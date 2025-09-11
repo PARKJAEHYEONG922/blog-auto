@@ -1,0 +1,27 @@
+# 로그 파일들
+logs/*.log
+*.log
+
+# 데이터베이스 파일들
+data/app.db
+
+# Python 캐시 파일들
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 환경 설정
+.env
+.env.local
+
+# IDE 설정
+.vscode/
+.idea/
+
+# 임시 파일들
+*.tmp
+*.temp
+nul
+
+# 로그 폴더 전체
+logs/
