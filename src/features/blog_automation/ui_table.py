@@ -595,17 +595,11 @@ class BlogWriteTableUI(QWidget):
             tone = settings.get('tone', '정중한 존댓말체')
             review_detail = settings.get('review_detail', '')
             
-            # 키워드 조합 (주제 + 보조)
-            full_keyword = main_keyword
-            if sub_keywords:
-                full_keyword += f" {sub_keywords}"
-            
-            # AI 요청 데이터 생성
-            ai_data = create_ai_request_data(full_keyword, analyzed_blogs, content_type, tone, review_detail)
+            # AI 요청 데이터 생성 (메인키워드와 보조키워드 분리)
+            ai_data = create_ai_request_data(main_keyword, sub_keywords, analyzed_blogs, content_type, tone, review_detail)
             
             if ai_data:
                 self.ai_prompt_data = {
-                    'keyword': full_keyword,
                     'main_keyword': main_keyword,
                     'sub_keywords': sub_keywords,
                     'structured_data': ai_data['structured_data'],
@@ -615,7 +609,7 @@ class BlogWriteTableUI(QWidget):
                     'tone': tone,
                     'review_detail': review_detail
                 }
-                logger.info(f"AI 프롬프트 생성 완료: {full_keyword}")
+                logger.info(f"AI 프롬프트 생성 완료: {main_keyword} + {sub_keywords}")
             else:
                 logger.error("AI 프롬프트 생성 실패")
                 
@@ -636,14 +630,15 @@ class BlogWriteTableUI(QWidget):
             # 워커 생성
             from .worker import create_ai_writing_worker, WorkerThread
             
-            keyword = self.ai_prompt_data['keyword']
+            main_keyword = self.ai_prompt_data['main_keyword']
+            sub_keywords = self.ai_prompt_data['sub_keywords']
             structured_data = self.ai_prompt_data['structured_data']
             content_type = self.ai_prompt_data['content_type']
             tone = self.ai_prompt_data['tone']
             review_detail = self.ai_prompt_data['review_detail']
             
             self.ai_writer_worker = create_ai_writing_worker(
-                self.parent.service, keyword, structured_data, content_type, tone, review_detail
+                self.parent.service, main_keyword, sub_keywords, structured_data, content_type, tone, review_detail
             )
             self.ai_writer_thread = WorkerThread(self.ai_writer_worker)
             
