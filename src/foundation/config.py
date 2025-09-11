@@ -43,6 +43,14 @@ class APIConfig:
     imagen_api_key: str = ""
     current_image_ai_model: str = ""  # 현재 선택된 이미지 AI 모델
     
+    # AI 글쓰기 설정
+    ai_writing_content_type: str = "정보/가이드형"  # 컨텐츠 유형
+    ai_writing_tone: str = "정중한 존댓말체"  # 말투 스타일
+    ai_writing_content_type_id: int = 1  # 컨텐츠 유형 ID
+    ai_writing_tone_id: int = 1  # 말투 스타일 ID
+    ai_writing_review_detail: str = "내돈내산 후기"  # 후기 세부 유형
+    ai_writing_review_detail_id: int = 0  # 후기 세부 유형 ID
+    
     def is_searchad_valid(self) -> bool:
         """검색광고 API 설정 유효성 확인"""
         return all([

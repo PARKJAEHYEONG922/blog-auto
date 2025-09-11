@@ -130,27 +130,41 @@ class APIChecker:
     
     @staticmethod
     def _check_ai_apis(api_config) -> dict:
-        """AI API 통합 상태 확인 (OpenAI, Claude, Gemini 중 하나라도 설정되면 OK)"""
-        # Gemini API 키도 확인해야 함 (api_config에 gemini_api_key 필드가 있다고 가정)
-        gemini_key = getattr(api_config, 'gemini_api_key', '')
+        """AI API 통합 상태 확인 (분리된 글 작성 AI와 이미지 생성 AI)"""
         
-        # 하나라도 설정되어 있으면 OK
-        if api_config.openai_api_key or api_config.claude_api_key or gemini_key:
-            configured_apis = []
-            if api_config.openai_api_key:
-                configured_apis.append("OpenAI")
-            if api_config.claude_api_key:
-                configured_apis.append("Claude")
-            if gemini_key:
-                configured_apis.append("Gemini")
-            
-            # 현재 선택된 AI 모델 정보 추가
-            current_model = getattr(api_config, 'current_ai_model', '')
-            if current_model and current_model != "AI 제공자를 선택하세요":
-                message = f"설정 완료 ({', '.join(configured_apis)}) - 현재 모델: {current_model}"
+        # 글 작성 AI 확인
+        text_ai_configured = any([
+            getattr(api_config, 'openai_api_key', '').strip(),
+            getattr(api_config, 'claude_api_key', '').strip(),
+            getattr(api_config, 'gemini_api_key', '').strip()
+        ])
+        
+        # 이미지 생성 AI 확인
+        image_ai_configured = any([
+            getattr(api_config, 'dalle_api_key', '').strip(),
+            getattr(api_config, 'imagen_api_key', '').strip()
+        ])
+        
+        # 설정된 AI API 목록 생성
+        configured_apis = []
+        if text_ai_configured:
+            # 현재 선택된 글 작성 AI 모델 확인
+            current_text_model = getattr(api_config, 'current_text_ai_model', '')
+            if current_text_model and current_text_model != "모델을 선택하세요":
+                configured_apis.append(f"글작성AI({current_text_model})")
             else:
-                message = f"설정 완료 ({', '.join(configured_apis)}) - 모델 미선택"
-            
+                configured_apis.append("글작성AI")
+        
+        if image_ai_configured:
+            # 현재 선택된 이미지 생성 AI 모델 확인
+            current_image_model = getattr(api_config, 'current_image_ai_model', '')
+            if current_image_model and current_image_model != "모델을 선택하세요":
+                configured_apis.append(f"이미지AI({current_image_model})")
+            else:
+                configured_apis.append("이미지AI")
+        
+        if configured_apis:
+            message = f"설정 완료 ({', '.join(configured_apis)})"
             return {
                 "configured": True,
                 "connected": True,

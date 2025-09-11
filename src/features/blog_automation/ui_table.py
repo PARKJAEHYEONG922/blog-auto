@@ -327,9 +327,17 @@ class BlogWriteTableUI(QWidget):
             # AI 글쓰기 버튼 활성화
             self.write_button.setEnabled(True)
             
-            # AI 프롬프트 생성 및 저장
+            # AI 프롬프트 생성 및 저장 (사용자 선택 스타일 반영)
             if hasattr(self, 'current_keyword'):
-                self.generate_ai_prompt(self.current_keyword, analyzed_blogs)
+                # 부모 UI에서 선택된 스타일 가져오기
+                if hasattr(self.parent, 'get_ai_writing_settings'):
+                    style_settings = self.parent.get_ai_writing_settings()
+                    self.generate_ai_prompt(self.current_keyword, analyzed_blogs, 
+                                          style_settings.get('content_type', '정보/가이드형'),
+                                          style_settings.get('tone', '정중한 존댓말체'),
+                                          style_settings.get('review_detail', ''))
+                else:
+                    self.generate_ai_prompt(self.current_keyword, analyzed_blogs)
             
             # UI 상태 복원
             self.reset_analysis_ui()
@@ -428,13 +436,13 @@ class BlogWriteTableUI(QWidget):
         except Exception as e:
             logger.error(f"테이블 데이터 표시 오류: {e}")
     
-    def generate_ai_prompt(self, keyword: str, analyzed_blogs: list):
-        """분석된 블로그 데이터로 AI 프롬프트 생성"""
+    def generate_ai_prompt(self, keyword: str, analyzed_blogs: list, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = ""):
+        """분석된 블로그 데이터로 AI 프롬프트 생성 (스타일 옵션 포함)"""
         try:
             from .ai_prompts import create_ai_request_data, BlogAIPrompts
             
-            # AI 요청 데이터 생성
-            ai_data = create_ai_request_data(keyword, analyzed_blogs)
+            # AI 요청 데이터 생성 (스타일 옵션 포함)
+            ai_data = create_ai_request_data(keyword, analyzed_blogs, content_type, tone, review_detail)
             
             if ai_data:
                 # 대화형 구조 프롬프트도 생성
@@ -454,7 +462,10 @@ class BlogWriteTableUI(QWidget):
                     'structured_data': ai_data['structured_data'],
                     'main_prompt': ai_data['ai_prompt'],
                     'structure_prompts': structure_prompts,
-                    'raw_blogs': analyzed_blogs
+                    'raw_blogs': analyzed_blogs,
+                    'content_type': content_type,
+                    'tone': tone,
+                    'review_detail': review_detail
                 }
                 
                 logger.info(f"AI 프롬프트 생성 완료: {keyword}")
@@ -541,7 +552,21 @@ class BlogWriteTableUI(QWidget):
             keyword = self.ai_prompt_data['keyword']
             structured_data = self.ai_prompt_data['structured_data']
             
-            self.ai_writer_worker = create_ai_writing_worker(self.parent.service, keyword, structured_data)
+            # 실시간으로 현재 선택된 스타일 가져오기 (저장하지 않아도 즉시 반영)
+            if hasattr(self.parent, 'get_ai_writing_settings'):
+                current_settings = self.parent.get_ai_writing_settings()
+                content_type = current_settings.get('content_type', '정보/가이드형')
+                tone = current_settings.get('tone', '정중한 존댓말체')
+                review_detail = current_settings.get('review_detail', '')
+                logger.info(f"실시간 스타일 적용: {content_type}, {tone}, 후기 세부: {review_detail}")
+            else:
+                # fallback: 저장된 데이터 사용
+                content_type = self.ai_prompt_data.get('content_type', '정보/가이드형')
+                tone = self.ai_prompt_data.get('tone', '정중한 존댓말체')
+                review_detail = self.ai_prompt_data.get('review_detail', '')
+            
+            # 스타일 정보도 함께 전달
+            self.ai_writer_worker = create_ai_writing_worker(self.parent.service, keyword, structured_data, content_type, tone, review_detail)
             self.ai_writer_thread = WorkerThread(self.ai_writer_worker)
             
             # 시그널 연결
