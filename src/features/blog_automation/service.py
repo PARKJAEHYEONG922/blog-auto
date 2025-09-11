@@ -335,12 +335,8 @@ class BlogAutomationService:
             from src.foundation.config import config_manager
             api_config = config_manager.load_api_config()
             
-            # 메시지 형식으로 변환
+            # ai_prompts에서 완성된 프롬프트를 그대로 AI에게 전달
             messages = [
-                {
-                    "role": "system",
-                    "content": "당신은 15년 경력의 네이버 블로그 전문 마케터이자 SEO 전문가입니다."
-                },
                 {
                     "role": "user", 
                     "content": prompt
