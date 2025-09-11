@@ -3,7 +3,7 @@
 """
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QTextEdit, QPushButton, QProgressBar,
+    QTextEdit, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget
 )
 from PySide6.QtCore import Qt
@@ -86,16 +86,6 @@ class AnalysisResultTab(QWidget):
     def setup_ui(self):
         """UI 구성"""
         layout = QVBoxLayout()
-        
-        # 분석 진행률
-        progress_layout = QHBoxLayout()
-        progress_layout.addWidget(QLabel("분석 진행률:"))
-        
-        self.analysis_progress = QProgressBar()
-        self.analysis_progress.setVisible(False)
-        progress_layout.addWidget(self.analysis_progress)
-        
-        layout.addLayout(progress_layout)
         
         # 상위 블로그 테이블
         self.blog_table = QTableWidget(0, 8)  # 0행 8열

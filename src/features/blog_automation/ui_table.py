@@ -3,7 +3,7 @@
 """
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QLineEdit, QTextEdit, QPushButton, QProgressBar,
+    QLineEdit, QTextEdit, QPushButton,
     QFrame, QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget, QComboBox
 )
 from PySide6.QtCore import Qt, QThread, Signal
@@ -14,7 +14,7 @@ from src.toolbox.ui_kit.components import (
     ModernButton, ModernLineEdit, ModernCard, 
     ModernPrimaryButton, ModernSuccessButton, ModernDangerButton
 )
-from src.toolbox.ui_kit.modern_dialog import ModernConfirmDialog
+from src.toolbox.ui_kit.modern_dialog import ModernConfirmDialog, ModernScrollableDialog
 from src.toolbox.ui_kit.modern_style import ModernStyle
 from src.toolbox.ui_kit import tokens
 from src.foundation.exceptions import BusinessError, ValidationError
@@ -68,6 +68,19 @@ class TableUIDialogHelper:
     def show_info_dialog(parent, title: str = "알림", message: str = "", icon: str = "ℹ️"):
         """정보 다이얼로그 표시"""
         dialog = ModernConfirmDialog(
+            parent,
+            title=title,
+            message=message,
+            confirm_text="확인",
+            cancel_text=None,
+            icon=icon
+        )
+        return dialog.exec()
+    
+    @staticmethod
+    def show_scrollable_success_dialog(parent, title: str = "성공", message: str = "", icon: str = "✅"):
+        """스크롤 가능한 성공 다이얼로그 표시 (긴 텍스트용)"""
+        dialog = ModernScrollableDialog(
             parent,
             title=title,
             message=message,
@@ -516,14 +529,16 @@ class BlogWriteTableUI(QWidget):
     def on_auto_analysis_started(self):
         """자동 분석 시작 시그널 처리"""
         logger.info("📊 자동 분석 시작됨")
-        analysis_tab = self.result_tabs.analysis_tab
-        analysis_tab.analysis_progress.setValue(15)
+        # 메인 UI 상태창에 표시
+        if hasattr(self, 'parent') and hasattr(self.parent, 'status_label'):
+            self.parent.status_label.setText("📊 블로그 분석 시작...")
     
     def on_auto_analysis_progress(self, message: str, progress: int):
         """자동 분석 진행 상황 업데이트"""
         logger.info(f"📝 자동 분석 진행: {message} ({progress}%)")
-        analysis_tab = self.result_tabs.analysis_tab
-        analysis_tab.analysis_progress.setValue(progress)
+        # 메인 UI 상태창에 진행 상황 표시
+        if hasattr(self, 'parent') and hasattr(self.parent, 'status_label'):
+            self.parent.status_label.setText(f"📊 {message} ({progress}%)")
     
     def on_auto_analysis_completed(self, analyzed_blogs: list, main_keyword: str, sub_keywords: str):
         """자동 분석 완료 후 AI 글쓰기 시작"""
@@ -533,7 +548,10 @@ class BlogWriteTableUI(QWidget):
             # 분석 결과를 테이블에 표시
             analysis_tab = self.result_tabs.analysis_tab
             analysis_tab.populate_blog_table(analyzed_blogs)
-            analysis_tab.analysis_progress.setVisible(False)
+            
+            # 메인 UI 상태창에 분석 완료 표시
+            if hasattr(self, 'parent') and hasattr(self.parent, 'status_label'):
+                self.parent.status_label.setText("📊 블로그 분석 완료, AI 글쓰기 시작...")
             
             # AI 프롬프트 생성 및 저장
             self.generate_ai_prompt_for_auto(main_keyword, sub_keywords, analyzed_blogs)
@@ -554,6 +572,11 @@ class BlogWriteTableUI(QWidget):
         """자동 분석 오류 처리"""
         try:
             logger.error(f"❌ 자동 분석 오류: {error_message}")
+            
+            # 메인 UI 상태창에 오류 표시
+            if hasattr(self, 'parent') and hasattr(self.parent, 'status_label'):
+                self.parent.status_label.setText("❌ 블로그 분석 오류")
+                
             self.reset_auto_generate_ui()
             
             TableUIDialogHelper.show_error_dialog(
@@ -642,6 +665,9 @@ class BlogWriteTableUI(QWidget):
     def on_auto_writing_started(self):
         """자동 AI 글쓰기 시작 시그널 처리"""
         logger.info("🤖 자동 AI 글쓰기 시작됨")
+        # 메인 UI 상태창에 표시
+        if hasattr(self, 'parent') and hasattr(self.parent, 'status_label'):
+            self.parent.status_label.setText("🤖 AI가 블로그 글을 생성 중...")
     
     def on_auto_writing_completed(self, generated_content: str):
         """자동 AI 글쓰기 완료 처리"""
@@ -655,11 +681,15 @@ class BlogWriteTableUI(QWidget):
             # 발행 버튼 활성화
             self.publish_button.setEnabled(True)
             
+            # 메인 UI 상태창에 완료 표시
+            if hasattr(self, 'parent') and hasattr(self.parent, 'status_label'):
+                self.parent.status_label.setText("✅ AI 글 생성 완료!")
+            
             # 버튼 상태 복원
             self.reset_auto_generate_ui()
             
-            # 성공 알림
-            TableUIDialogHelper.show_success_dialog(
+            # 성공 알림 (스크롤 가능한 다이얼로그 사용)
+            TableUIDialogHelper.show_scrollable_success_dialog(
                 self, "자동 생성 완료", 
                 f"AI 블로그 글 자동 생성이 완료되었습니다!\n\n글자수: {len(generated_content.replace(' ', ''))}자\n\n생성된 글을 확인하고 '네이버 블로그에 발행하기' 버튼을 클릭하세요.",
                 "🎉"
@@ -673,6 +703,11 @@ class BlogWriteTableUI(QWidget):
         """자동 AI 글쓰기 오류 처리"""
         try:
             logger.error(f"❌ 자동 AI 글쓰기 오류: {error_message}")
+            
+            # 메인 UI 상태창에 오류 표시
+            if hasattr(self, 'parent') and hasattr(self.parent, 'status_label'):
+                self.parent.status_label.setText("❌ AI 글쓰기 오류")
+            
             self.reset_auto_generate_ui()
             
             TableUIDialogHelper.show_error_dialog(
@@ -688,10 +723,9 @@ class BlogWriteTableUI(QWidget):
         self.auto_generate_button.setText("🚀 AI 블로그 글 자동 생성")
         self.auto_generate_button.setEnabled(True)
         
-        # 진행률 숨기기
-        if hasattr(self, 'result_tabs'):
-            analysis_tab = self.result_tabs.analysis_tab
-            analysis_tab.analysis_progress.setVisible(False)
+        # 메인 UI 상태 초기화
+        if hasattr(self, 'parent') and hasattr(self.parent, 'status_label'):
+            self.parent.status_label.setText("대기 중...")
     
     def on_show_results_clicked(self):
         """결과 보기 버튼 클릭 처리 - 별도 창에서 결과 표시"""
