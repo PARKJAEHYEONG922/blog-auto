@@ -172,10 +172,11 @@ class AIWritingWorker(QObject):
     writing_completed = Signal(str)  # 글쓰기 완료 (생성된 콘텐츠)
     error_occurred = Signal(str)  # 오류 발생
     
-    def __init__(self, service: BlogAutomationService, keyword: str, structured_data: dict, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = ""):
+    def __init__(self, service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = ""):
         super().__init__()
         self.service = service
-        self.keyword = keyword
+        self.main_keyword = main_keyword
+        self.sub_keywords = sub_keywords
         self.structured_data = structured_data
         self.content_type = content_type
         self.tone = tone
@@ -185,12 +186,12 @@ class AIWritingWorker(QObject):
     def run(self):
         """AI 글쓰기 작업 실행"""
         try:
-            logger.info(f"🤖 AI 글쓰기 워커 시작: {self.keyword}")
+            logger.info(f"🤖 AI 글쓰기 워커 시작: {self.main_keyword}")
             self.writing_started.emit()
             
             # AI 프롬프트 생성 (스타일 옵션 포함)
             from .ai_prompts import BlogAIPrompts
-            prompt = BlogAIPrompts.generate_content_analysis_prompt(self.keyword, self.structured_data, self.content_type, self.tone, self.review_detail)
+            prompt = BlogAIPrompts.generate_content_analysis_prompt(self.main_keyword, self.sub_keywords, self.structured_data, self.content_type, self.tone, self.review_detail)
             
             # AI API 호출
             generated_content = self.service.generate_blog_content(prompt)
@@ -222,6 +223,6 @@ def create_blog_analysis_worker(service: BlogAutomationService, keyword: str) ->
     return BlogAnalysisWorker(service, keyword)
 
 
-def create_ai_writing_worker(service: BlogAutomationService, keyword: str, structured_data: dict, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "") -> AIWritingWorker:
+def create_ai_writing_worker(service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "") -> AIWritingWorker:
     """AI 글쓰기 워커 생성 (스타일 옵션 포함)"""
-    return AIWritingWorker(service, keyword, structured_data, content_type, tone, review_detail)
+    return AIWritingWorker(service, main_keyword, sub_keywords, structured_data, content_type, tone, review_detail)
