@@ -131,28 +131,29 @@ class BlogWriteTableUI(QWidget):
         layout.setSpacing(tokens.GAP_8)  # 요소 간 간격 조정
         
         # 간단한 설명
-        simple_desc = QLabel("주제키워드 입력 후 자동 생성 버튼을 클릭하세요")
+        simple_desc = QLabel("메인키워드 입력 후 자동생성 버튼을 클릭해주세요\n   • 보조키워드는 생략 가능하며, 여러 개 입력할 수 있습니다")
         simple_desc.setStyleSheet(f"""
             QLabel {{
-                color: {ModernStyle.COLORS['text_primary']};
+                color: {ModernStyle.COLORS['primary']};
                 font-size: {tokens.get_font_size('normal')}px;
-                font-weight: 500;
+                font-weight: 600;
                 padding: 4px 0px;
                 margin-bottom: {tokens.GAP_8}px;
+                line-height: 1.4;
             }}
         """)
         layout.addWidget(simple_desc)
         
-        # 주제키워드 입력
+        # 메인키워드 입력
         main_keyword_layout = QHBoxLayout()
-        main_keyword_label = QLabel("주제키워드:")
+        main_keyword_label = QLabel("메인키워드:")
         main_keyword_label.setMinimumWidth(80)  # 라벨 너비 고정
         main_keyword_label.setStyleSheet(f"font-size: {tokens.get_font_size('normal')}px;")
         main_keyword_layout.addWidget(main_keyword_label)
         
         self.main_keyword_input = ModernLineEdit()
-        self.main_keyword_input.setPlaceholderText("메인 키워드 (예: 프로그래밍 학습법)")
-        self.main_keyword_input.setMinimumHeight(35)  # 높이 증가
+        self.main_keyword_input.setPlaceholderText("메인키워드 필수 (예: 프로그래밍 학습법)")
+        self.main_keyword_input.setMinimumHeight(40)  # 높이 증가
         main_keyword_layout.addWidget(self.main_keyword_input, 1)  # 확장 가능
         
         layout.addLayout(main_keyword_layout)
@@ -166,7 +167,7 @@ class BlogWriteTableUI(QWidget):
         
         self.sub_keyword_input = ModernLineEdit()
         self.sub_keyword_input.setPlaceholderText("보조 키워드들을 쉼표로 구분 (예: 개발자, 코딩, 입문)")
-        self.sub_keyword_input.setMinimumHeight(35)  # 높이 증가
+        self.sub_keyword_input.setMinimumHeight(40)  # 높이 증가
         sub_keyword_layout.addWidget(self.sub_keyword_input, 1)  # 확장 가능
         
         layout.addLayout(sub_keyword_layout)
@@ -191,8 +192,8 @@ class BlogWriteTableUI(QWidget):
         
         card.setLayout(layout)
         
-        # 카드 사이즈 최적화 - 기존 카드들과 통일
-        # card.setMaximumHeight() 제거 - 자동 사이즈 조정
+        # 카드 사이즈 최적화 - 2줄 설명 텍스트로 높이 증가
+        card.setMaximumHeight(250)
         
         return card
     
@@ -225,6 +226,19 @@ class BlogWriteTableUI(QWidget):
         card = ModernCard("🤖 AI 글쓰기 설정")
         layout = QVBoxLayout()
         layout.setSpacing(tokens.GAP_4)  # 간격을 더 줄여서 더 컴팩트하게
+        
+        # 간단한 설명
+        simple_desc = QLabel("원하는 글쓰기 스타일을 선택하고 설정을 저장하세요")
+        simple_desc.setStyleSheet(f"""
+            QLabel {{
+                color: {ModernStyle.COLORS['primary']};
+                font-size: {tokens.get_font_size('normal')}px;
+                font-weight: 600;
+                padding: 4px 0px;
+                margin-bottom: {tokens.GAP_4}px;
+            }}
+        """)
+        layout.addWidget(simple_desc)
         
         # 컨텐츠 유형 선택
         content_type_layout = QHBoxLayout()
@@ -329,7 +343,7 @@ class BlogWriteTableUI(QWidget):
         card.setLayout(layout)
         
         # AI 설정 카드는 제일 위에 있어서 높이 제한 필요 (드롭박스 간격 정리)
-        card.setMaximumHeight(235)  # 적당히 컴팩트하게
+        card.setMaximumHeight(270)  # 설명 텍스트 추가로 충분한 높이 확보
         
         return card
     
@@ -444,11 +458,11 @@ class BlogWriteTableUI(QWidget):
     def on_auto_generate_clicked(self):
         """AI 자동 생성 버튼 클릭 처리"""
         try:
-            # 주제키워드 확인
+            # 메인키워드 확인
             main_keyword = self.main_keyword_input.text().strip()
             if not main_keyword:
                 TableUIDialogHelper.show_warning_dialog(
-                    self, "입력 오류", "주제키워드를 입력해주세요."
+                    self, "입력 오류", "메인키워드를 입력해주세요."
                 )
                 return
             
