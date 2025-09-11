@@ -35,13 +35,15 @@ class APIConfig:
     openai_api_key: str = ""
     claude_api_key: str = ""
     gemini_api_key: str = ""
-    current_text_ai_model: str = ""  # 현재 선택된 텍스트 AI 모델
+    current_text_ai_provider: str = "openai"  # openai, anthropic, google
+    current_text_ai_model: str = "GPT-4o (유료, 표준)"  # 현재 선택된 텍스트 AI 모델 (UI 표시명)
     current_ai_model: str = ""  # 기존 호환성을 위해 유지
     
     # AI API - 이미지 생성
     dalle_api_key: str = ""
     imagen_api_key: str = ""
-    current_image_ai_model: str = ""  # 현재 선택된 이미지 AI 모델
+    current_image_ai_provider: str = "openai"  # openai, google
+    current_image_ai_model: str = "DALL-E 3 (고품질, 유료)"  # 현재 선택된 이미지 AI 모델 (UI 표시명)
     
     # AI 글쓰기 설정
     ai_writing_content_type: str = "정보/가이드형"  # 컨텐츠 유형

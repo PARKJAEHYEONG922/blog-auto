@@ -751,6 +751,12 @@ class APISettingsDialog(QDialog):
             elif provider == "imagen":
                 api_config.imagen_api_key = api_key
             
+            # 선택된 AI API 저장 (누락된 부분 추가!)
+            if provider == "dalle":
+                api_config.current_image_ai_provider = "openai"  # service.py에서 "openai"로 확인
+            elif provider == "imagen":
+                api_config.current_image_ai_provider = "google"  # service.py에서 "google"로 확인
+            
             # 선택된 모델 저장
             api_config.current_image_ai_model = selected_model
             
@@ -949,6 +955,14 @@ class APISettingsDialog(QDialog):
                 api_config.gemini_api_key = api_key
             elif provider == "claude":
                 api_config.claude_api_key = api_key
+            
+            # 선택된 AI API 저장 (누락된 부분 추가!)
+            if provider == "openai":
+                api_config.current_text_ai_provider = "openai"
+            elif provider == "gemini":
+                api_config.current_text_ai_provider = "google"  # service.py에서 "google"로 확인
+            elif provider == "claude":
+                api_config.current_text_ai_provider = "anthropic"  # service.py에서 "anthropic"으로 확인
             
             # 선택된 모델 저장
             api_config.current_text_ai_model = selected_model
