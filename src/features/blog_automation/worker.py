@@ -164,6 +164,51 @@ class BlogAnalysisWorker(QObject):
         logger.info("블로그 분석 워커 취소됨")
 
 
+class AIWritingWorker(QObject):
+    """AI 블로그 글쓰기 워커 - AI API 호출 처리"""
+    
+    # 시그널 정의
+    writing_started = Signal()  # 글쓰기 시작
+    writing_completed = Signal(str)  # 글쓰기 완료 (생성된 콘텐츠)
+    error_occurred = Signal(str)  # 오류 발생
+    
+    def __init__(self, service: BlogAutomationService, keyword: str, structured_data: dict):
+        super().__init__()
+        self.service = service
+        self.keyword = keyword
+        self.structured_data = structured_data
+        self.is_cancelled = False
+        
+    def run(self):
+        """AI 글쓰기 작업 실행"""
+        try:
+            logger.info(f"🤖 AI 글쓰기 워커 시작: {self.keyword}")
+            self.writing_started.emit()
+            
+            # AI 프롬프트 생성
+            from .ai_prompts import BlogAIPrompts
+            prompt = BlogAIPrompts.generate_naver_seo_prompt(self.keyword, self.structured_data)
+            
+            # AI API 호출
+            generated_content = self.service.generate_blog_content(prompt)
+            
+            if not self.is_cancelled and generated_content:
+                self.writing_completed.emit(generated_content)
+                logger.info("✅ AI 글쓰기 워커 완료")
+            elif not generated_content:
+                self.error_occurred.emit("AI가 콘텐츠를 생성하지 못했습니다. API 키를 확인해주세요.")
+            
+        except Exception as e:
+            logger.error(f"❌ AI 글쓰기 워커 오류: {e}")
+            if not self.is_cancelled:
+                self.error_occurred.emit(str(e))
+    
+    def cancel(self):
+        """워커 취소"""
+        self.is_cancelled = True
+        logger.info("AI 글쓰기 워커 취소됨")
+
+
 def create_blog_login_worker(service: BlogAutomationService, credentials: BlogCredentials) -> BlogLoginWorker:
     """블로그 로그인 워커 생성"""
     return BlogLoginWorker(service, credentials)
@@ -172,3 +217,8 @@ def create_blog_login_worker(service: BlogAutomationService, credentials: BlogCr
 def create_blog_analysis_worker(service: BlogAutomationService, keyword: str) -> BlogAnalysisWorker:
     """블로그 분석 워커 생성"""
     return BlogAnalysisWorker(service, keyword)
+
+
+def create_ai_writing_worker(service: BlogAutomationService, keyword: str, structured_data: dict) -> AIWritingWorker:
+    """AI 글쓰기 워커 생성"""
+    return AIWritingWorker(service, keyword, structured_data)

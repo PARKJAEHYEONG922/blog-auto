@@ -304,3 +304,220 @@ class BlogAutomationService:
             BlogPlatform.BLOGGER: "구글 (블로거)"
         }
         return display_names.get(platform, platform.value)
+    
+    def generate_blog_content(self, prompt: str) -> str:
+        """API 설정에서 선택된 AI를 사용하여 블로그 콘텐츠 생성"""
+        try:
+            logger.info("AI 블로그 콘텐츠 생성 시작")
+            
+            # API 설정 로드
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+            
+            # 메시지 형식으로 변환
+            messages = [
+                {
+                    "role": "system",
+                    "content": "당신은 15년 경력의 네이버 블로그 전문 마케터이자 SEO 전문가입니다."
+                },
+                {
+                    "role": "user", 
+                    "content": prompt
+                }
+            ]
+            
+            # 설정된 AI API 확인 및 호출 (우선순위: OpenAI → Gemini → Claude)
+            if api_config.openai_api_key:
+                logger.info("OpenAI API 사용")
+                response = self._call_openai_api(messages, api_config.openai_api_key)
+                
+            elif hasattr(api_config, 'gemini_api_key') and api_config.gemini_api_key:
+                logger.info("Google Gemini API 사용")
+                response = self._call_gemini_api(messages, api_config.gemini_api_key)
+                
+            elif api_config.claude_api_key:
+                logger.info("Anthropic Claude API 사용")
+                response = self._call_claude_api(messages, api_config.claude_api_key)
+                
+            else:
+                raise BusinessError("텍스트 생성 AI API 키가 설정되지 않았습니다. API 설정에서 글 작성 AI API를 설정해주세요.")
+            
+            if response:
+                logger.info(f"AI 콘텐츠 생성 완료: {len(response)}자")
+                return response
+            else:
+                raise BusinessError("AI API 응답을 처리할 수 없습니다")
+                
+        except Exception as e:
+            logger.error(f"AI 콘텐츠 생성 실패: {e}")
+            raise BusinessError(f"AI 콘텐츠 생성 실패: {str(e)}")
+    
+    def _call_openai_api(self, messages: list, api_key: str) -> str:
+        """OpenAI API 호출"""
+        try:
+            from src.vendors.openai.client import openai_client
+            
+            response = openai_client.create_completion(
+                messages=messages,
+                model="gpt-4o-mini",
+                temperature=0.7,
+                max_tokens=4000
+            )
+            
+            if response and 'choices' in response and len(response['choices']) > 0:
+                return response['choices'][0]['message']['content']
+            else:
+                raise BusinessError("OpenAI API 응답이 비어있습니다")
+                
+        except Exception as e:
+            logger.error(f"OpenAI API 호출 실패: {e}")
+            raise BusinessError(f"OpenAI API 호출 실패: {str(e)}")
+    
+    def _call_gemini_api(self, messages: list, api_key: str) -> str:
+        """Google Gemini API 호출"""
+        try:
+            import requests
+            
+            # 메시지를 Gemini 형식으로 변환
+            text_content = ""
+            for message in messages:
+                if message['role'] == 'system':
+                    text_content += f"System: {message['content']}\n\n"
+                elif message['role'] == 'user':
+                    text_content += f"User: {message['content']}"
+            
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
+            
+            headers = {
+                "Content-Type": "application/json"
+            }
+            
+            data = {
+                "contents": [{
+                    "parts": [{
+                        "text": text_content
+                    }]
+                }],
+                "generationConfig": {
+                    "maxOutputTokens": 4000,
+                    "temperature": 0.7
+                }
+            }
+            
+            response = requests.post(url, headers=headers, json=data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if 'candidates' in result and len(result['candidates']) > 0:
+                    content = result['candidates'][0]['content']['parts'][0]['text']
+                    return content
+                else:
+                    raise BusinessError("Gemini API 응답이 예상과 다릅니다")
+            else:
+                raise BusinessError(f"Gemini API 오류: 상태 코드 {response.status_code}")
+                
+        except Exception as e:
+            logger.error(f"Gemini API 호출 실패: {e}")
+            raise BusinessError(f"Gemini API 호출 실패: {str(e)}")
+    
+    def _call_claude_api(self, messages: list, api_key: str) -> str:
+        """Anthropic Claude API 호출"""
+        try:
+            from src.vendors.openai.client import claude_client
+            
+            response = claude_client.create_message(
+                messages=messages,
+                model="claude-3-haiku-20240307",
+                max_tokens=4000,
+                temperature=0.7
+            )
+            
+            if response and 'content' in response and len(response['content']) > 0:
+                return response['content'][0]['text']
+            else:
+                raise BusinessError("Claude API 응답이 비어있습니다")
+                
+        except Exception as e:
+            logger.error(f"Claude API 호출 실패: {e}")
+            raise BusinessError(f"Claude API 호출 실패: {str(e)}")
+    
+    def generate_blog_images(self, prompt: str, image_count: int = 1) -> list:
+        """API 설정에서 선택된 이미지 생성 AI를 사용하여 블로그 이미지 생성"""
+        try:
+            logger.info("AI 블로그 이미지 생성 시작")
+            
+            # API 설정 로드
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+            
+            # 설정된 이미지 생성 AI API 확인 및 호출
+            if hasattr(api_config, 'dalle_api_key') and api_config.dalle_api_key:
+                logger.info("DALL-E API 사용")
+                images = self._call_dalle_api(prompt, api_config.dalle_api_key, image_count)
+                
+            elif hasattr(api_config, 'imagen_api_key') and api_config.imagen_api_key:
+                logger.info("Google Imagen API 사용")
+                images = self._call_imagen_api(prompt, api_config.imagen_api_key, image_count)
+                
+            else:
+                raise BusinessError("이미지 생성 AI API 키가 설정되지 않았습니다. API 설정에서 이미지 생성 AI API를 설정해주세요.")
+            
+            if images:
+                logger.info(f"AI 이미지 생성 완료: {len(images)}개")
+                return images
+            else:
+                raise BusinessError("AI API 응답을 처리할 수 없습니다")
+                
+        except Exception as e:
+            logger.error(f"AI 이미지 생성 실패: {e}")
+            raise BusinessError(f"AI 이미지 생성 실패: {str(e)}")
+    
+    def _call_dalle_api(self, prompt: str, api_key: str, image_count: int = 1) -> list:
+        """DALL-E API 호출"""
+        try:
+            import requests
+            
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            data = {
+                "prompt": prompt,
+                "n": min(image_count, 4),  # DALL-E는 최대 4개까지
+                "size": "1024x1024",
+                "quality": "standard"
+            }
+            
+            response = requests.post(
+                "https://api.openai.com/v1/images/generations",
+                headers=headers,
+                json=data,
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if 'data' in result and len(result['data']) > 0:
+                    return [item['url'] for item in result['data']]
+                else:
+                    raise BusinessError("DALL-E API 응답이 비어있습니다")
+            else:
+                raise BusinessError(f"DALL-E API 오류: 상태 코드 {response.status_code}")
+                
+        except Exception as e:
+            logger.error(f"DALL-E API 호출 실패: {e}")
+            raise BusinessError(f"DALL-E API 호출 실패: {str(e)}")
+    
+    def _call_imagen_api(self, prompt: str, api_key: str, image_count: int = 1) -> list:
+        """Google Imagen API 호출"""
+        try:
+            # Google Imagen API는 복잡한 인증 과정이 필요하므로 일단 플레이스홀더로 구현
+            logger.warning("Google Imagen API는 아직 구현되지 않았습니다.")
+            
+            # 임시로 DALL-E와 유사한 더미 응답 반환
+            return [f"https://placeholder-image-{i+1}.jpg" for i in range(image_count)]
+                
+        except Exception as e:
+            logger.error(f"Imagen API 호출 실패: {e}")
+            raise BusinessError(f"Imagen API 호출 실패: {str(e)}")

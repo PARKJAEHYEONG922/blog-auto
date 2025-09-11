@@ -327,9 +327,9 @@ class BlogWriteTableUI(QWidget):
             # AI 글쓰기 버튼 활성화
             self.write_button.setEnabled(True)
             
-            # AI 프롬프트 생성 및 저장 (테스트를 위해 임시 주석처리)
-            # if hasattr(self, 'current_keyword'):
-            #     self.generate_ai_prompt(self.current_keyword, analyzed_blogs)
+            # AI 프롬프트 생성 및 저장
+            if hasattr(self, 'current_keyword'):
+                self.generate_ai_prompt(self.current_keyword, analyzed_blogs)
             
             # UI 상태 복원
             self.reset_analysis_ui()
@@ -506,19 +506,113 @@ class BlogWriteTableUI(QWidget):
         try:
             logger.info("AI 블로그 글 작성 시작")
             
-            # TODO: 실제 AI 글쓰기 로직 구현
+            # AI 프롬프트 데이터 확인
+            if not hasattr(self, 'ai_prompt_data') or not self.ai_prompt_data:
+                dialog = ModernConfirmDialog(
+                    self,
+                    title="분석 필요",
+                    message="먼저 상위 블로그 분석을 완료해주세요.\n'상위 블로그 분석 시작' 버튼을 클릭하여 분석을 진행하세요.",
+                    confirm_text="확인",
+                    cancel_text=None,
+                    icon="⚠️"
+                )
+                dialog.exec()
+                return
+            
+            # 버튼 상태 변경
+            self.write_button.setText("🤖 AI 글 작성 중...")
+            self.write_button.setEnabled(False)
+            
+            # 비동기 AI 글쓰기 시작
+            self.start_async_ai_writing()
+            
+        except Exception as e:
+            logger.error(f"AI 글쓰기 시작 오류: {e}")
+            self.reset_write_ui()
+    
+    def start_async_ai_writing(self):
+        """비동기 AI 글쓰기 시작"""
+        try:
+            logger.info("🚀 비동기 AI 글쓰기 시작")
+            
+            # 워커 생성
+            from .worker import create_ai_writing_worker, WorkerThread
+            
+            keyword = self.ai_prompt_data['keyword']
+            structured_data = self.ai_prompt_data['structured_data']
+            
+            self.ai_writer_worker = create_ai_writing_worker(self.parent.service, keyword, structured_data)
+            self.ai_writer_thread = WorkerThread(self.ai_writer_worker)
+            
+            # 시그널 연결
+            self.ai_writer_worker.writing_started.connect(self.on_ai_writing_started)
+            self.ai_writer_worker.writing_completed.connect(self.on_ai_writing_completed)
+            self.ai_writer_worker.error_occurred.connect(self.on_ai_writing_error)
+            
+            # 워커 시작
+            self.ai_writer_thread.start()
+            logger.info("✅ 비동기 AI 글쓰기 워커 시작됨")
+            
+        except Exception as e:
+            logger.error(f"❌ 비동기 AI 글쓰기 시작 실패: {e}")
+            self.reset_write_ui()
+    
+    def on_ai_writing_started(self):
+        """AI 글쓰기 시작 시그널 처리"""
+        logger.info("🤖 AI 글쓰기 시작됨")
+    
+    def on_ai_writing_completed(self, generated_content: str):
+        """AI 글쓰기 완료 처리"""
+        try:
+            logger.info("✅ AI 글쓰기 완료!")
+            
+            # 생성된 글을 UI에 표시
+            self.generated_text.setPlainText(generated_content)
+            
+            # 발행 버튼 활성화
+            self.publish_button.setEnabled(True)
+            
+            # 버튼 상태 복원
+            self.reset_write_ui()
+            
+            # 성공 다이얼로그
             dialog = ModernConfirmDialog(
                 self,
-                title="구현 예정",
-                message="AI 블로그 글 작성 기능은 곧 구현됩니다.\n현재는 UI만 구성된 상태입니다.",
+                title="AI 글쓰기 완료",
+                message=f"AI가 블로그 글 작성을 완료했습니다!\n\n글자수: {len(generated_content.replace(' ', ''))}자\n\n생성된 글을 확인하고 '네이버 블로그에 발행하기' 버튼을 클릭하세요.",
                 confirm_text="확인",
                 cancel_text=None,
-                icon="🚧"
+                icon="🎉"
             )
             dialog.exec()
             
         except Exception as e:
-            logger.error(f"AI 글쓰기 오류: {e}")
+            logger.error(f"AI 글쓰기 완료 처리 중 오류: {e}")
+            self.reset_write_ui()
+    
+    def on_ai_writing_error(self, error_message: str):
+        """AI 글쓰기 오류 처리"""
+        try:
+            logger.error(f"❌ AI 글쓰기 오류: {error_message}")
+            self.reset_write_ui()
+            
+            dialog = ModernConfirmDialog(
+                self,
+                title="AI 글쓰기 오류",
+                message=f"AI 글쓰기 중 오류가 발생했습니다:\n{error_message}\n\nAPI 키 설정을 확인해주세요.",
+                confirm_text="확인",
+                cancel_text=None,
+                icon="❌"
+            )
+            dialog.exec()
+            
+        except Exception as e:
+            logger.error(f"AI 글쓰기 오류 처리 중 오류: {e}")
+    
+    def reset_write_ui(self):
+        """AI 글쓰기 UI 상태 초기화"""
+        self.write_button.setText("🤖 AI로 블로그 글 작성하기")
+        self.write_button.setEnabled(True)
     
     def on_publish_clicked(self):
         """블로그 발행 시작"""

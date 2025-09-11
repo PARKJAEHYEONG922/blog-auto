@@ -1326,8 +1326,12 @@ class ModernScrollableDialog(QDialog):
             }}
         """)
         message_label.setWordWrap(True)
-        message_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        message_label.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse)
         message_label.setAlignment(Qt.AlignTop)
+        
+        # HTML 지원 및 외부 링크 활성화
+        message_label.setTextFormat(Qt.RichText)
+        message_label.setOpenExternalLinks(True)
         
         # 스크롤 영역에 메시지 라벨 추가
         scroll_area.setWidget(message_label)

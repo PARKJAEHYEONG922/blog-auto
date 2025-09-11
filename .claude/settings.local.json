@@ -20,7 +20,9 @@
       "Bash(ls:*)",
       "Bash(git rm:*)",
       "Bash(git commit:*)",
-      "Bash(git remote remove:*)"
+      "Bash(git remote remove:*)",
+      "Bash(python:*)",
+      "Bash(find:*)"
     ],
     "deny": []
   }

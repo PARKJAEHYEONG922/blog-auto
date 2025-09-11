@@ -31,11 +31,17 @@ class APIConfig:
     shopping_client_id: str = ""
     shopping_client_secret: str = ""
     
-    # AI API
+    # AI API - 텍스트 생성
     openai_api_key: str = ""
     claude_api_key: str = ""
     gemini_api_key: str = ""
-    current_ai_model: str = ""  # 현재 선택된 AI 모델
+    current_text_ai_model: str = ""  # 현재 선택된 텍스트 AI 모델
+    current_ai_model: str = ""  # 기존 호환성을 위해 유지
+    
+    # AI API - 이미지 생성
+    dalle_api_key: str = ""
+    imagen_api_key: str = ""
+    current_image_ai_model: str = ""  # 현재 선택된 이미지 AI 모델
     
     def is_searchad_valid(self) -> bool:
         """검색광고 API 설정 유효성 확인"""
