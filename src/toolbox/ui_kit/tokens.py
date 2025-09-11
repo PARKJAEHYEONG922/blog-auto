@@ -149,6 +149,13 @@ COLOR_WARNING = "#f59e0b"  # 주황
 COLOR_DANGER  = "#ef4444"  # 빨강
 COLOR_INFO    = "#3b82f6"  # 정보
 
+# 밝은 색상들 (연한 버전)
+COLOR_PRIMARY_LIGHT = "#60a5fa"  # 파랑 밝은색
+COLOR_SUCCESS_LIGHT = "#34d399"  # 초록 밝은색
+COLOR_WARNING_LIGHT = "#fbbf24"  # 주황 밝은색
+COLOR_DANGER_LIGHT  = "#f87171"  # 빨강 밝은색
+COLOR_INFO_LIGHT    = "#60a5fa"  # 정보 밝은색
+
 # 호버 색상들 (더 진한 버전)
 COLOR_PRIMARY_HOVER = "#1d4ed8"  # 파랑 호버
 COLOR_SUCCESS_HOVER = "#059669"  # 초록 호버
@@ -215,6 +222,7 @@ def get_radius(size_name: str = 'md') -> int:
 # 기존 코드에서 바로 사용할 수 있도록
 COLORS = {
     'primary': COLOR_PRIMARY,
+    'primary_light': COLOR_PRIMARY_LIGHT,
     'primary_hover': COLOR_PRIMARY_HOVER,
     'primary_pressed': COLOR_PRIMARY_PRESSED,
     
@@ -223,18 +231,22 @@ COLORS = {
     'secondary_pressed': COLOR_SUCCESS_PRESSED,
     
     'success': COLOR_SUCCESS,
+    'success_light': COLOR_SUCCESS_LIGHT,
     'success_hover': COLOR_SUCCESS_HOVER,
     'success_pressed': COLOR_SUCCESS_PRESSED,
     
     'warning': COLOR_WARNING,
+    'warning_light': COLOR_WARNING_LIGHT,
     'warning_hover': COLOR_WARNING_HOVER,
     'warning_pressed': COLOR_WARNING_PRESSED,
     
     'danger': COLOR_DANGER,
+    'danger_light': COLOR_DANGER_LIGHT,
     'danger_hover': COLOR_DANGER_HOVER,
     'danger_pressed': COLOR_DANGER_PRESSED,
     
     'info': COLOR_INFO,
+    'info_light': COLOR_INFO_LIGHT,
     'info_hover': COLOR_INFO_HOVER,
     'info_pressed': COLOR_INFO_PRESSED,
     

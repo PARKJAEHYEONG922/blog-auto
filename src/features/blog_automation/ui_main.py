@@ -186,10 +186,6 @@ class BlogAutomationMainUI(QWidget):
         platform_login_card = self.create_platform_login_card()
         layout.addWidget(platform_login_card)
         
-        # AI 글쓰기 설정 카드
-        ai_settings_card = self.create_ai_settings_card()
-        layout.addWidget(ai_settings_card)
-        
         layout.addStretch()
         panel.setLayout(layout)
         return panel
@@ -365,227 +361,6 @@ class BlogAutomationMainUI(QWidget):
         card.setLayout(layout)
         return card
     
-    def create_ai_settings_card(self) -> ModernCard:
-        """AI 글쓰기 설정 카드 생성"""
-        card = ModernCard("🤖 AI 글쓰기 설정")
-        layout = QVBoxLayout()
-        
-        # 컨텐츠 유형 선택
-        content_type_layout = QHBoxLayout()
-        content_type_layout.addWidget(QLabel("📝 컨텐츠 유형:"))
-        
-        self.content_type_combo = QComboBox()
-        self.content_type_combo.addItems([
-            "후기/리뷰형 - 개인 경험과 솔직한 후기 중심",
-            "정보/가이드형 - 객관적 정보와 가이드 중심", 
-            "비교/추천형 - 여러 옵션 비교분석 중심"
-        ])
-        self.content_type_combo.setCurrentIndex(1)  # 정보/가이드형을 기본값으로
-        
-        # 콤보박스 스타일 설정
-        combo_style = f"""
-            QComboBox {{
-                padding: {tokens.GAP_8}px {tokens.GAP_12}px;
-                border: 1px solid {ModernStyle.COLORS['border']};
-                border-radius: {tokens.RADIUS_SM}px;
-                background-color: {ModernStyle.COLORS['bg_card']};
-                color: {ModernStyle.COLORS['text_primary']};
-                font-size: 13px;
-                min-height: 20px;
-            }}
-            QComboBox::drop-down {{
-                border: none;
-                width: 20px;
-            }}
-            QComboBox::down-arrow {{
-                image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 5px solid {ModernStyle.COLORS['text_secondary']};
-                margin-right: 5px;
-            }}
-            QComboBox QAbstractItemView {{
-                background-color: {ModernStyle.COLORS['bg_card']};
-                border: 1px solid {ModernStyle.COLORS['border']};
-                selection-background-color: {ModernStyle.COLORS['primary']};
-                selection-color: white;
-                font-size: 13px;
-            }}
-        """
-        self.content_type_combo.setStyleSheet(combo_style)
-        
-        content_type_layout.addWidget(self.content_type_combo)
-        layout.addLayout(content_type_layout)
-        
-        # 후기형 세부 옵션 (후기/리뷰형 선택 시에만 표시)
-        self.review_detail_layout = QHBoxLayout()
-        self.review_detail_layout.addWidget(QLabel("📋 후기 유형:"))
-        
-        self.review_detail_combo = QComboBox()
-        self.review_detail_combo.addItems([
-            "내돈내산 후기 - 직접 구매해서 써본 솔직 후기",
-            "협찬 후기 - 브랜드 제공 제품의 정직한 리뷰",
-            "체험단 후기 - 체험단 참여 후기",
-            "대여/렌탈 후기 - 렌탈 서비스 이용 후기"
-        ])
-        self.review_detail_combo.setStyleSheet(combo_style)
-        
-        self.review_detail_layout.addWidget(self.review_detail_combo)
-        
-        # 후기형 세부 옵션을 위젯으로 감싸기 (숨기기/보이기 위해)
-        self.review_detail_widget = QWidget()
-        self.review_detail_widget.setLayout(self.review_detail_layout)
-        layout.addWidget(self.review_detail_widget)
-        
-        # 말투 선택
-        tone_layout = QHBoxLayout()
-        tone_layout.addWidget(QLabel("🗣️ 말투 스타일:"))
-        
-        self.tone_combo = QComboBox()
-        self.tone_combo.addItems([
-            "친근한 반말체 - '써봤는데 진짜 좋더라~', '완전 강추!'",
-            "정중한 존댓말체 - '사용해보았습니다', '추천드립니다'",
-            "전문가/리뷰어체 - '분석 결과', '객관적으로 평가하면'"
-        ])
-        self.tone_combo.setCurrentIndex(1)  # 정중한 존댓말체를 기본값으로
-        self.tone_combo.setStyleSheet(combo_style)
-        
-        tone_layout.addWidget(self.tone_combo)
-        layout.addLayout(tone_layout)
-        
-        # 컨텐츠 유형 변경 시 후기 세부 옵션 표시/숨김 처리
-        self.content_type_combo.currentIndexChanged.connect(self.on_content_type_changed)
-        
-        # 초기 상태 설정 (정보/가이드형이 기본이므로 후기 옵션 숨김)
-        self.review_detail_widget.setVisible(False)
-        
-        # 저장 버튼
-        save_layout = QHBoxLayout()
-        save_layout.addStretch()
-        
-        self.save_settings_button = ModernButton("💾 설정 저장")
-        self.save_settings_button.clicked.connect(self.save_ai_settings)
-        save_layout.addWidget(self.save_settings_button)
-        
-        layout.addLayout(save_layout)
-        
-        card.setLayout(layout)
-        return card
-    
-    def on_content_type_changed(self, index):
-        """컨텐츠 유형 변경 시 후기 세부 옵션 표시/숨김"""
-        try:
-            # 후기/리뷰형(인덱스 0)일 때만 세부 옵션 표시
-            if index == 0:  # 후기/리뷰형
-                self.review_detail_widget.setVisible(True)
-            else:  # 정보/가이드형, 비교/추천형
-                self.review_detail_widget.setVisible(False)
-        except Exception as e:
-            logger.error(f"컨텐츠 유형 변경 처리 오류: {e}")
-    
-    def get_ai_writing_settings(self) -> dict:
-        """사용자가 선택한 AI 글쓰기 설정 반환"""
-        content_types = ["후기/리뷰형", "정보/가이드형", "비교/추천형"]
-        tones = ["친근한 반말체", "정중한 존댓말체", "전문가/리뷰어체"]
-        review_details = ["내돈내산 후기", "협찬 후기", "체험단 후기", "대여/렌탈 후기"]
-        
-        selected_content_type = content_types[self.content_type_combo.currentIndex()]
-        selected_tone = tones[self.tone_combo.currentIndex()]
-        
-        settings = {
-            "content_type": selected_content_type,
-            "tone": selected_tone,
-            "content_type_id": self.content_type_combo.currentIndex(),
-            "tone_id": self.tone_combo.currentIndex()
-        }
-        
-        # 후기/리뷰형인 경우 세부 옵션 추가
-        if self.content_type_combo.currentIndex() == 0:  # 후기/리뷰형
-            settings["review_detail"] = review_details[self.review_detail_combo.currentIndex()]
-            settings["review_detail_id"] = self.review_detail_combo.currentIndex()
-        
-        return settings
-    
-    def save_ai_settings(self):
-        """AI 글쓰기 설정 저장"""
-        try:
-            settings = self.get_ai_writing_settings()
-            
-            # 설정을 config 파일에 저장
-            from src.foundation.config import config_manager
-            
-            # 현재 API 설정 로드
-            config = config_manager.load_api_config()
-            
-            # AI 글쓰기 설정 추가
-            config.ai_writing_content_type = settings['content_type']
-            config.ai_writing_tone = settings['tone']
-            config.ai_writing_content_type_id = settings['content_type_id']
-            config.ai_writing_tone_id = settings['tone_id']
-            
-            # 후기 세부 옵션이 있는 경우 저장
-            if 'review_detail' in settings:
-                config.ai_writing_review_detail = settings['review_detail']
-                config.ai_writing_review_detail_id = settings['review_detail_id']
-            
-            # 설정 저장
-            config_manager.save_api_config(config)
-            
-            logger.info(f"AI 글쓰기 설정 저장됨: {settings['content_type']}, {settings['tone']}")
-            
-            # 성공 다이얼로그
-            UIDialogHelper.show_success_dialog(
-                self,
-                title="설정 저장 완료",
-                message=f"AI 글쓰기 설정이 저장되었습니다!\n\n컨텐츠 유형: {settings['content_type']}\n말투 스타일: {settings['tone']}",
-                icon="💾"
-            )
-            
-        except Exception as e:
-            logger.error(f"AI 글쓰기 설정 저장 실패: {e}")
-            UIDialogHelper.show_error_dialog(
-                self,
-                title="설정 저장 실패",
-                message=f"설정 저장 중 오류가 발생했습니다:\n{str(e)}"
-            )
-    
-    def load_ai_settings(self):
-        """저장된 AI 글쓰기 설정 로드"""
-        try:
-            from src.foundation.config import config_manager
-            config = config_manager.load_api_config()
-            
-            # 저장된 설정 로드
-            content_type_id = getattr(config, 'ai_writing_content_type_id', 1)  # 기본: 정보/가이드형
-            tone_id = getattr(config, 'ai_writing_tone_id', 1)  # 기본: 정중한 존댓말체
-            review_detail_id = getattr(config, 'ai_writing_review_detail_id', 0)  # 기본: 내돈내산 후기
-            content_type = getattr(config, 'ai_writing_content_type', '정보/가이드형')
-            tone = getattr(config, 'ai_writing_tone', '정중한 존댓말체')
-            review_detail = getattr(config, 'ai_writing_review_detail', '내돈내산 후기')
-            
-            # 유효성 검사 (인덱스 범위 체크)
-            if 0 <= content_type_id <= 2:
-                self.content_type_combo.setCurrentIndex(content_type_id)
-            else:
-                self.content_type_combo.setCurrentIndex(1)  # 기본값
-                
-            if 0 <= tone_id <= 2:
-                self.tone_combo.setCurrentIndex(tone_id)
-            else:
-                self.tone_combo.setCurrentIndex(1)  # 기본값
-                
-            if 0 <= review_detail_id <= 3:
-                self.review_detail_combo.setCurrentIndex(review_detail_id)
-            else:
-                self.review_detail_combo.setCurrentIndex(0)  # 기본값
-            
-            logger.info(f"AI 글쓰기 설정 로드됨: {content_type} (ID: {content_type_id}), {tone} (ID: {tone_id}), 후기 세부: {review_detail} (ID: {review_detail_id})")
-                
-        except Exception as e:
-            logger.error(f"AI 글쓰기 설정 로드 실패: {e}")
-            # 오류 시 기본값 설정
-            self.content_type_combo.setCurrentIndex(1)
-            self.tone_combo.setCurrentIndex(1)
     
     def setup_styles(self):
         """스타일 설정"""
@@ -603,8 +378,11 @@ class BlogAutomationMainUI(QWidget):
         # 저장된 로그인 정보 로드
         self.load_saved_credentials()
         
-        # 저장된 AI 글쓰기 설정 로드
-        self.load_ai_settings()
+        # AI 설정 정보 업데이트 (table UI에서 로드 후)
+        if hasattr(self, 'blog_table_ui'):
+            # 약간의 지연 후 AI 정보 업데이트 (UI 초기화 완료 후)
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(100, self.update_ai_info_display)
     
     def on_platform_changed(self, platform_text: str):
         """플랫폼 변경 이벤트"""
