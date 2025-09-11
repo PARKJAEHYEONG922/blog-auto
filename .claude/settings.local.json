@@ -22,7 +22,10 @@
       "Bash(git commit:*)",
       "Bash(git remote remove:*)",
       "Bash(python:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(del test_prompt.py debug_prompt.txt)",
+      "Bash(cat:*)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": []
   }

@@ -499,10 +499,8 @@ class BlogWriteTableUI(QWidget):
         try:
             logger.info(f"🚀 자동 블로그 분석 시작: {main_keyword}")
             
-            # 분석 준비 (탭은 별도 창에서 표시될 예정)
-            analysis_tab = self.result_tabs.analysis_tab
-            analysis_tab.analysis_progress.setVisible(True)
-            analysis_tab.analysis_progress.setValue(10)
+            # 분석 준비 - UI 상태 업데이트
+            logger.info("분석 준비 중...")
             
             # 워커 생성
             from .worker import create_blog_analysis_worker, WorkerThread

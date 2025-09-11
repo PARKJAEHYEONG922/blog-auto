@@ -18,14 +18,11 @@ logger = get_logger("main")
 def load_features(app):
     """블로그 자동화 기능 모듈 로드 및 등록"""
     try:
-        # TODO: 블로그 자동화 기능 모듈이 개발되면 여기에 추가
-        logger.info("블로그 자동화 모듈 개발 예정")
+        logger.info("블로그 자동화 모듈 로드 시작")
         
-        # 예시:
-        # logger.info("블로그 자동화 모듈 로드 시작")
-        # from src.features.blog_automation import register as register_blog_automation
-        # register_blog_automation(app)
-        # logger.info("블로그 자동화 모듈 로드 완료")
+        # 블로그 자동화 모듈이 이미 앱에서 동적으로 로드되므로
+        # 여기서는 추가 초기화만 수행
+        logger.info("블로그 자동화 모듈은 UI에서 동적 로드됩니다")
         
         logger.info("기능 모듈 로드 완료")
         
