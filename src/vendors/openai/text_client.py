@@ -102,8 +102,8 @@ class OpenAITextClient:
         
         # 모델별 기본 max_tokens 설정 (출력용)
         if max_tokens is None:
-            # 충분한 길이의 블로그 글을 위해 (3,000~4,000자)
-            max_tokens = 2,000
+            # 충분한 길이의 블로그 글을 위해 (6,000~8,000자)
+            max_tokens = 4000
         
         # 속도 제한 적용
         self.rate_limiter.wait()

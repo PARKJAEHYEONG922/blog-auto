@@ -37,13 +37,21 @@ class BlogResultTabWidget(QTabWidget):
         self.analysis_tab = AnalysisResultTab(self.parent)
         self.addTab(self.analysis_tab, "📊 상위 블로그 분석")
         
-        # 탭 2: AI 프롬프트
-        self.prompt_tab = PromptResultTab(self.parent)
-        self.addTab(self.prompt_tab, "📝 AI 프롬프트")
+        # 탭 2: 정보요약 AI 프롬프트
+        self.summary_prompt_tab = SummaryPromptResultTab(self.parent)
+        self.addTab(self.summary_prompt_tab, "🔍 정보요약 AI 프롬프트")
         
-        # 탭 3: 생성된 글
-        self.content_tab = ContentResultTab(self.parent)
-        self.addTab(self.content_tab, "✨ AI 생성 결과")
+        # 탭 3: 정보요약 AI 결과
+        self.summary_result_tab = SummaryResultTab(self.parent)
+        self.addTab(self.summary_result_tab, "📋 정보요약 AI 결과")
+        
+        # 탭 4: 글작성 AI 프롬프트
+        self.writing_prompt_tab = WritingPromptResultTab(self.parent)
+        self.addTab(self.writing_prompt_tab, "📝 글작성 AI 프롬프트")
+        
+        # 탭 5: 글작성 AI 생성 결과
+        self.writing_result_tab = WritingResultTab(self.parent)
+        self.addTab(self.writing_result_tab, "✨ 글작성 AI 생성결과")
     
     def setup_styles(self):
         """탭 위젯 스타일 설정"""
@@ -88,30 +96,31 @@ class AnalysisResultTab(QWidget):
         layout = QVBoxLayout()
         
         # 상위 블로그 테이블
-        self.blog_table = QTableWidget(0, 8)  # 0행 8열
+        self.blog_table = QTableWidget(0, 9)  # 0행 9열 (내용 컬럼 추가)
         self.blog_table.setHorizontalHeaderLabels([
-            "순위", "제목", "글자수", "이미지수", "GIF수", "동영상수", "태그", "URL"
+            "순위", "제목", "내용", "글자수", "이미지수", "GIF수", "동영상수", "태그", "URL"
         ])
         
         # 테이블 설정
         header = self.blog_table.horizontalHeader()
         
-        # 고정 너비 설정
+        # 고정 너비 설정 (내용 컬럼 추가로 인한 조정)
         self.blog_table.setColumnWidth(0, 50)   # 순위
-        self.blog_table.setColumnWidth(1, 300)  # 제목
-        self.blog_table.setColumnWidth(2, 80)   # 글자수
-        self.blog_table.setColumnWidth(3, 80)   # 이미지수
-        self.blog_table.setColumnWidth(4, 70)   # GIF수
-        self.blog_table.setColumnWidth(5, 80)   # 동영상수
-        self.blog_table.setColumnWidth(6, 400)  # 태그
-        self.blog_table.setColumnWidth(7, 200)  # URL
+        self.blog_table.setColumnWidth(1, 250)  # 제목
+        self.blog_table.setColumnWidth(2, 350)  # 내용 (새로 추가)
+        self.blog_table.setColumnWidth(3, 80)   # 글자수
+        self.blog_table.setColumnWidth(4, 80)   # 이미지수
+        self.blog_table.setColumnWidth(5, 70)   # GIF수
+        self.blog_table.setColumnWidth(6, 80)   # 동영상수
+        self.blog_table.setColumnWidth(7, 350)  # 태그
+        self.blog_table.setColumnWidth(8, 200)  # URL
         
         # 가로 스크롤 활성화
         header.setSectionResizeMode(QHeaderView.Interactive)
         self.blog_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         
-        # 행 높이 조정
-        self.blog_table.verticalHeader().setDefaultSectionSize(60)
+        # 행 높이 조정 (내용을 보여주기 위해 더 높게)
+        self.blog_table.verticalHeader().setDefaultSectionSize(120)
         
         # 텍스트 래핑 활성화
         self.blog_table.setWordWrap(True)
@@ -160,17 +169,32 @@ class AnalysisResultTab(QWidget):
                 title = blog['title'][:50] + '...' if len(blog['title']) > 50 else blog['title']
                 self.blog_table.setItem(row, 1, QTableWidgetItem(title))
                 
+                # 내용 (크롤링된 실제 콘텐츠)
+                text_content = blog.get('text_content', '내용 없음')
+                if text_content and text_content != '분석 실패':
+                    # 내용을 200자로 제한하여 표시
+                    display_content = text_content[:200] + '...' if len(text_content) > 200 else text_content
+                    # 줄바꿈 처리하여 가독성 향상
+                    display_content = display_content.replace('\n', ' ').strip()
+                else:
+                    display_content = '내용 분석 실패'
+                
+                content_item = QTableWidgetItem(display_content)
+                content_item.setToolTip(text_content if text_content and text_content != '분석 실패' else '내용 분석 실패')
+                content_item.setTextAlignment(Qt.AlignTop | Qt.AlignLeft)
+                self.blog_table.setItem(row, 2, content_item)
+                
                 # 글자수
-                self.blog_table.setItem(row, 2, QTableWidgetItem(str(blog['content_length'])))
+                self.blog_table.setItem(row, 3, QTableWidgetItem(str(blog['content_length'])))
                 
                 # 이미지 수
-                self.blog_table.setItem(row, 3, QTableWidgetItem(str(blog['image_count'])))
+                self.blog_table.setItem(row, 4, QTableWidgetItem(str(blog['image_count'])))
                 
                 # GIF 수
-                self.blog_table.setItem(row, 4, QTableWidgetItem(str(blog['gif_count'])))
+                self.blog_table.setItem(row, 5, QTableWidgetItem(str(blog['gif_count'])))
                 
                 # 동영상 수
-                self.blog_table.setItem(row, 5, QTableWidgetItem(str(blog['video_count'])))
+                self.blog_table.setItem(row, 6, QTableWidgetItem(str(blog['video_count'])))
                 
                 # 태그 (두 줄로 표시)
                 tags = blog.get('tags', [])
@@ -188,11 +212,11 @@ class AnalysisResultTab(QWidget):
                 tag_item = QTableWidgetItem(tags_text)
                 tag_item.setToolTip(', '.join(tags) if tags else '태그 없음')
                 tag_item.setTextAlignment(Qt.AlignTop | Qt.AlignLeft)
-                self.blog_table.setItem(row, 6, tag_item)
+                self.blog_table.setItem(row, 7, tag_item)
                 
                 # URL (단축)
                 url = blog['url'][:50] + '...' if len(blog['url']) > 50 else blog['url']
-                self.blog_table.setItem(row, 7, QTableWidgetItem(url))
+                self.blog_table.setItem(row, 8, QTableWidgetItem(url))
             
             logger.info(f"테이블에 {len(analyzed_blogs)}개 블로그 데이터 표시 완료")
             
@@ -317,5 +341,73 @@ class ContentResultTab(QWidget):
     def set_generated_content(self, content: str):
         """생성된 콘텐츠 설정"""
         self.generated_text.setPlainText(content)
+
+
+class SummaryPromptResultTab(PromptResultTab):
+    """정보요약 AI 프롬프트 결과 탭"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # 제목 업데이트
+        title_layout = self.layout().itemAt(0).layout()
+        title_label = title_layout.itemAt(0).widget()
+        title_label.setText("🔍 정보요약 AI가 받은 프롬프트:")
+        
+        # 복사 버튼 텍스트 업데이트
+        self.copy_prompt_button.setText("📋 요약 프롬프트 복사")
+        
+        # 플레이스홀더 업데이트
+        self.prompt_text.setPlaceholderText("정보요약 AI가 받은 프롬프트가 여기에 표시됩니다...")
+
+
+class SummaryResultTab(ContentResultTab):
+    """정보요약 AI 결과 탭"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # 제목 업데이트
+        title_layout = self.layout().itemAt(0).layout()
+        title_label = title_layout.itemAt(0).widget()
+        title_label.setText("📋 정보요약 AI 결과:")
+        
+        # 복사 버튼 텍스트 업데이트
+        self.copy_button.setText("📋 요약 결과 복사")
+        
+        # 플레이스홀더 업데이트
+        self.generated_text.setPlaceholderText("정보요약 AI가 생성한 요약 내용이 여기에 표시됩니다...")
+
+
+class WritingPromptResultTab(PromptResultTab):
+    """글작성 AI 프롬프트 결과 탭"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # 제목 업데이트
+        title_layout = self.layout().itemAt(0).layout()
+        title_label = title_layout.itemAt(0).widget()
+        title_label.setText("📝 글작성 AI가 받은 프롬프트:")
+        
+        # 복사 버튼 텍스트 업데이트
+        self.copy_prompt_button.setText("📋 글작성 프롬프트 복사")
+        
+        # 플레이스홀더 업데이트
+        self.prompt_text.setPlaceholderText("글작성 AI가 받은 프롬프트가 여기에 표시됩니다...")
+
+
+class WritingResultTab(ContentResultTab):
+    """글작성 AI 생성 결과 탭"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # 제목 업데이트
+        title_layout = self.layout().itemAt(0).layout()
+        title_label = title_layout.itemAt(0).widget()
+        title_label.setText("✨ 글작성 AI 생성 결과:")
+        
+        # 복사 버튼 텍스트 업데이트
+        self.copy_button.setText("📋 생성 결과 복사")
+        
+        # 플레이스홀더 업데이트
+        self.generated_text.setPlaceholderText("글작성 AI가 생성한 최종 블로그 글이 여기에 표시됩니다...")
 
 

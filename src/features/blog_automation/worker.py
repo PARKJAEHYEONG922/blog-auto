@@ -368,46 +368,92 @@ class AIWritingWorker(QObject):
     writing_completed = Signal(str)  # 글쓰기 완료 (생성된 콘텐츠)
     error_occurred = Signal(str)  # 오류 발생
     
-    def __init__(self, service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = ""):
+    # 2단계 파이프라인 추가 시그널
+    summary_prompt_generated = Signal(str)  # 정보요약 AI 프롬프트 생성
+    summary_completed = Signal(str)  # 정보요약 AI 결과 완료
+    writing_prompt_generated = Signal(str)  # 글작성 AI 프롬프트 생성
+    
+    def __init__(self, service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, analyzed_blogs: list = None, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = ""):
         super().__init__()
         self.service = service
         self.main_keyword = main_keyword
         self.sub_keywords = sub_keywords
         self.structured_data = structured_data
+        self.analyzed_blogs = analyzed_blogs or []
         self.content_type = content_type
         self.tone = tone
         self.review_detail = review_detail
         self.is_cancelled = False
         
     def run(self):
-        """AI 글쓰기 작업 실행"""
+        """AI 글쓰기 작업 실행 (2단계 파이프라인)"""
         try:
-            logger.info(f"🤖 AI 글쓰기 워커 시작: {self.main_keyword}")
+            logger.info(f"🤖 AI 글쓰기 워커 시작 (2단계 파이프라인): {self.main_keyword}")
             self.writing_started.emit()
             
-            # 세밀한 진행 상황 업데이트
-            self.writing_progress.emit("프롬프트 준비 중...", 10)
-            
-            if self.is_cancelled:
-                return
+            # 분석된 블로그 데이터가 있는지 확인
+            if self.analyzed_blogs:
+                logger.info(f"2단계 파이프라인 사용: {len(self.analyzed_blogs)}개 블로그 분석 데이터 활용")
+                self.writing_progress.emit("경쟁 블로그 콘텐츠 통합 중...", 10)
                 
-            # AI 프롬프트 생성 (스타일 옵션 포함)
-            from .ai_prompts import BlogAIPrompts
-            prompt = BlogAIPrompts.generate_content_analysis_prompt(
-                self.main_keyword, self.sub_keywords, self.structured_data, 
-                self.content_type, self.tone, self.review_detail
-            )
-            
-            self.writing_progress.emit("AI 모델 연결 중...", 30)
-            time.sleep(1)
-            
-            if self.is_cancelled:
-                return
+                if self.is_cancelled:
+                    return
                 
-            self.writing_progress.emit("콘텐츠 생성 중... (시간이 좀 걸릴 수 있습니다)", 50)
-            
-            # AI API 호출
-            generated_content = self.service.generate_blog_content(prompt)
+                self.writing_progress.emit("정보요약 AI로 콘텐츠 요약 중...", 30)
+                
+                if self.is_cancelled:
+                    return
+                    
+                self.writing_progress.emit("글작성 AI로 최종 콘텐츠 생성 중... (시간이 좀 걸릴 수 있습니다)", 60)
+                
+                # 2단계 파이프라인으로 콘텐츠 생성 (상세 정보 포함)
+                detailed_results = self.service.generate_blog_content_with_summary_detailed(
+                    self.main_keyword,
+                    self.sub_keywords, 
+                    self.analyzed_blogs,
+                    self.content_type,
+                    self.tone,
+                    self.review_detail
+                )
+                
+                # 각 단계별 시그널 발송
+                if not self.is_cancelled and detailed_results:
+                    # 정보요약 AI 프롬프트 시그널
+                    self.summary_prompt_generated.emit(detailed_results.get("summary_prompt", ""))
+                    
+                    # 정보요약 AI 결과 시그널  
+                    self.summary_completed.emit(detailed_results.get("summary_result", ""))
+                    
+                    # 글작성 AI 프롬프트 시그널
+                    self.writing_prompt_generated.emit(detailed_results.get("writing_prompt", ""))
+                    
+                    # 최종 생성 콘텐츠
+                    generated_content = detailed_results.get("final_content", "")
+                
+            else:
+                logger.info("기존 방식 사용: 분석 데이터 없이 프롬프트만으로 생성")
+                self.writing_progress.emit("프롬프트 준비 중...", 10)
+                
+                if self.is_cancelled:
+                    return
+                    
+                # 기존 방식: 프롬프트만으로 생성
+                from .ai_prompts import BlogAIPrompts
+                prompt = BlogAIPrompts.generate_content_analysis_prompt(
+                    self.main_keyword, self.sub_keywords, self.structured_data, 
+                    self.content_type, self.tone, self.review_detail
+                )
+                
+                self.writing_progress.emit("AI 모델 연결 중...", 30)
+                time.sleep(1)
+                
+                if self.is_cancelled:
+                    return
+                    
+                self.writing_progress.emit("콘텐츠 생성 중... (시간이 좀 걸릴 수 있습니다)", 50)
+                
+                # 기존 AI API 호출
+                generated_content = self.service.generate_blog_content(prompt)
             
             if not self.is_cancelled:
                 if generated_content:
@@ -441,9 +487,9 @@ def create_blog_analysis_worker(service: BlogAutomationService, keyword: str) ->
     return BlogAnalysisWorker(service, keyword)
 
 
-def create_ai_writing_worker(service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "") -> AIWritingWorker:
-    """AI 글쓰기 워커 생성 (스타일 옵션 포함)"""
-    return AIWritingWorker(service, main_keyword, sub_keywords, structured_data, content_type, tone, review_detail)
+def create_ai_writing_worker(service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, analyzed_blogs: list = None, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "") -> AIWritingWorker:
+    """AI 글쓰기 워커 생성 (2단계 파이프라인 지원)"""
+    return AIWritingWorker(service, main_keyword, sub_keywords, structured_data, analyzed_blogs, content_type, tone, review_detail)
 
 
 def create_worker_pool(max_workers: int = 3) -> WorkerPool:

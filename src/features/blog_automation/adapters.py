@@ -22,6 +22,59 @@ from .models import BlogCredentials, BlogPlatform, LoginStatus
 logger = get_logger("blog_automation.adapters")
 
 
+def is_advertisement_content(text_content: str, title: str = "") -> bool:
+    """광고/협찬/체험단 글인지 판단"""
+    if not text_content:
+        return False
+    
+    # 전체 텍스트를 소문자로 변환하여 검사
+    full_text = (text_content + " " + title).lower()
+    
+    # 광고/협찬 관련 키워드들
+    ad_keywords = [
+        # 광고 관련
+        "광고포스트", "광고 포스트", "광고글", "광고 글", "광고입니다", "광고 입니다",
+        "유료광고", "유료 광고", "파트너스", "쿠팡파트너스", "파트너 활동", "추천링크",
+        
+        # 협찬 관련  
+        "협찬", "협찬받", "협찬글", "협찬 글", "협찬으로", "협찬을", "제공받", "무료로 제공",
+        "브랜드로부터", "업체로부터", "해당업체", "해당 업체", "제품을 제공", "서비스를 제공", 
+        "제공받아", "제공받은", "지원을 받아", "지원받아", "업체에서 제공", "업체로부터 제품",
+        
+        # 체험단 관련
+        "체험단", "체험 단", "리뷰어", "체험후기", "체험 후기", "체험해보", "체험을",
+        "무료체험", "무료 체험", "서포터즈", "앰배서더", "인플루언서",
+        
+        # 기타 상업적 키워드
+        "원고료", "대가", "소정의", "혜택을", "증정", "무료로 받", "공짜로", 
+        "할인코드", "쿠폰", "프로모션", "이벤트 참여"
+    ]
+    
+    # 키워드 매칭 검사
+    for keyword in ad_keywords:
+        if keyword in full_text:
+            logger.info(f"광고/협찬 글 감지: '{keyword}' 키워드 발견")
+            return True
+    
+    # 패턴 매칭 (정규식)
+    ad_patterns = [
+        r".*제공받.*작성.*",  # "제공받아 작성한", "제공받고 작성한" 등
+        r".*협찬.*받.*글.*",  # "협찬받은 글", "협찬을 받아서" 등  
+        r".*무료.*받.*후기.*", # "무료로 받아서 후기", "무료로 받은 후기" 등
+        r".*체험.*참여.*",     # "체험에 참여해", "체험단 참여" 등
+        r".*광고.*포함.*",     # "광고가 포함", "광고를 포함한" 등
+        r".*업체.*지원.*받.*", # "해당 업체에 지원을 받아", "업체로부터 지원받아" 등
+        r".*업체.*제품.*제공.*", # "업체로부터 제품을 제공받아" 등
+    ]
+    
+    for pattern in ad_patterns:
+        if re.search(pattern, full_text):
+            logger.info(f"광고/협찬 글 감지: 패턴 '{pattern}' 매칭")
+            return True
+    
+    return False
+
+
 def handle_web_automation_errors(operation_name: str):
     """웹 자동화 오류 처리 데코레이터 (중복 코드 제거용)"""
     def decorator(func):
@@ -1109,7 +1162,7 @@ class NaverBlogAdapter:
                 # 결과 설정
                 final_text = total_text.strip()
                 analysis_result['content_length'] = len(final_text.replace(' ', ''))  # 공백 제거한 글자수
-                analysis_result['text_content'] = final_text[:500] + '...' if len(final_text) > 500 else final_text
+                analysis_result['text_content'] = final_text  # 전체 텍스트 사용 (정보요약 AI를 위해)
                 
                 logger.info(f"본문 글자수 (공백제거): {analysis_result['content_length']}")
                 
@@ -1369,7 +1422,7 @@ class NaverBlogAdapter:
             
             # 본문 텍스트 추출 및 길이 계산 (iframe 콘텐츠에서)
             text_content, content_length = self._extract_text_content_http(analysis_soup)
-            analysis_result['text_content'] = text_content[:500] + '...' if len(text_content) > 500 else text_content
+            analysis_result['text_content'] = text_content  # 전체 텍스트 사용 (정보요약 AI를 위해)
             analysis_result['content_length'] = content_length
             logger.info(f"HTTP 본문 글자수: {content_length}")
             
@@ -2488,13 +2541,14 @@ class NaverBlogAdapter:
             logger.error(f"iframe 복귀 오류: {e}")
     
     def analyze_top_blogs(self, keyword: str, max_results: int = 3) -> list:
-        """상위 블로그 검색 및 분석 통합"""
+        """상위 블로그 검색 및 분석 통합 (광고/협찬 글 필터링 포함)"""
         try:
-            logger.info(f"📊 상위 블로그 통합 분석 시작: '{keyword}' (상위 {max_results}개)")
+            logger.info(f"📊 상위 블로그 통합 분석 시작: '{keyword}' (광고 제외 상위 {max_results}개)")
             
-            # 1단계: 블로그 검색
-            logger.info("🔍 1단계: 블로그 검색 중...")
-            blog_list = self.search_top_blogs(keyword, max_results)
+            # 1단계: 블로그 검색 (광고 글 필터링을 위해 더 많이 검색)
+            search_count = max_results * 2  # 광고 글이 있을 수 있으니 2배 많이 검색
+            logger.info(f"🔍 1단계: 블로그 검색 중... (광고 필터링을 위해 {search_count}개 검색)")
+            blog_list = self.search_top_blogs(keyword, search_count)
             
             if not blog_list:
                 logger.warning("검색된 블로그가 없습니다")
@@ -2564,8 +2618,22 @@ class NaverBlogAdapter:
                             'content_structure': []
                         }
                     
+                    # 🚫 광고/협찬 글 필터링 체크
+                    text_content = integrated_result.get('text_content', '')
+                    title = integrated_result.get('title', '')
+                    
+                    if is_advertisement_content(text_content, title):
+                        logger.warning(f"🚫 {i+1}번째 블로그 제외: 광고/협찬/체험단 글로 판단됨")
+                        continue  # 이 블로그는 결과에 포함하지 않음
+                    
+                    # 💚 정상적인 정보성 글만 추가
                     analyzed_blogs.append(integrated_result)
-                    logger.info(f"✅ {i+1}번째 블로그 분석 완료")
+                    logger.info(f"✅ {i+1}번째 블로그 분석 완료 (정보성 글)")
+                    
+                    # 🎯 원하는 개수만큼 수집했으면 중단
+                    if len(analyzed_blogs) >= max_results:
+                        logger.info(f"🎯 광고 제외 상위 {max_results}개 블로그 수집 완료")
+                        break
                     
                 except Exception as e:
                     logger.error(f"❌ {i+1}번째 블로그 분석 실패: {e}")
@@ -2585,7 +2653,11 @@ class NaverBlogAdapter:
                     analyzed_blogs.append(failed_result)
                     continue
             
-            logger.info(f"🎉 상위 블로그 통합 분석 완료: {len(analyzed_blogs)}개")
+            # 🔢 최종 결과 순위 재정렬 (광고 제외된 순위로 1, 2, 3...)
+            for idx, blog in enumerate(analyzed_blogs):
+                blog['rank'] = idx + 1  # 1부터 시작하는 순위로 재설정
+            
+            logger.info(f"🎉 상위 블로그 통합 분석 완료: {len(analyzed_blogs)}개 (광고/협찬 글 필터링 완료)")
             return analyzed_blogs
             
         except Exception as e:

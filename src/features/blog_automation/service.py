@@ -326,6 +326,69 @@ class BlogAutomationService:
         
         return model_mapping.get(ui_model_name, ui_model_name)
     
+    def generate_content_summary(self, content: str, main_keyword: str = "", content_type: str = "정보/가이드형") -> str:
+        """정보요약 AI를 사용하여 블로그 콘텐츠 요약"""
+        try:
+            logger.info(f"정보요약 AI를 사용한 콘텐츠 요약 시작 - 키워드: {main_keyword}")
+            
+            # API 설정 로드
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+            
+            # ai_prompts.py에서 1차 가공 프롬프트 생성
+            from .ai_prompts import BlogSummaryPrompts
+            summary_prompt = BlogSummaryPrompts.generate_content_summary_prompt(content, main_keyword, content_type)
+
+            messages = [
+                {
+                    "role": "user", 
+                    "content": summary_prompt
+                }
+            ]
+            
+            # 정보요약 AI 설정 확인
+            summary_provider = api_config.current_summary_ai_provider or "openai"
+            summary_ui_model = api_config.current_summary_ai_model or "GPT-4o Mini (유료, 저렴)"
+            
+            # 디버그: 현재 요약 AI 설정 상태 로깅
+            logger.info(f"정보요약 AI 설정 - Provider: {summary_provider}, Model: {summary_ui_model}")
+            
+            # UI 모델명을 기술적 모델명으로 변환
+            technical_model = self._map_ui_model_to_technical_name(summary_ui_model)
+            
+            if summary_provider == "openai" and api_config.openai_api_key and api_config.openai_api_key.strip():
+                logger.info(f"OpenAI API 사용 (요약): {summary_ui_model} -> {technical_model}")
+                from src.vendors.openai.text_client import openai_text_client
+                response = openai_text_client.generate_text(messages, model=technical_model)
+                
+            elif summary_provider == "google" and api_config.gemini_api_key and api_config.gemini_api_key.strip():
+                logger.info(f"Google Gemini API 사용 (요약): {summary_ui_model} -> {technical_model}")
+                from src.vendors.google.text_client import gemini_text_client
+                response = gemini_text_client.generate_text(messages, model=technical_model)
+                
+            elif summary_provider == "anthropic" and api_config.claude_api_key and api_config.claude_api_key.strip():
+                logger.info(f"Anthropic Claude API 사용 (요약): {summary_ui_model} -> {technical_model}")
+                from src.vendors.anthropic.text_client import claude_text_client
+                response = claude_text_client.generate_text(messages, model=technical_model)
+                
+            else:
+                logger.error("정보요약 AI가 설정되지 않음. API 설정에서 정보요약 AI를 설정해주세요.")
+                raise BusinessError("정보요약 AI가 설정되지 않았습니다. API 설정에서 정보요약 AI를 먼저 설정해주세요.")
+            
+            if response:
+                logger.info(f"콘텐츠 요약 완료: {len(response)}자")
+                return response
+            else:
+                logger.warning("요약 AI 응답 실패. 원본 콘텐츠를 그대로 사용합니다.")
+                return content[:2000] + "..." if len(content) > 2000 else content
+                
+        except BusinessError:
+            # BusinessError는 그대로 재발생
+            raise
+        except Exception as e:
+            logger.error(f"콘텐츠 요약 실패: {e}")
+            raise BusinessError(f"정보요약 AI 처리 중 오류가 발생했습니다: {str(e)}")
+    
     def generate_blog_content(self, prompt: str) -> str:
         """API 설정에서 선택된 AI를 사용하여 블로그 콘텐츠 생성"""
         try:
@@ -392,6 +455,158 @@ class BlogAutomationService:
             logger.error(f"AI 콘텐츠 생성 실패: {e}")
             raise BusinessError(f"AI 콘텐츠 생성 실패: {str(e)}")
     
+    def generate_blog_content_with_summary(self, main_keyword: str, sub_keywords: str, analyzed_blogs: list, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "") -> str:
+        """2단계 파이프라인: 정보요약 AI → 글작성 AI"""
+        try:
+            logger.info("2단계 파이프라인으로 블로그 콘텐츠 생성 시작")
+            
+            # 1단계: 분석된 블로그들의 콘텐츠를 하나의 텍스트로 통합
+            logger.info("1단계: 경쟁 블로그 콘텐츠 통합")
+            combined_content = self._combine_blog_contents(analyzed_blogs)
+            
+            if not combined_content.strip():
+                logger.warning("통합할 블로그 콘텐츠가 없습니다.")
+                combined_content = "분석할 콘텐츠가 없습니다."
+            
+            logger.info(f"통합된 콘텐츠 길이: {len(combined_content)}자")
+            
+            # 2단계: 정보요약 AI로 콘텐츠 요약
+            logger.info("2단계: 정보요약 AI로 콘텐츠 요약")
+            summarized_content = self.generate_content_summary(combined_content, main_keyword, content_type)
+            logger.info(f"요약된 콘텐츠 길이: {len(summarized_content)}자")
+            
+            # 3단계: 요약된 내용을 포함한 프롬프트로 글작성 AI 호출
+            logger.info("3단계: 요약 내용 기반 최종 블로그 글 생성")
+            
+            # 블로그 구조 분석
+            from .ai_prompts import BlogContentStructure, BlogAIPrompts
+            structure_analyzer = BlogContentStructure()
+            structured_data = structure_analyzer.analyze_blog_structure(analyzed_blogs)
+            
+            # 기존 프롬프트에 요약 내용 통합
+            base_prompt = BlogAIPrompts.generate_content_analysis_prompt(
+                main_keyword=main_keyword,
+                sub_keywords=sub_keywords, 
+                structured_data=structured_data,
+                content_type=content_type,
+                tone=tone,
+                review_detail=review_detail
+            )
+            
+            # 요약된 내용을 프롬프트에 추가
+            enhanced_prompt = f"""{base_prompt}
+
+## 참고할 경쟁 블로그 요약 정보
+{summarized_content}
+
+위 요약 정보를 참고하되, 단순 복사가 아닌 더 나은 독창적인 콘텐츠를 작성해주세요."""
+
+            # 글작성 AI로 최종 콘텐츠 생성
+            final_content = self.generate_blog_content(enhanced_prompt)
+            
+            logger.info("2단계 파이프라인 완료")
+            return final_content
+            
+        except Exception as e:
+            logger.error(f"2단계 파이프라인 실패: {e}")
+            raise BusinessError(f"블로그 콘텐츠 생성 실패: {str(e)}")
+    
+    def _combine_blog_contents(self, analyzed_blogs: list) -> str:
+        """분석된 블로그들의 텍스트 콘텐츠를 하나로 통합 (전체 내용 포함)"""
+        combined_parts = []
+        
+        for i, blog in enumerate(analyzed_blogs):
+            title = blog.get('title', '제목 없음')
+            text_content = blog.get('text_content', '')
+            url = blog.get('url', '')
+            
+            if text_content and text_content != '분석 실패':
+                blog_section = f"""=== {i+1}위 블로그: {title} ===
+URL: {url}
+글자수: {blog.get('content_length', 0)}자
+
+{text_content}
+
+===============================
+"""
+                combined_parts.append(blog_section)
+                logger.info(f"{i+1}위 블로그 내용 추가: {len(text_content)}자")
+        
+        if not combined_parts:
+            return "분석할 수 있는 블로그 콘텐츠가 없습니다."
+        
+        combined_content = '\n'.join(combined_parts)
+        logger.info(f"최종 결합된 전체 콘텐츠 길이: {len(combined_content)}자 (길이 제한 없음)")
+        return combined_content
+    
+    def generate_blog_content_with_summary_detailed(self, main_keyword: str, sub_keywords: str, analyzed_blogs: list, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "") -> Dict[str, str]:
+        """2단계 파이프라인: 정보요약 AI → 글작성 AI (상세 정보 포함)"""
+        try:
+            logger.info("2단계 파이프라인으로 블로그 콘텐츠 생성 시작 (상세 정보 포함)")
+            
+            # 1단계: 분석된 블로그들의 콘텐츠를 하나의 텍스트로 통합
+            logger.info("1단계: 경쟁 블로그 콘텐츠 통합")
+            combined_content = self._combine_blog_contents(analyzed_blogs)
+            
+            if not combined_content.strip():
+                logger.warning("통합할 블로그 콘텐츠가 없습니다.")
+                combined_content = "분석할 콘텐츠가 없습니다."
+            
+            logger.info(f"통합된 콘텐츠 길이: {len(combined_content)}자")
+            
+            # 2단계: 정보요약 AI로 콘텐츠 요약
+            logger.info("2단계: 정보요약 AI로 콘텐츠 요약")
+            
+            # 기존 generate_content_summary 메서드 사용
+            summarized_content = self.generate_content_summary(combined_content, main_keyword, content_type)
+            
+            # UI용 프롬프트 생성 (ai_prompts.py에서)
+            from .ai_prompts import BlogSummaryPrompts
+            summary_prompt = BlogSummaryPrompts.generate_content_summary_prompt(combined_content, main_keyword, content_type)
+            logger.info(f"요약된 콘텐츠 길이: {len(summarized_content)}자")
+            
+            # 3단계: 요약된 내용을 포함한 프롬프트로 글작성 AI 호출
+            logger.info("3단계: 요약 내용 기반 최종 블로그 글 생성")
+            
+            # 블로그 구조 분석
+            from .ai_prompts import BlogContentStructure, BlogAIPrompts
+            structure_analyzer = BlogContentStructure()
+            structured_data = structure_analyzer.analyze_blog_structure(analyzed_blogs)
+            
+            # 기존 프롬프트에 요약 내용 통합
+            base_prompt = BlogAIPrompts.generate_content_analysis_prompt(
+                main_keyword=main_keyword,
+                sub_keywords=sub_keywords, 
+                structured_data=structured_data,
+                content_type=content_type,
+                tone=tone,
+                review_detail=review_detail
+            )
+            
+            # 요약된 내용을 프롬프트에 추가
+            enhanced_prompt = f"""{base_prompt}
+
+## 참고할 경쟁 블로그 요약 정보
+{summarized_content}
+
+위 요약 정보를 참고하되, 단순 복사가 아닌 더 나은 독창적인 콘텐츠를 작성해주세요."""
+
+            # 글작성 AI로 최종 콘텐츠 생성
+            final_content = self.generate_blog_content(enhanced_prompt)
+            
+            logger.info("2단계 파이프라인 완료 (상세 정보 포함)")
+            
+            return {
+                "summary_prompt": summary_prompt,
+                "summary_result": summarized_content,
+                "writing_prompt": enhanced_prompt,
+                "final_content": final_content,
+                "combined_content": combined_content
+            }
+            
+        except Exception as e:
+            logger.error(f"2단계 파이프라인 실패 (상세): {e}")
+            raise BusinessError(f"블로그 콘텐츠 생성 실패: {str(e)}")
     
     def _map_ui_image_model_to_technical_name(self, ui_model_name: str) -> str:
         """UI 이미지 모델명을 기술적 모델명으로 매핑"""

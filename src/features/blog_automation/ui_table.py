@@ -554,10 +554,10 @@ class BlogWriteTableUI(QWidget):
             # AI 프롬프트 생성 및 저장
             self.generate_ai_prompt_for_auto(main_keyword, sub_keywords, analyzed_blogs)
             
-            # 프롬프트 탭에 내용 설정
+            # 글작성 AI 프롬프트 탭에 내용 설정
             if self.ai_prompt_data and 'main_prompt' in self.ai_prompt_data:
-                prompt_tab = self.result_tabs.prompt_tab
-                prompt_tab.set_prompt_content(self.ai_prompt_data['main_prompt'])
+                writing_prompt_tab = self.result_tabs.writing_prompt_tab
+                writing_prompt_tab.set_prompt_content(self.ai_prompt_data['main_prompt'])
             
             # 2단계: AI 글쓰기 시작
             self.start_auto_writing(main_keyword, sub_keywords, analyzed_blogs)
@@ -638,7 +638,7 @@ class BlogWriteTableUI(QWidget):
             review_detail = self.ai_prompt_data['review_detail']
             
             self.ai_writer_worker = create_ai_writing_worker(
-                self.parent.service, main_keyword, sub_keywords, structured_data, content_type, tone, review_detail
+                self.parent.service, main_keyword, sub_keywords, structured_data, analyzed_blogs, content_type, tone, review_detail
             )
             self.ai_writer_thread = WorkerThread(self.ai_writer_worker)
             
@@ -646,6 +646,11 @@ class BlogWriteTableUI(QWidget):
             self.ai_writer_worker.writing_started.connect(self.on_auto_writing_started)
             self.ai_writer_worker.writing_completed.connect(self.on_auto_writing_completed)
             self.ai_writer_worker.error_occurred.connect(self.on_auto_writing_error)
+            
+            # 2단계 파이프라인 시그널 연결
+            self.ai_writer_worker.summary_prompt_generated.connect(self.on_summary_prompt_generated)
+            self.ai_writer_worker.summary_completed.connect(self.on_summary_completed)
+            self.ai_writer_worker.writing_prompt_generated.connect(self.on_writing_prompt_generated)
             
             # 워커 시작
             self.ai_writer_thread.start()
@@ -667,9 +672,9 @@ class BlogWriteTableUI(QWidget):
         try:
             logger.info("✅ 자동 AI 글쓰기 완료!")
             
-            # 생성된 글을 컨텐츠 탭에 표시
-            content_tab = self.result_tabs.content_tab
-            content_tab.set_generated_content(generated_content)
+            # 생성된 글을 최종 결과 탭에 표시
+            writing_result_tab = self.result_tabs.writing_result_tab
+            writing_result_tab.set_generated_content(generated_content)
             
             # 발행 버튼 활성화
             self.publish_button.setEnabled(True)
@@ -764,6 +769,36 @@ class BlogWriteTableUI(QWidget):
             TableUIDialogHelper.show_error_dialog(
                 self, "오류", f"결과 창을 열 수 없습니다:\n{e}"
             )
+    
+    def on_summary_prompt_generated(self, summary_prompt: str):
+        """정보요약 AI 프롬프트 생성 시그널 처리"""
+        try:
+            logger.info("📋 정보요약 AI 프롬프트 생성됨")
+            # 정보요약 AI 프롬프트 탭에 내용 설정
+            summary_prompt_tab = self.result_tabs.summary_prompt_tab
+            summary_prompt_tab.set_prompt_content(summary_prompt)
+        except Exception as e:
+            logger.error(f"정보요약 AI 프롬프트 표시 오류: {e}")
+    
+    def on_summary_completed(self, summary_result: str):
+        """정보요약 AI 결과 완료 시그널 처리"""
+        try:
+            logger.info("📋 정보요약 AI 결과 완료됨")
+            # 정보요약 AI 결과 탭에 내용 설정
+            summary_result_tab = self.result_tabs.summary_result_tab
+            summary_result_tab.set_generated_content(summary_result)
+        except Exception as e:
+            logger.error(f"정보요약 AI 결과 표시 오류: {e}")
+    
+    def on_writing_prompt_generated(self, writing_prompt: str):
+        """글작성 AI 프롬프트 생성 시그널 처리"""
+        try:
+            logger.info("📝 글작성 AI 프롬프트 생성됨")
+            # 글작성 AI 프롬프트 탭에 내용 설정 (기존 프롬프트 덮어쓰기)
+            writing_prompt_tab = self.result_tabs.writing_prompt_tab
+            writing_prompt_tab.set_prompt_content(writing_prompt)
+        except Exception as e:
+            logger.error(f"글작성 AI 프롬프트 표시 오류: {e}")
     
     def on_publish_clicked(self):
         """블로그 발행 시작"""
