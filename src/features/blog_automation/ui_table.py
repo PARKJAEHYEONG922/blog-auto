@@ -628,7 +628,7 @@ class BlogWriteTableUI(QWidget):
             review_detail = settings.get('review_detail', '')
             
             # AI 요청 데이터 생성 (메인키워드와 보조키워드 분리)
-            ai_data = create_ai_request_data(main_keyword, sub_keywords, analyzed_blogs, content_type, tone, review_detail)
+            ai_data = create_ai_request_data(main_keyword, sub_keywords, analyzed_blogs, content_type, tone, review_detail, "", "")
             
             if ai_data:
                 self.ai_prompt_data = {

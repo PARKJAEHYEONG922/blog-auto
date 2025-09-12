@@ -441,7 +441,7 @@ class AIWritingWorker(QObject):
                 from .ai_prompts import BlogAIPrompts
                 prompt = BlogAIPrompts.generate_content_analysis_prompt(
                     self.main_keyword, self.sub_keywords, self.structured_data, 
-                    self.content_type, self.tone, self.review_detail
+                    self.content_type, self.tone, self.review_detail, "", ""
                 )
                 
                 self.writing_progress.emit("AI 모델 연결 중...", 30)

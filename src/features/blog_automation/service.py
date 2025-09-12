@@ -488,24 +488,17 @@ class BlogAutomationService:
             api_config = config_manager.load_api_config()
             blogger_identity = getattr(api_config, 'ai_writing_blogger_identity', '')
             
-            # 기존 프롬프트에 요약 내용 통합
-            base_prompt = BlogAIPrompts.generate_content_analysis_prompt(
+            # 1차 결과를 포함한 완전한 프롬프트 생성
+            enhanced_prompt = BlogAIPrompts.generate_content_analysis_prompt(
                 main_keyword=main_keyword,
                 sub_keywords=sub_keywords, 
                 structured_data=structured_data,
                 content_type=content_type,
                 tone=tone,
                 review_detail=review_detail,
-                blogger_identity=blogger_identity
+                blogger_identity=blogger_identity,
+                summary_result=summarized_content
             )
-            
-            # 요약된 내용을 프롬프트에 추가
-            enhanced_prompt = f"""{base_prompt}
-
-## 참고할 경쟁 블로그 요약 정보
-{summarized_content}
-
-위 요약 정보를 참고하되, 단순 복사가 아닌 더 나은 독창적인 콘텐츠를 작성해주세요."""
 
             # 글작성 AI로 최종 콘텐츠 생성
             final_content = self.generate_blog_content(enhanced_prompt)
@@ -584,24 +577,17 @@ URL: {url}
             api_config = config_manager.load_api_config()
             blogger_identity = getattr(api_config, 'ai_writing_blogger_identity', '')
             
-            # 기존 프롬프트에 요약 내용 통합
-            base_prompt = BlogAIPrompts.generate_content_analysis_prompt(
+            # 1차 결과를 포함한 완전한 프롬프트 생성
+            enhanced_prompt = BlogAIPrompts.generate_content_analysis_prompt(
                 main_keyword=main_keyword,
                 sub_keywords=sub_keywords, 
                 structured_data=structured_data,
                 content_type=content_type,
                 tone=tone,
                 review_detail=review_detail,
-                blogger_identity=blogger_identity
+                blogger_identity=blogger_identity,
+                summary_result=summarized_content
             )
-            
-            # 요약된 내용을 프롬프트에 추가
-            enhanced_prompt = f"""{base_prompt}
-
-## 참고할 경쟁 블로그 요약 정보
-{summarized_content}
-
-위 요약 정보를 참고하되, 단순 복사가 아닌 더 나은 독창적인 콘텐츠를 작성해주세요."""
 
             # 글작성 AI로 최종 콘텐츠 생성
             final_content = self.generate_blog_content(enhanced_prompt)
