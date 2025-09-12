@@ -127,6 +127,7 @@ class OpenAITextClient:
         url = f"{self.base_url}/chat/completions"
         
         logger.info(f"OpenAI 텍스트 생성 API 호출: {model} (max_tokens: {max_tokens})")
+        logger.info(f"OpenAI API 페이로드 상세: model={model}, max_tokens={max_tokens}, temperature={temperature}")
         
         try:
             response = default_http_client.post(url, headers=headers, json=payload)
@@ -136,8 +137,20 @@ class OpenAITextClient:
                 raise OpenAIError(f"API 에러: {data['error'].get('message', 'Unknown error')}")
             
             if 'choices' in data and len(data['choices']) > 0:
-                generated_text = data['choices'][0]['message']['content']
-                logger.info(f"OpenAI 텍스트 생성 완료: {len(generated_text)}자")
+                choice = data['choices'][0]
+                generated_text = choice['message']['content']
+                finish_reason = choice.get('finish_reason', 'unknown')
+                
+                logger.info(f"OpenAI 텍스트 생성 완료: {len(generated_text)}자, finish_reason: {finish_reason}")
+                
+                # finish_reason 분석 로깅
+                if finish_reason == 'length':
+                    logger.warning(f"OpenAI 응답이 max_tokens({max_tokens}) 제한으로 잘렸습니다. 더 긴 글을 원한다면 max_tokens를 늘려주세요.")
+                elif finish_reason == 'content_filter':
+                    logger.warning("OpenAI 콘텐츠 필터로 인해 생성이 중단되었습니다.")
+                elif finish_reason == 'stop':
+                    logger.info("OpenAI 응답이 자연스럽게 완료되었습니다.")
+                
                 return generated_text
             else:
                 raise OpenAIError("API 응답에 생성된 텍스트가 없습니다")
