@@ -25,7 +25,14 @@
       "Bash(find:*)",
       "Bash(del test_prompt.py debug_prompt.txt)",
       "Bash(cat:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "WebFetch(domain:blog.naver.com)",
+      "Bash(curl:*)",
+      "WebFetch(domain:developers.naver.com)",
+      "Bash(pip install:*)",
+      "Bash(rg:*)",
+      "Bash(dir)",
+      "Bash(sed:*)"
     ],
     "deny": []
   }

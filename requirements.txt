@@ -6,6 +6,7 @@ SQLAlchemy>=2.0.0
 
 # HTTP Requests
 requests>=2.31.0
+beautifulsoup4>=4.12.0
 
 # Excel Processing  
 pandas>=2.0.0

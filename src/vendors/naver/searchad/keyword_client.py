@@ -122,6 +122,3 @@ class NaverSearchAdClient(NaverKeywordToolClient):
 # 전역 클라이언트 인스턴스
 naver_searchad_client = NaverSearchAdClient()
 
-def get_keyword_tool_client():
-    """키워드 도구 클라이언트 반환 (호환성)"""
-    return naver_searchad_client
