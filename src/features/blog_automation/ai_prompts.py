@@ -141,7 +141,7 @@ class BlogAIPrompts:
     """2차 가공: 글작성 AI를 위한 프롬프트 템플릿"""
     
     @staticmethod
-    def generate_content_analysis_prompt(main_keyword: str, sub_keywords: str, structured_data: Dict, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "") -> str:
+    def generate_content_analysis_prompt(main_keyword: str, sub_keywords: str, structured_data: Dict, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", blogger_identity: str = "") -> str:
         """네이버 SEO 최적화 콘텐츠 분석 기반 AI 프롬프트 생성 (컨텐츠 유형과 말투, 후기 세부 유형 반영)"""
         
         competitor_info = structured_data.get("competitor_analysis", {})
@@ -335,6 +335,8 @@ class BlogAIPrompts:
         prompt += f"""
 
 ## 🎨 글쓰기 스타일 가이드라인
+**블로그 소개:** {blogger_identity if blogger_identity.strip() else '다양한 정보를 공유하는 일반적인 블로그'}
+
 **컨텐츠 유형:** {content_type}
 - **접근법:** {current_content['approach']}
 - **구조:** {current_content['structure']}
@@ -420,7 +422,7 @@ class BlogAIPrompts:
         return prompt.strip()
     
 
-def create_ai_request_data(main_keyword: str, sub_keywords: str, analyzed_blogs: List[Dict], content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "") -> Dict:
+def create_ai_request_data(main_keyword: str, sub_keywords: str, analyzed_blogs: List[Dict], content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", blogger_identity: str = "") -> Dict:
     """AI 요청용 데이터 생성 (컨텐츠 유형과 말투, 후기 세부 유형 포함)"""
     try:
         structure_analyzer = BlogContentStructure()
@@ -429,7 +431,7 @@ def create_ai_request_data(main_keyword: str, sub_keywords: str, analyzed_blogs:
         
         # AI 프롬프트 생성 (스타일 옵션 포함)
         prompt_generator = BlogAIPrompts()
-        ai_prompt = prompt_generator.generate_content_analysis_prompt(main_keyword, sub_keywords, structured_data, content_type, tone, review_detail)
+        ai_prompt = prompt_generator.generate_content_analysis_prompt(main_keyword, sub_keywords, structured_data, content_type, tone, review_detail, blogger_identity)
         
         return {
             "structured_data": structured_data,

@@ -339,6 +339,32 @@ class BlogWriteTableUI(QWidget):
         tone_layout.addWidget(self.tone_combo)
         layout.addLayout(tone_layout)
         
+        # 블로그 소개 입력
+        blogger_identity_layout = QHBoxLayout()
+        blogger_identity_label = QLabel("📝 블로그 소개:")
+        blogger_identity_label.setStyleSheet(f"font-size: {tokens.get_font_size('normal')}px;")
+        blogger_identity_layout.addWidget(blogger_identity_label)
+        
+        self.blogger_identity_edit = ModernLineEdit()
+        self.blogger_identity_edit.setPlaceholderText("예: 음악과 작곡에 대한 전문 정보를 공유하는 블로그")
+        self.blogger_identity_edit.setStyleSheet(f"""
+            ModernLineEdit {{
+                padding: {tokens.GAP_8}px {tokens.GAP_12}px;
+                border: 1px solid {ModernStyle.COLORS['border']};
+                border-radius: {tokens.RADIUS_SM}px;
+                background-color: {ModernStyle.COLORS['bg_card']};
+                color: {ModernStyle.COLORS['text_primary']};
+                font-size: {tokens.get_font_size('normal')}px;
+                min-height: 20px;
+            }}
+            ModernLineEdit:focus {{
+                border-color: {ModernStyle.COLORS['primary']};
+                background-color: {ModernStyle.COLORS['bg_primary']};
+            }}
+        """)
+        blogger_identity_layout.addWidget(self.blogger_identity_edit)
+        layout.addLayout(blogger_identity_layout)
+        
         # 컨텐츠 유형 변경 시 후기 세부 옵션 표시/숨김 처리
         self.content_type_combo.currentIndexChanged.connect(self.on_content_type_changed)
         
@@ -356,7 +382,7 @@ class BlogWriteTableUI(QWidget):
         card.setLayout(layout)
         
         # AI 설정 카드는 제일 위에 있어서 높이 제한 필요 (드롭박스 간격 정리)
-        card.setMaximumHeight(270)  # 설명 텍스트 추가로 충분한 높이 확보
+        card.setMaximumHeight(310)  # 블로그 소개 필드 추가로 높이 40px 증가
         
         return card
     
@@ -384,7 +410,8 @@ class BlogWriteTableUI(QWidget):
             "content_type": selected_content_type,
             "tone": selected_tone,
             "content_type_id": self.content_type_combo.currentIndex(),
-            "tone_id": self.tone_combo.currentIndex()
+            "tone_id": self.tone_combo.currentIndex(),
+            "blogger_identity": self.blogger_identity_edit.text().strip()
         }
         
         # 후기/리뷰형인 경우 세부 옵션 추가
@@ -408,6 +435,7 @@ class BlogWriteTableUI(QWidget):
             api_config.ai_writing_content_type_id = settings['content_type_id']
             api_config.ai_writing_tone = settings['tone']
             api_config.ai_writing_tone_id = settings['tone_id']
+            api_config.ai_writing_blogger_identity = settings['blogger_identity']
             
             # 후기 세부 옵션이 있는 경우 추가
             if 'review_detail' in settings:
@@ -450,6 +478,10 @@ class BlogWriteTableUI(QWidget):
             tone_id = getattr(api_config, 'ai_writing_tone_id', 1)  # 기본값: 정중한 존댓말체
             if 0 <= tone_id <= 2:
                 self.tone_combo.setCurrentIndex(tone_id)
+            
+            # 블로거 정체성 로드
+            blogger_identity = getattr(api_config, 'ai_writing_blogger_identity', '')
+            self.blogger_identity_edit.setText(blogger_identity)
             
             # 후기 세부 옵션 로드
             review_detail_id = getattr(api_config, 'ai_writing_review_detail_id', 0)  # 기본값: 내돈내산 후기

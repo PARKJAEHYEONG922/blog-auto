@@ -483,6 +483,11 @@ class BlogAutomationService:
             structure_analyzer = BlogContentStructure()
             structured_data = structure_analyzer.analyze_blog_structure(analyzed_blogs)
             
+            # 블로거 정체성 가져오기
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+            blogger_identity = getattr(api_config, 'ai_writing_blogger_identity', '')
+            
             # 기존 프롬프트에 요약 내용 통합
             base_prompt = BlogAIPrompts.generate_content_analysis_prompt(
                 main_keyword=main_keyword,
@@ -490,7 +495,8 @@ class BlogAutomationService:
                 structured_data=structured_data,
                 content_type=content_type,
                 tone=tone,
-                review_detail=review_detail
+                review_detail=review_detail,
+                blogger_identity=blogger_identity
             )
             
             # 요약된 내용을 프롬프트에 추가
@@ -573,6 +579,11 @@ URL: {url}
             structure_analyzer = BlogContentStructure()
             structured_data = structure_analyzer.analyze_blog_structure(analyzed_blogs)
             
+            # 블로거 정체성 가져오기
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+            blogger_identity = getattr(api_config, 'ai_writing_blogger_identity', '')
+            
             # 기존 프롬프트에 요약 내용 통합
             base_prompt = BlogAIPrompts.generate_content_analysis_prompt(
                 main_keyword=main_keyword,
@@ -580,7 +591,8 @@ URL: {url}
                 structured_data=structured_data,
                 content_type=content_type,
                 tone=tone,
-                review_detail=review_detail
+                review_detail=review_detail,
+                blogger_identity=blogger_identity
             )
             
             # 요약된 내용을 프롬프트에 추가

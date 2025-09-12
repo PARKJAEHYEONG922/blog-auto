@@ -56,6 +56,7 @@ class APIConfig:
     ai_writing_tone_id: int = 1  # 말투 스타일 ID
     ai_writing_review_detail: str = "내돈내산 후기"  # 후기 세부 유형
     ai_writing_review_detail_id: int = 0  # 후기 세부 유형 ID
+    ai_writing_blogger_identity: str = ""  # 블로거 정체성
     
     def is_searchad_valid(self) -> bool:
         """검색광고 API 설정 유효성 확인"""
