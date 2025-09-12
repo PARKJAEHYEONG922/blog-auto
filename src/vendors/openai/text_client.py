@@ -102,8 +102,16 @@ class OpenAITextClient:
         
         # 모델별 기본 max_tokens 설정 (출력용)
         if max_tokens is None:
-            # 충분한 길이의 블로그 글을 위해 (6,000~8,000자)
-            max_tokens = 4000
+            model_info = SUPPORTED_MODELS.get(model, {})
+            if model == "gpt-4o":
+                # GPT-4o는 충분히 긴 블로그 글 생성을 위해 더 큰 토큰 수 사용
+                max_tokens = 8000  # 약 6,000-8,000자 블로그 글 생성 가능
+            elif model == "gpt-4o-mini":
+                max_tokens = 6000  # GPT-4o-mini도 충분한 길이 지원
+            elif model == "gpt-4-turbo":
+                max_tokens = 4000
+            else:
+                max_tokens = 3000
         
         # 속도 제한 적용
         self.rate_limiter.wait()

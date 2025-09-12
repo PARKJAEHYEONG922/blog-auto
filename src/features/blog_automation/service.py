@@ -309,13 +309,13 @@ class BlogAutomationService:
         """UI 모델명을 기술적 모델명으로 매핑"""
         model_mapping = {
             # OpenAI 모델들
-            "GPT-4o Mini (무료, 빠름)": "gpt-4o-mini",
+            "GPT-4o Mini (유료, 저렴)": "gpt-4o-mini",
             "GPT-4o (유료, 표준)": "gpt-4o", 
-            "GPT-4 Turbo (유료, 고품질)": "gpt-4-turbo",
+            "GPT-4 Turbo (유료, 고단가)": "gpt-4-turbo",
             
             # Google Gemini 모델들
             "Gemini 1.5 Flash (무료, 빠름)": "gemini-1.5-flash-latest",
-            "Gemini 1.5 Pro (무료, 고품질)": "gemini-1.5-pro-latest", 
+            "Gemini 1.5 Pro (유료, 고품질)": "gemini-1.5-pro-latest", 
             "Gemini 2.0 Flash (무료, 최신)": "gemini-2.0-flash-exp",
             
             # Anthropic Claude 모델들
@@ -324,7 +324,12 @@ class BlogAutomationService:
             "Claude 3 Opus (유료, 최고품질)": "claude-3-opus-20240229"
         }
         
-        return model_mapping.get(ui_model_name, ui_model_name)
+        mapped_model = model_mapping.get(ui_model_name, ui_model_name)
+        if mapped_model == ui_model_name and ui_model_name not in model_mapping:
+            logger.warning(f"UI 모델명 '{ui_model_name}'에 대한 매핑을 찾을 수 없음. 원본 모델명 사용")
+        else:
+            logger.info(f"모델 매핑: '{ui_model_name}' -> '{mapped_model}'")
+        return mapped_model
     
     def generate_content_summary(self, content: str, main_keyword: str = "", content_type: str = "정보/가이드형") -> str:
         """정보요약 AI를 사용하여 블로그 콘텐츠 요약"""
