@@ -340,6 +340,115 @@ class HTTPClient:
         except ValueError as e:
             raise APIResponseError(f"Invalid JSON response: {e}")
     
+    def get_with_encoding_detection(self, url: str, 
+                                  headers: Optional[Dict[str, str]] = None,
+                                  params: Optional[Dict[str, Any]] = None,
+                                  encoding_fallbacks: List[str] = None,
+                                  **kwargs) -> requests.Response:
+        """
+        인코딩 자동 감지가 포함된 GET 요청 (블로그/웹페이지용)
+        
+        Args:
+            url: 요청할 URL
+            headers: HTTP 헤더
+            params: URL 파라미터
+            encoding_fallbacks: 인코딩 실패 시 시도할 인코딩 목록
+            **kwargs: requests.get에 전달할 추가 파라미터
+        
+        Returns:
+            requests.Response: 올바른 인코딩이 적용된 응답
+        """
+        if encoding_fallbacks is None:
+            encoding_fallbacks = ['utf-8', 'euc-kr', 'cp949', 'iso-8859-1']
+        
+        # 기본 요청 수행
+        response = self.get(url, headers=headers, params=params, **kwargs)
+        
+        # 인코딩 자동 감지 및 수정
+        if response.status_code == 200:
+            original_encoding = response.encoding
+            
+            # 응답 헤더에서 charset 확인
+            content_type = response.headers.get('content-type', '').lower()
+            if 'charset=' in content_type:
+                # 헤더에서 지정된 인코딩 사용
+                declared_encoding = content_type.split('charset=')[-1].split(';')[0].strip()
+                if declared_encoding and declared_encoding != original_encoding:
+                    response.encoding = declared_encoding
+                    logger.debug(f"인코딩 수정됨: {original_encoding} -> {declared_encoding}")
+            else:
+                # 인코딩 자동 감지 시도
+                try:
+                    # 한국어 블로그의 경우 EUC-KR/CP949 우선 시도
+                    if 'naver.com' in url or 'tistory.com' in url or 'daum.net' in url:
+                        encoding_fallbacks = ['euc-kr', 'cp949', 'utf-8'] + [e for e in encoding_fallbacks if e not in ['euc-kr', 'cp949', 'utf-8']]
+                    
+                    # 텍스트 디코딩 테스트
+                    for encoding in encoding_fallbacks:
+                        try:
+                            test_text = response.content.decode(encoding)
+                            # 한국어 문자가 포함되어 있고 깨짐 현상이 없다면 성공
+                            if any(ord(char) >= 0xAC00 and ord(char) <= 0xD7AF for char in test_text[:1000]):  # 한글 유니코드 범위
+                                response.encoding = encoding
+                                logger.debug(f"한국어 인코딩 감지: {encoding}")
+                                break
+                        except UnicodeDecodeError:
+                            continue
+                    
+                except Exception as e:
+                    logger.debug(f"인코딩 자동 감지 실패: {e}")
+        
+        return response
+    
+    def get_with_retry_fallback(self, urls: List[str], 
+                               headers: Optional[Dict[str, str]] = None,
+                               params: Optional[Dict[str, Any]] = None,
+                               **kwargs) -> Optional[requests.Response]:
+        """
+        여러 URL을 순서대로 시도하는 GET 요청 (블로그 분석용)
+        
+        Args:
+            urls: 시도할 URL 목록 (우선순위 순)
+            headers: HTTP 헤더  
+            params: URL 파라미터
+            **kwargs: requests.get에 전달할 추가 파라미터
+        
+        Returns:
+            성공한 첫 번째 응답, 모두 실패하면 None
+        """
+        last_exception = None
+        
+        for i, url in enumerate(urls):
+            try:
+                logger.debug(f"URL 시도 {i+1}/{len(urls)}: {url}")
+                response = self.get_with_encoding_detection(url, headers=headers, params=params, **kwargs)
+                
+                if response.status_code == 200:
+                    logger.debug(f"URL 성공: {url}")
+                    return response
+                else:
+                    logger.debug(f"URL 실패 ({response.status_code}): {url}")
+                    
+            except APIResponseError as e:
+                last_exception = e
+                if "Resource not found" in str(e):
+                    logger.debug(f"URL 404: {url}")
+                else:
+                    logger.debug(f"URL API 오류: {url} -> {e}")
+                continue
+            except Exception as e:
+                last_exception = e
+                logger.debug(f"URL 오류: {url} -> {e}")
+                continue
+        
+        # 모든 URL 실패
+        if last_exception:
+            logger.warning(f"모든 URL 시도 실패. 마지막 오류: {last_exception}")
+        else:
+            logger.warning("모든 URL에서 200 응답을 받지 못함")
+        
+        return None
+    
     def get_error_details(self, response: requests.Response) -> str:
         """응답에서 오류 상세 정보 추출"""
         try:
