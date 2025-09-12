@@ -20,6 +20,7 @@ python-dotenv>=1.0.0
 
 # Web Automation
 playwright>=1.40.0
+selenium>=4.15.0
 
 # Development Dependencies
 pytest>=7.4.0

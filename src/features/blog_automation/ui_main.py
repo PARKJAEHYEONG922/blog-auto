@@ -565,6 +565,23 @@ class BlogAutomationMainUI(QWidget):
             from src.foundation.config import config_manager
             api_config = config_manager.load_api_config()
             
+            # 정보요약 AI 정보
+            current_summary_model = getattr(api_config, 'current_summary_ai_model', '')
+            if current_summary_model and current_summary_model != "모델을 선택하세요":
+                summary_ai_info = f"📄 {current_summary_model} (요약)"
+            else:
+                # API 키가 설정되어 있는지 확인
+                summary_ai_configured = any([
+                    getattr(api_config, 'openai_api_key', '').strip(),
+                    getattr(api_config, 'claude_api_key', '').strip(),
+                    getattr(api_config, 'gemini_api_key', '').strip()
+                ])
+                
+                if summary_ai_configured:
+                    summary_ai_info = "📄 정보요약AI: 모델미선택"
+                else:
+                    summary_ai_info = "📄 정보요약AI: 미설정"
+            
             # 글 작성 AI 정보
             current_text_model = getattr(api_config, 'current_text_ai_model', '')
             if current_text_model and current_text_model != "모델을 선택하세요":
@@ -598,14 +615,14 @@ class BlogAutomationMainUI(QWidget):
                 else:
                     image_ai_info = "🎨 이미지AI: 미설정"
             
-            # 한 줄로 표시 (구분자로 | 사용)
-            combined_info = f"{text_ai_info} | {image_ai_info}"
+            # 한 줄로 표시 (구분자로 | 사용) - 정보요약 AI 추가
+            combined_info = f"{summary_ai_info} | {text_ai_info} | {image_ai_info}"
             self.ai_info_label.setText(combined_info)
             self.ai_info_label.setVisible(True)
                     
         except Exception as e:
             logger.error(f"AI 정보 표시 업데이트 오류: {e}")
-            self.ai_info_label.setText("📝 글작성AI: 오류 | 🎨 이미지AI: 오류")
+            self.ai_info_label.setText("📄 정보요약AI: 오류 | 📝 글작성AI: 오류 | 🎨 이미지AI: 오류")
     
     def _on_api_settings_changed(self):
         """API 설정 변경 시 호출 (메인 앱에서 브로드캐스트)"""

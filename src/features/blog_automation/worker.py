@@ -3,15 +3,142 @@
 """
 import time
 import threading
-from typing import Optional
-from PySide6.QtCore import QObject, Signal
+from typing import Optional, Dict, Any
+from PySide6.QtCore import QObject, Signal, QTimer
+import uuid
 
 from src.foundation.logging import get_logger
 from src.foundation.exceptions import BusinessError
 from .models import BlogCredentials, LoginStatus
 from .service import BlogAutomationService
+from src.toolbox.progress import calc_percentage
 
 logger = get_logger("blog_automation.worker")
+
+
+class WorkerPool(QObject):
+    """워커 풀 관리 클래스 - 다중 워커 작업을 효율적으로 관리"""
+    
+    # 풀 상태 시그널
+    pool_status_changed = Signal(str, int, int)  # 상태메시지, 활성워커수, 총워커수
+    all_workers_completed = Signal()  # 모든 워커 완료
+    
+    def __init__(self, max_workers: int = 3):
+        super().__init__()
+        self.max_workers = max_workers
+        self.active_workers: Dict[str, Dict[str, Any]] = {}  # worker_id -> {worker, thread, status}
+        self.completed_workers = []
+        self.failed_workers = []
+        
+        # 상태 업데이트 타이머
+        self.status_timer = QTimer()
+        self.status_timer.timeout.connect(self._emit_pool_status)
+        self.status_timer.start(500)  # 0.5초마다 상태 업데이트
+    
+    def add_worker(self, worker: QObject, worker_id: str = None) -> str:
+        """워커를 풀에 추가하고 시작"""
+        if len(self.active_workers) >= self.max_workers:
+            logger.warning(f"워커 풀이 가득참 (최대 {self.max_workers}개)")
+            return None
+            
+        if not worker_id:
+            worker_id = str(uuid.uuid4())[:8]
+            
+        # 워커 스레드 생성
+        thread = WorkerThread(worker)
+        
+        # 워커 완료 시그널 연결
+        if hasattr(worker, 'login_completed'):
+            worker.login_completed.connect(lambda success: self._on_worker_completed(worker_id, success))
+        elif hasattr(worker, 'analysis_completed'):
+            worker.analysis_completed.connect(lambda result: self._on_worker_completed(worker_id, True))
+        elif hasattr(worker, 'writing_completed'):
+            worker.writing_completed.connect(lambda result: self._on_worker_completed(worker_id, True))
+            
+        # 워커 오류 시그널 연결
+        if hasattr(worker, 'error_occurred'):
+            worker.error_occurred.connect(lambda error: self._on_worker_error(worker_id, error))
+        
+        # 풀에 추가
+        self.active_workers[worker_id] = {
+            'worker': worker,
+            'thread': thread,
+            'status': 'starting',
+            'start_time': time.time()
+        }
+        
+        # 워커 시작
+        thread.start()
+        logger.info(f"워커 풀에 워커 추가: {worker_id} (총 {len(self.active_workers)}개)")
+        
+        return worker_id
+    
+    def _on_worker_completed(self, worker_id: str, success: bool):
+        """워커 완료 처리"""
+        if worker_id in self.active_workers:
+            worker_info = self.active_workers.pop(worker_id)
+            elapsed = time.time() - worker_info['start_time']
+            
+            if success:
+                self.completed_workers.append(worker_id)
+                logger.info(f"워커 완료: {worker_id} ({elapsed:.1f}초)")
+            else:
+                self.failed_workers.append(worker_id)
+                logger.info(f"워커 실패: {worker_id} ({elapsed:.1f}초)")
+            
+            self._check_all_completed()
+    
+    def _on_worker_error(self, worker_id: str, error: str):
+        """워커 오류 처리"""
+        if worker_id in self.active_workers:
+            worker_info = self.active_workers.pop(worker_id)
+            elapsed = time.time() - worker_info['start_time']
+            
+            self.failed_workers.append(worker_id)
+            logger.error(f"워커 오류: {worker_id} - {error} ({elapsed:.1f}초)")
+            
+            self._check_all_completed()
+    
+    def _check_all_completed(self):
+        """모든 워커 완료 확인"""
+        if len(self.active_workers) == 0:
+            total_completed = len(self.completed_workers)
+            total_failed = len(self.failed_workers)
+            logger.info(f"모든 워커 완료: 성공 {total_completed}개, 실패 {total_failed}개")
+            self.all_workers_completed.emit()
+    
+    def _emit_pool_status(self):
+        """풀 상태 시그널 발송"""
+        active_count = len(self.active_workers)
+        total_count = active_count + len(self.completed_workers) + len(self.failed_workers)
+        
+        if active_count > 0:
+            status_msg = f"실행 중인 작업: {active_count}개"
+        elif total_count > 0:
+            status_msg = f"완료: {len(self.completed_workers)}개, 실패: {len(self.failed_workers)}개"
+        else:
+            status_msg = "대기 중"
+            
+        self.pool_status_changed.emit(status_msg, active_count, total_count)
+    
+    def cancel_all_workers(self):
+        """모든 워커 취소"""
+        for worker_id, worker_info in self.active_workers.items():
+            if hasattr(worker_info['worker'], 'cancel'):
+                worker_info['worker'].cancel()
+            worker_info['thread'].quit()
+        
+        self.active_workers.clear()
+        logger.info("모든 워커가 취소됨")
+    
+    def get_status(self) -> Dict[str, Any]:
+        """현재 풀 상태 반환"""
+        return {
+            'active': len(self.active_workers),
+            'completed': len(self.completed_workers),
+            'failed': len(self.failed_workers),
+            'max_workers': self.max_workers
+        }
 
 
 class BlogLoginWorker(QObject):
@@ -20,7 +147,7 @@ class BlogLoginWorker(QObject):
     # 시그널 정의
     login_started = Signal()  # 로그인 시작
     login_completed = Signal(bool)  # 로그인 완료 (성공/실패)
-    login_progress = Signal(str)  # 로그인 진행 상황
+    login_progress = Signal(str, int)  # 로그인 진행 상황 (메시지, 진행률%)
     error_occurred = Signal(str)  # 오류 발생
     two_factor_detected = Signal()  # 2차 인증 감지
     
@@ -43,11 +170,23 @@ class BlogLoginWorker(QObject):
             )
             two_factor_monitor.start()
             
-            # 로그인 진행 상황 업데이트
-            self.login_progress.emit("브라우저 시작 중...")
+            # 단계별 진행률 업데이트
+            self.login_progress.emit("브라우저 시작 중...", 10)
+            time.sleep(1)  # UI 업데이트를 위한 짧은 대기
+            
+            if self.is_cancelled:
+                return
+                
+            self.login_progress.emit("로그인 페이지 로딩...", 30)
             
             # 실제 로그인 수행
+            self.login_progress.emit("로그인 시도 중...", 50)
             success = self.service.login(self.credentials)
+            
+            if success:
+                self.login_progress.emit("로그인 확인 중...", 80)
+                time.sleep(1)
+                self.login_progress.emit("로그인 완료", 100)
             
             # 2차 인증 모니터링 종료
             self._stop_two_factor_monitoring = True
@@ -80,7 +219,7 @@ class BlogLoginWorker(QObject):
                     
                     logger.info("🔐 2차 인증 실시간 감지!")
                     self.two_factor_detected.emit()
-                    self.login_progress.emit("2차 인증 진행 중... 브라우저에서 인증을 완료해주세요")
+                    self.login_progress.emit("2차 인증 진행 중... 브라우저에서 인증을 완료해주세요", 60)
                     two_factor_already_detected = True
                 
                 time.sleep(1)  # 1초마다 체크
@@ -97,26 +236,67 @@ class BlogLoginWorker(QObject):
 
 
 class WorkerThread:
-    """워커 스레드 관리 클래스"""
+    """향상된 워커 스레드 관리 클래스"""
     
     def __init__(self, worker):
         self.worker = worker
         self.thread = None
+        self.start_time = None
+        self.is_running = False
         
     def start(self):
         """워커 스레드 시작"""
-        self.thread = threading.Thread(target=self.worker.run, daemon=True)
+        if self.is_running:
+            logger.warning("워커가 이미 실행 중입니다")
+            return False
+            
+        self.thread = threading.Thread(
+            target=self._safe_run, 
+            daemon=True,
+            name=f"Worker-{type(self.worker).__name__}"
+        )
+        self.start_time = time.time()
+        self.is_running = True
         self.thread.start()
+        logger.info(f"워커 스레드 시작: {self.thread.name}")
+        return True
         
+    def _safe_run(self):
+        """안전한 워커 실행 래퍼"""
+        try:
+            self.worker.run()
+        except Exception as e:
+            logger.error(f"워커 실행 중 예외 발생: {e}")
+            if hasattr(self.worker, 'error_occurred'):
+                self.worker.error_occurred.emit(f"워커 실행 오류: {str(e)}")
+        finally:
+            self.is_running = False
+            elapsed = time.time() - self.start_time if self.start_time else 0
+            logger.info(f"워커 스레드 종료: {self.thread.name} ({elapsed:.1f}초)")
+            
     def quit(self):
         """스레드 종료 (워커 취소)"""
-        if self.worker:
+        if self.worker and hasattr(self.worker, 'cancel'):
             self.worker.cancel()
+            logger.info("워커 취소 신호 발송")
             
     def wait(self, timeout=5):
         """스레드 종료 대기"""
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=timeout)
+            if self.thread.is_alive():
+                logger.warning(f"워커 스레드가 {timeout}초 내에 종료되지 않음")
+                return False
+        return True
+        
+    def get_status(self):
+        """워커 상태 정보 반환"""
+        return {
+            'is_running': self.is_running,
+            'thread_alive': self.thread.is_alive() if self.thread else False,
+            'elapsed_time': time.time() - self.start_time if self.start_time else 0,
+            'worker_type': type(self.worker).__name__
+        }
 
 
 class BlogAnalysisWorker(QObject):
@@ -141,13 +321,28 @@ class BlogAnalysisWorker(QObject):
             logger.info(f"📊 블로그 분석 워커 시작: {self.keyword}")
             self.analysis_started.emit()
             
-            # 진행 상황 업데이트
-            self.analysis_progress.emit("키워드 검색 중...", 20)
+            # 세밀한 진행 상황 업데이트
+            self.analysis_progress.emit("브라우저 준비 중...", 10)
+            time.sleep(0.5)
+            
+            if self.is_cancelled:
+                return
+                
+            self.analysis_progress.emit("키워드 검색 중...", 30)
+            time.sleep(0.5)
+            
+            if self.is_cancelled:
+                return
+                
+            self.analysis_progress.emit("상위 블로그 수집 중...", 50)
             
             # 실제 블로그 분석 수행
             analyzed_blogs = self.service.analyze_top_blogs(self.keyword)
             
             if not self.is_cancelled:
+                self.analysis_progress.emit("블로그 내용 분석 중...", 80)
+                time.sleep(1)  # 분석 시뮬레이션
+                
                 self.blog_found.emit(len(analyzed_blogs))
                 self.analysis_progress.emit("분석 완료", 100)
                 self.analysis_completed.emit(analyzed_blogs)
@@ -169,6 +364,7 @@ class AIWritingWorker(QObject):
     
     # 시그널 정의
     writing_started = Signal()  # 글쓰기 시작
+    writing_progress = Signal(str, int)  # 글쓰기 진행 상황 (메시지, 진행률%)
     writing_completed = Signal(str)  # 글쓰기 완료 (생성된 콘텐츠)
     error_occurred = Signal(str)  # 오류 발생
     
@@ -189,18 +385,40 @@ class AIWritingWorker(QObject):
             logger.info(f"🤖 AI 글쓰기 워커 시작: {self.main_keyword}")
             self.writing_started.emit()
             
+            # 세밀한 진행 상황 업데이트
+            self.writing_progress.emit("프롬프트 준비 중...", 10)
+            
+            if self.is_cancelled:
+                return
+                
             # AI 프롬프트 생성 (스타일 옵션 포함)
             from .ai_prompts import BlogAIPrompts
-            prompt = BlogAIPrompts.generate_content_analysis_prompt(self.main_keyword, self.sub_keywords, self.structured_data, self.content_type, self.tone, self.review_detail)
+            prompt = BlogAIPrompts.generate_content_analysis_prompt(
+                self.main_keyword, self.sub_keywords, self.structured_data, 
+                self.content_type, self.tone, self.review_detail
+            )
+            
+            self.writing_progress.emit("AI 모델 연결 중...", 30)
+            time.sleep(1)
+            
+            if self.is_cancelled:
+                return
+                
+            self.writing_progress.emit("콘텐츠 생성 중... (시간이 좀 걸릴 수 있습니다)", 50)
             
             # AI API 호출
             generated_content = self.service.generate_blog_content(prompt)
             
-            if not self.is_cancelled and generated_content:
-                self.writing_completed.emit(generated_content)
-                logger.info("✅ AI 글쓰기 워커 완료")
-            elif not generated_content:
-                self.error_occurred.emit("AI가 콘텐츠를 생성하지 못했습니다. API 키를 확인해주세요.")
+            if not self.is_cancelled:
+                if generated_content:
+                    self.writing_progress.emit("콘텐츠 후처리 중...", 90)
+                    time.sleep(0.5)
+                    
+                    self.writing_progress.emit("글쓰기 완료", 100)
+                    self.writing_completed.emit(generated_content)
+                    logger.info("✅ AI 글쓰기 워커 완료")
+                else:
+                    self.error_occurred.emit("AI가 콘텐츠를 생성하지 못했습니다. API 키를 확인해주세요.")
             
         except Exception as e:
             logger.error(f"❌ AI 글쓰기 워커 오류: {e}")
@@ -226,3 +444,25 @@ def create_blog_analysis_worker(service: BlogAutomationService, keyword: str) ->
 def create_ai_writing_worker(service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "") -> AIWritingWorker:
     """AI 글쓰기 워커 생성 (스타일 옵션 포함)"""
     return AIWritingWorker(service, main_keyword, sub_keywords, structured_data, content_type, tone, review_detail)
+
+
+def create_worker_pool(max_workers: int = 3) -> WorkerPool:
+    """워커 풀 생성"""
+    return WorkerPool(max_workers)
+
+
+def create_enhanced_worker_thread(worker: QObject) -> WorkerThread:
+    """향상된 워커 스레드 생성"""
+    return WorkerThread(worker)
+
+
+# 전역 워커 풀 인스턴스 (필요 시 사용)
+_global_worker_pool = None
+
+def get_global_worker_pool(max_workers: int = 3) -> WorkerPool:
+    """전역 워커 풀 인스턴스 가져오기 (싱글톤 패턴)"""
+    global _global_worker_pool
+    if _global_worker_pool is None:
+        _global_worker_pool = WorkerPool(max_workers)
+        logger.info(f"전역 워커 풀 생성: 최대 {max_workers}개 워커")
+    return _global_worker_pool

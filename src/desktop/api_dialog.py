@@ -93,13 +93,13 @@ class APISettingsDialog(QDialog):
             }}
         """)
         desc_layout.addWidget(desc)
+        desc_layout.addStretch()
         
-        # 네이버 API 발급방법 버튼
+        # 네이버 API 발급방법 버튼 (오른쪽 고정)
         naver_help_btn = ModernButton("📋 발급방법", "secondary")
         naver_help_btn.clicked.connect(self.show_naver_help)
         naver_help_btn.setMaximumWidth(105)
         desc_layout.addWidget(naver_help_btn)
-        desc_layout.addStretch()
         
         layout.addLayout(desc_layout)
         
@@ -231,7 +231,7 @@ class APISettingsDialog(QDialog):
         
         # 전체 설명과 도움말 버튼
         desc_layout = QHBoxLayout()
-        desc = QLabel("블로그 글 작성을 위한 AI API를 선택하고 설정하세요.\n네이버 SEO 최적화 글 작성에 사용됩니다.")
+        desc = QLabel("블로그 글 작성을 위한 AI API를 선택하고 설정하세요.\n정보요약과 글작성 AI를 각각 설정할 수 있습니다.")
         desc.setStyleSheet(f"""
             QLabel {{
                 color: {ModernStyle.COLORS['text_secondary']};
@@ -240,88 +240,156 @@ class APISettingsDialog(QDialog):
             }}
         """)
         desc_layout.addWidget(desc)
+        desc_layout.addStretch()
         
-        # 글 작성 AI 발급방법 버튼
+        # 글 작성 AI 발급방법 버튼 (오른쪽 고정)
         text_ai_help_btn = ModernButton("📋 발급방법", "secondary")
         text_ai_help_btn.clicked.connect(self.show_text_ai_help)
         text_ai_help_btn.setMaximumWidth(105)
         desc_layout.addWidget(text_ai_help_btn)
-        desc_layout.addStretch()
         
         layout.addLayout(desc_layout)
         
-        # 글 작성 AI 제공자 선택 드롭박스
-        text_ai_selector_group = QGroupBox("글 작성 AI 제공자 선택")
-        text_ai_selector_layout = QVBoxLayout()
-        text_ai_selector_layout.setSpacing(10)
+        # 정보요약 AI 설정 그룹
+        summary_ai_group = QGroupBox("📄 정보요약 AI")
+        summary_ai_layout = QVBoxLayout()
+        summary_ai_layout.setSpacing(10)
         
-        # 1단계: AI 제공자 선택
-        provider_layout = QHBoxLayout()
-        provider_layout.addWidget(QLabel("AI 제공자:"))
+        # 정보요약 AI 제공자 선택
+        summary_provider_layout = QHBoxLayout()
+        summary_provider_layout.addWidget(QLabel("AI 제공자:"))
+        
+        self.summary_ai_provider_combo = QComboBox()
+        self.summary_ai_provider_combo.addItems([
+            "AI 제공자를 선택하세요",
+            "OpenAI (GPT)",
+            "Google (Gemini)",
+            "Anthropic (Claude)"
+        ])
+        self.summary_ai_provider_combo.currentTextChanged.connect(self.on_summary_ai_provider_changed)
+        summary_provider_layout.addWidget(self.summary_ai_provider_combo, 1)
+        summary_ai_layout.addLayout(summary_provider_layout)
+
+        # AI 모델 선택 (처음에는 숨김)
+        summary_model_layout = QHBoxLayout()
+        self.summary_model_label = QLabel("AI 모델:")
+        self.summary_model_label.setVisible(False)
+        summary_model_layout.addWidget(self.summary_model_label)
+        
+        self.summary_ai_model_combo = QComboBox()
+        self.summary_ai_model_combo.setVisible(False)
+        self.summary_ai_model_combo.currentTextChanged.connect(self.on_summary_ai_model_changed)
+        summary_model_layout.addWidget(self.summary_ai_model_combo, 1)
+        summary_ai_layout.addLayout(summary_model_layout)
+        
+        # 정보요약 AI API 키 설정 (처음에는 숨김)
+        self.summary_ai_config_group = QGroupBox("API 설정")
+        self.summary_ai_config_group.setVisible(False)
+        summary_config_layout = QVBoxLayout()
+        
+        # API 키 입력
+        summary_api_key_layout = QHBoxLayout()
+        summary_api_key_layout.addWidget(QLabel("API Key:"))
+        self.summary_ai_api_key = QLineEdit()
+        self.summary_ai_api_key.setPlaceholderText("API 키를 입력하세요")
+        self.summary_ai_api_key.setEchoMode(QLineEdit.Password)
+        summary_api_key_layout.addWidget(self.summary_ai_api_key, 1)
+        summary_config_layout.addLayout(summary_api_key_layout)
+        
+        # 정보요약 AI 버튼
+        summary_btn_layout = QHBoxLayout()
+        self.summary_ai_delete_btn = ModernDangerButton("삭제")
+        self.summary_ai_delete_btn.clicked.connect(self.delete_summary_ai_key)
+        summary_btn_layout.addWidget(self.summary_ai_delete_btn)
+        
+        self.summary_ai_apply_btn = ModernSuccessButton("적용")
+        self.summary_ai_apply_btn.clicked.connect(self.apply_summary_ai_key)
+        summary_btn_layout.addWidget(self.summary_ai_apply_btn)
+        summary_btn_layout.addStretch()
+        summary_config_layout.addLayout(summary_btn_layout)
+        
+        # 정보요약 AI 상태
+        self.summary_ai_status = QLabel("")
+        self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['text_secondary']};")
+        summary_config_layout.addWidget(self.summary_ai_status)
+        
+        self.summary_ai_config_group.setLayout(summary_config_layout)
+        summary_ai_layout.addWidget(self.summary_ai_config_group)
+        
+        summary_ai_group.setLayout(summary_ai_layout)
+        layout.addWidget(summary_ai_group)
+        
+        # 글 작성 AI 설정 그룹
+        text_ai_group = QGroupBox("✍️ 글작성 AI")
+        text_ai_layout = QVBoxLayout()
+        text_ai_layout.setSpacing(10)
+
+        # 글작성 AI 제공자 선택
+        text_provider_layout = QHBoxLayout()
+        text_provider_layout.addWidget(QLabel("AI 제공자:"))
         
         self.text_ai_provider_combo = QComboBox()
         self.text_ai_provider_combo.addItems([
             "AI 제공자를 선택하세요",
             "OpenAI (GPT)",
-            "Google (Gemini)", 
+            "Google (Gemini)",
             "Anthropic (Claude)"
         ])
         self.text_ai_provider_combo.currentTextChanged.connect(self.on_text_ai_provider_changed)
-        provider_layout.addWidget(self.text_ai_provider_combo, 1)
-        text_ai_selector_layout.addLayout(provider_layout)
-        
-        # 2단계: 모델 선택 (초기에는 숨김)
-        model_layout = QHBoxLayout()
+        text_provider_layout.addWidget(self.text_ai_provider_combo, 1)
+        text_ai_layout.addLayout(text_provider_layout)
+
+        # AI 모델 선택 (처음에는 숨김)
+        text_model_layout = QHBoxLayout()
         self.text_model_label = QLabel("AI 모델:")
         self.text_model_label.setVisible(False)
-        model_layout.addWidget(self.text_model_label)
+        text_model_layout.addWidget(self.text_model_label)
         
         self.text_ai_model_combo = QComboBox()
         self.text_ai_model_combo.setVisible(False)
         self.text_ai_model_combo.currentTextChanged.connect(self.on_text_ai_model_changed)
-        model_layout.addWidget(self.text_ai_model_combo, 1)
-        text_ai_selector_layout.addLayout(model_layout)
-        
-        text_ai_selector_group.setLayout(text_ai_selector_layout)
-        layout.addWidget(text_ai_selector_group)
-        
-        # 글 작성 AI API 설정 그룹 (처음에는 숨김)
+        text_model_layout.addWidget(self.text_ai_model_combo, 1)
+        text_ai_layout.addLayout(text_model_layout)
+
+        # 글작성 AI API 키 설정 (처음에는 숨김)
         self.text_ai_config_group = QGroupBox("API 설정")
         self.text_ai_config_group.setVisible(False)
         text_ai_config_layout = QVBoxLayout()
         text_ai_config_layout.setSpacing(10)
-        
+
         # API 키 입력
-        api_key_layout = QHBoxLayout()
-        api_key_layout.addWidget(QLabel("API Key:"))
+        text_api_key_layout = QHBoxLayout()
+        text_api_key_layout.addWidget(QLabel("API Key:"))
+        
         self.text_ai_api_key = QLineEdit()
         self.text_ai_api_key.setPlaceholderText("API 키를 입력하세요")
         self.text_ai_api_key.setEchoMode(QLineEdit.Password)
-        api_key_layout.addWidget(self.text_ai_api_key, 1)
-        
-        text_ai_config_layout.addLayout(api_key_layout)
-        
-        # 적용/삭제 버튼
-        text_ai_btn_layout = QHBoxLayout()
-        
+        text_api_key_layout.addWidget(self.text_ai_api_key, 1)
+        text_ai_config_layout.addLayout(text_api_key_layout)
+
+        # 글작성 AI 버튼
+        text_btn_layout = QHBoxLayout()
         self.text_ai_delete_btn = ModernDangerButton("삭제")
         self.text_ai_delete_btn.clicked.connect(self.delete_text_ai_api)
-        text_ai_btn_layout.addWidget(self.text_ai_delete_btn)
-        
+        text_btn_layout.addWidget(self.text_ai_delete_btn)
+
         self.text_ai_apply_btn = ModernSuccessButton("적용")
         self.text_ai_apply_btn.clicked.connect(self.apply_text_ai_api)
-        text_ai_btn_layout.addWidget(self.text_ai_apply_btn)
-        
-        text_ai_btn_layout.addStretch()
-        text_ai_config_layout.addLayout(text_ai_btn_layout)
-        
-        # 글 작성 AI API 상태
+        text_btn_layout.addWidget(self.text_ai_apply_btn)
+
+        text_btn_layout.addStretch()
+        text_ai_config_layout.addLayout(text_btn_layout)
+
+        # 글작성 AI 상태
         self.text_ai_status = QLabel("")
         self.text_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['text_secondary']};")
         text_ai_config_layout.addWidget(self.text_ai_status)
-        
+
         self.text_ai_config_group.setLayout(text_ai_config_layout)
-        layout.addWidget(self.text_ai_config_group)
+        text_ai_layout.addWidget(self.text_ai_config_group)
+
+        text_ai_group.setLayout(text_ai_layout)
+        layout.addWidget(text_ai_group)
         
         layout.addStretch()
         tab.setLayout(layout)
@@ -344,24 +412,24 @@ class APISettingsDialog(QDialog):
             }}
         """)
         desc_layout.addWidget(desc)
+        desc_layout.addStretch()
         
-        # 이미지 생성 AI 발급방법 버튼
+        # 이미지 생성 AI 발급방법 버튼 (오른쪽 고정)
         image_ai_help_btn = ModernButton("📋 발급방법", "secondary")
         image_ai_help_btn.clicked.connect(self.show_image_ai_help)
         image_ai_help_btn.setMaximumWidth(105)
         desc_layout.addWidget(image_ai_help_btn)
-        desc_layout.addStretch()
         
         layout.addLayout(desc_layout)
         
-        # 이미지 생성 AI 제공자 선택 드롭박스
-        image_ai_selector_group = QGroupBox("이미지 생성 AI 제공자 선택")
-        image_ai_selector_layout = QVBoxLayout()
-        image_ai_selector_layout.setSpacing(10)
-        
-        # 1단계: AI 제공자 선택
-        provider_layout = QHBoxLayout()
-        provider_layout.addWidget(QLabel("AI 제공자:"))
+        # 이미지 생성 AI 설정 그룹
+        image_ai_group = QGroupBox("🎨 이미지 생성 AI")
+        image_ai_layout = QVBoxLayout()
+        image_ai_layout.setSpacing(10)
+
+        # 이미지 생성 AI 제공자 선택
+        image_provider_layout = QHBoxLayout()
+        image_provider_layout.addWidget(QLabel("AI 제공자:"))
         
         self.image_ai_provider_combo = QComboBox()
         self.image_ai_provider_combo.addItems([
@@ -370,61 +438,60 @@ class APISettingsDialog(QDialog):
             "Google (Imagen)"
         ])
         self.image_ai_provider_combo.currentTextChanged.connect(self.on_image_ai_provider_changed)
-        provider_layout.addWidget(self.image_ai_provider_combo, 1)
-        image_ai_selector_layout.addLayout(provider_layout)
-        
-        # 2단계: 모델 선택 (초기에는 숨김)
-        model_layout = QHBoxLayout()
+        image_provider_layout.addWidget(self.image_ai_provider_combo, 1)
+        image_ai_layout.addLayout(image_provider_layout)
+
+        # AI 모델 선택 (처음에는 숨김)
+        image_model_layout = QHBoxLayout()
         self.image_model_label = QLabel("AI 모델:")
         self.image_model_label.setVisible(False)
-        model_layout.addWidget(self.image_model_label)
+        image_model_layout.addWidget(self.image_model_label)
         
         self.image_ai_model_combo = QComboBox()
         self.image_ai_model_combo.setVisible(False)
         self.image_ai_model_combo.currentTextChanged.connect(self.on_image_ai_model_changed)
-        model_layout.addWidget(self.image_ai_model_combo, 1)
-        image_ai_selector_layout.addLayout(model_layout)
-        
-        image_ai_selector_group.setLayout(image_ai_selector_layout)
-        layout.addWidget(image_ai_selector_group)
-        
-        # 이미지 생성 AI API 설정 그룹 (처음에는 숨김)
+        image_model_layout.addWidget(self.image_ai_model_combo, 1)
+        image_ai_layout.addLayout(image_model_layout)
+
+        # 이미지 생성 AI API 키 설정 (처음에는 숨김)
         self.image_ai_config_group = QGroupBox("API 설정")
         self.image_ai_config_group.setVisible(False)
         image_ai_config_layout = QVBoxLayout()
         image_ai_config_layout.setSpacing(10)
-        
+
         # API 키 입력
-        api_key_layout = QHBoxLayout()
-        api_key_layout.addWidget(QLabel("API Key:"))
+        image_api_key_layout = QHBoxLayout()
+        image_api_key_layout.addWidget(QLabel("API Key:"))
+        
         self.image_ai_api_key = QLineEdit()
         self.image_ai_api_key.setPlaceholderText("API 키를 입력하세요")
         self.image_ai_api_key.setEchoMode(QLineEdit.Password)
-        api_key_layout.addWidget(self.image_ai_api_key, 1)
-        
-        image_ai_config_layout.addLayout(api_key_layout)
-        
-        # 적용/삭제 버튼
-        image_ai_btn_layout = QHBoxLayout()
-        
+        image_api_key_layout.addWidget(self.image_ai_api_key, 1)
+        image_ai_config_layout.addLayout(image_api_key_layout)
+
+        # 이미지 생성 AI 버튼
+        image_btn_layout = QHBoxLayout()
         self.image_ai_delete_btn = ModernDangerButton("삭제")
         self.image_ai_delete_btn.clicked.connect(self.delete_image_ai_api)
-        image_ai_btn_layout.addWidget(self.image_ai_delete_btn)
-        
+        image_btn_layout.addWidget(self.image_ai_delete_btn)
+
         self.image_ai_apply_btn = ModernSuccessButton("적용")
         self.image_ai_apply_btn.clicked.connect(self.apply_image_ai_api)
-        image_ai_btn_layout.addWidget(self.image_ai_apply_btn)
-        
-        image_ai_btn_layout.addStretch()
-        image_ai_config_layout.addLayout(image_ai_btn_layout)
-        
-        # 이미지 생성 AI API 상태
+        image_btn_layout.addWidget(self.image_ai_apply_btn)
+
+        image_btn_layout.addStretch()
+        image_ai_config_layout.addLayout(image_btn_layout)
+
+        # 이미지 생성 AI 상태
         self.image_ai_status = QLabel("")
         self.image_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['text_secondary']};")
         image_ai_config_layout.addWidget(self.image_ai_status)
-        
+
         self.image_ai_config_group.setLayout(image_ai_config_layout)
-        layout.addWidget(self.image_ai_config_group)
+        image_ai_layout.addWidget(self.image_ai_config_group)
+
+        image_ai_group.setLayout(image_ai_layout)
+        layout.addWidget(image_ai_group)
         
         layout.addStretch()
         tab.setLayout(layout)
@@ -479,6 +546,222 @@ class APISettingsDialog(QDialog):
             
             self.load_text_ai_provider_api_key()
     
+    def on_summary_ai_provider_changed(self, provider_text):
+        """정보요약 AI 제공자 변경시 호출"""
+        if provider_text == "AI 제공자를 선택하세요":
+            self.summary_model_label.setVisible(False)
+            self.summary_ai_model_combo.setVisible(False)
+            self.summary_ai_config_group.setVisible(False)
+            self.current_summary_ai_provider = None
+            if hasattr(self, 'summary_ai_api_key'):
+                self.summary_ai_api_key.clear()
+        else:
+            self.summary_model_label.setVisible(True)
+            self.summary_ai_model_combo.setVisible(True)
+            
+            self.summary_ai_model_combo.clear()
+            if provider_text == "OpenAI (GPT)":
+                self.summary_ai_model_combo.addItems([
+                    "모델을 선택하세요",
+                    "GPT-4o Mini (유료, 저렴)",
+                    "GPT-4o (유료, 표준)",
+                    "GPT-4 Turbo (유료, 고단가)"
+                ])
+                self.current_summary_ai_provider = "openai"
+                if hasattr(self, 'summary_ai_api_key'):
+                    self.summary_ai_api_key.setPlaceholderText("sk-...")
+                    
+            elif provider_text == "Google (Gemini)":
+                self.summary_ai_model_combo.addItems([
+                    "모델을 선택하세요",
+                    "Gemini 1.5 Flash (무료, 빠름)",
+                    "Gemini 1.5 Pro (유료, 고품질)",
+                    "Gemini 2.0 Flash (무료, 최신)"
+                ])
+                self.current_summary_ai_provider = "gemini"
+                if hasattr(self, 'summary_ai_api_key'):
+                    self.summary_ai_api_key.setPlaceholderText("Google AI API 키")
+                    
+            elif provider_text == "Anthropic (Claude)":
+                self.summary_ai_model_combo.addItems([
+                    "모델을 선택하세요",
+                    "Claude 3.5 Sonnet (유료, 고품질)", 
+                    "Claude 3.5 Haiku (유료, 빠름)",
+                    "Claude 3 Opus (유료, 최고품질)"
+                ])
+                self.current_summary_ai_provider = "claude"
+                if hasattr(self, 'summary_ai_api_key'):
+                    self.summary_ai_api_key.setPlaceholderText("Anthropic API 키")
+            
+            self.load_summary_ai_provider_api_key()
+
+    def on_summary_ai_model_changed(self, model_text):
+        """정보요약 AI 모델 변경시 호출"""
+        if model_text == "모델을 선택하세요":
+            self.summary_ai_config_group.setVisible(False)
+        else:
+            self.summary_ai_config_group.setVisible(True)
+            self.current_summary_ai_model = model_text
+
+    def apply_summary_ai_key(self):
+        """정보요약 AI API 테스트 후 적용"""
+        if not hasattr(self, 'current_summary_ai_provider') or not self.current_summary_ai_provider:
+            return
+
+        api_key = self.summary_ai_api_key.text().strip()
+        if not api_key:
+            self.summary_ai_status.setText("⚠️ API 키를 입력해주세요.")
+            self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['danger']};")
+            return
+
+        self.summary_ai_status.setText("테스트 및 적용 중...")
+        self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['primary']};")
+        self.summary_ai_apply_btn.setEnabled(False)
+
+        try:
+            if self.current_summary_ai_provider == "openai":
+                result = self.test_openai_api_internal(api_key)
+            elif self.current_summary_ai_provider == "gemini":
+                result = self.test_google_gemini_api_internal(api_key)
+            elif self.current_summary_ai_provider == "claude":
+                result = self.test_claude_api_internal(api_key)
+            else:
+                result = (False, "지원되지 않는 AI 제공자입니다.")
+
+            if result[0]:
+                selected_model = getattr(self, 'current_summary_ai_model', '')
+                if not selected_model:
+                    selected_model = self.summary_ai_model_combo.currentText()
+
+                # 정보요약 AI 설정 저장
+                self.save_summary_ai_config(self.current_summary_ai_provider, api_key, selected_model)
+                
+                self.summary_ai_status.setText(f"✅ {selected_model} API가 적용되었습니다.")
+                self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['success']};")
+            else:
+                self.summary_ai_status.setText(f"❌ 연결 실패: {result[1]}")
+                self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['danger']};")
+
+        except Exception as e:
+            self.summary_ai_status.setText(f"❌ 적용 오류: {str(e)}")
+            self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['danger']};")
+        finally:
+            self.summary_ai_apply_btn.setEnabled(True)
+
+    def save_summary_ai_config(self, provider: str, api_key: str, selected_model: str):
+        """정보요약 AI API 설정 저장"""
+        try:
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+
+            if provider == "openai":
+                api_config.openai_api_key = api_key
+                api_config.current_summary_ai_provider = "openai"
+            elif provider == "gemini":
+                api_config.gemini_api_key = api_key
+                api_config.current_summary_ai_provider = "google"  # service.py에서 "google"로 확인
+            elif provider == "claude":
+                api_config.claude_api_key = api_key
+                api_config.current_summary_ai_provider = "anthropic"  # service.py에서 "anthropic"으로 확인
+
+            # 선택된 모델 저장
+            api_config.current_summary_ai_model = selected_model
+
+            if config_manager.save_api_config(api_config):
+                logger.info(f"정보요약 AI API 설정 저장 완료: {provider} - {selected_model}")
+            else:
+                logger.error("정보요약 AI API 설정 저장 실패")
+
+        except Exception as e:
+            logger.error(f"정보요약 AI API 설정 저장 중 오류: {e}")
+
+    def delete_summary_ai_key(self):
+        """정보요약 AI API 삭제"""
+        if not hasattr(self, 'current_summary_ai_provider') or not self.current_summary_ai_provider:
+            return
+
+        reply = QMessageBox.question(
+            self, 
+            "확인", 
+            f"{self.summary_ai_provider_combo.currentText()} API 설정을 삭제하시겠습니까?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                from src.foundation.config import config_manager
+                api_config = config_manager.load_api_config()
+                
+                # API 키 삭제
+                if self.current_summary_ai_provider == "openai":
+                    api_config.openai_api_key = ""
+                elif self.current_summary_ai_provider == "gemini":
+                    api_config.gemini_api_key = ""
+                elif self.current_summary_ai_provider == "claude":
+                    api_config.claude_api_key = ""
+                
+                # 현재 설정 초기화
+                api_config.current_summary_ai_provider = ""
+                api_config.current_summary_ai_model = ""
+                
+                if config_manager.save_api_config(api_config):
+                    # UI 초기화
+                    self.summary_ai_api_key.clear()
+                    self.summary_ai_provider_combo.setCurrentText("AI 제공자를 선택하세요")
+                    self.summary_ai_model_combo.clear()
+                    
+                    self.summary_model_label.setVisible(False)
+                    self.summary_ai_model_combo.setVisible(False)
+                    self.summary_ai_config_group.setVisible(False)
+
+                    # 상태 초기화
+                    self.current_summary_ai_provider = None
+                    if hasattr(self, 'current_summary_ai_model'):
+                        self.current_summary_ai_model = None
+
+                    self.summary_ai_status.setText("🟡 API를 다시 설정해 주세요.")
+                    self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['warning']};")
+
+                    # 완료 메시지
+                    QMessageBox.information(self, "완료", "정보요약 AI API 설정이 삭제되었습니다.")
+
+            except Exception as e:
+                logger.error(f"정보요약 AI API 삭제 실패: {e}")
+
+    def load_summary_ai_provider_api_key(self):
+        """정보요약 AI 제공자의 API 키 로드"""
+        try:
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+            
+            if hasattr(self, 'current_summary_ai_provider') and self.current_summary_ai_provider:
+                if self.current_summary_ai_provider == "openai" and hasattr(api_config, 'openai_api_key'):
+                    if api_config.openai_api_key:
+                        self.summary_ai_api_key.setText(api_config.openai_api_key)
+                    else:
+                        self.summary_ai_api_key.clear()
+                        
+                elif self.current_summary_ai_provider == "gemini" and hasattr(api_config, 'gemini_api_key'):
+                    if api_config.gemini_api_key:
+                        self.summary_ai_api_key.setText(api_config.gemini_api_key)
+                    else:
+                        self.summary_ai_api_key.clear()
+                        
+                elif self.current_summary_ai_provider == "claude" and hasattr(api_config, 'claude_api_key'):
+                    if api_config.claude_api_key:
+                        self.summary_ai_api_key.setText(api_config.claude_api_key)
+                    else:
+                        self.summary_ai_api_key.clear()
+                        
+                else:
+                    self.summary_ai_api_key.clear()
+            else:
+                self.summary_ai_api_key.clear()
+
+        except Exception as e:
+            logger.error(f"정보요약 AI API 키 로드 실패: {e}")
+
     def on_image_ai_provider_changed(self, provider_text):
         """이미지 생성 AI 제공자 변경시 호출"""
         if provider_text == "AI 제공자를 선택하세요":
@@ -894,6 +1177,38 @@ class APISettingsDialog(QDialog):
         except Exception as e:
             logger.error(f"이미지 생성 AI API 키 로드 실패: {e}")
     
+    def load_summary_ai_provider_api_key(self):
+        """정보요약 AI 제공자의 API 키 로드"""
+        try:
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+            
+            if hasattr(self, 'current_summary_ai_provider') and self.current_summary_ai_provider:
+                if self.current_summary_ai_provider == "openai" and hasattr(api_config, 'openai_api_key'):
+                    if api_config.openai_api_key:
+                        self.summary_ai_api_key.setText(api_config.openai_api_key)
+                    else:
+                        self.summary_ai_api_key.clear()
+                        
+                elif self.current_summary_ai_provider == "gemini" and hasattr(api_config, 'gemini_api_key'):
+                    if api_config.gemini_api_key:
+                        self.summary_ai_api_key.setText(api_config.gemini_api_key)
+                    else:
+                        self.summary_ai_api_key.clear()
+                        
+                elif self.current_summary_ai_provider == "claude" and hasattr(api_config, 'claude_api_key'):
+                    if api_config.claude_api_key:
+                        self.summary_ai_api_key.setText(api_config.claude_api_key)
+                    else:
+                        self.summary_ai_api_key.clear()
+                else:
+                    self.summary_ai_api_key.clear()
+            else:
+                self.summary_ai_api_key.clear()
+                
+        except Exception as e:
+            logger.error(f"정보요약 AI API 키 로드 실패: {e}")
+    
     def apply_text_ai_api(self):
         """글 작성 AI API 테스트 후 적용"""
         if not hasattr(self, 'current_text_ai_provider') or not self.current_text_ai_provider:
@@ -976,6 +1291,169 @@ class APISettingsDialog(QDialog):
                 
         except Exception as e:
             logger.error(f"글 작성 AI API 설정 저장 중 오류: {e}")
+    
+    def apply_summary_ai_key(self):
+        """정보요약 AI API 테스트 후 적용"""
+        if not hasattr(self, 'current_summary_ai_provider') or not self.current_summary_ai_provider:
+            return
+            
+        api_key = self.summary_ai_api_key.text().strip()
+        if not api_key:
+            self.summary_ai_status.setText("⚠️ API 키를 입력해주세요.")
+            self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['danger']};")
+            return
+        
+        self.summary_ai_status.setText("테스트 및 적용 중...")
+        self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['primary']};")
+        self.summary_ai_apply_btn.setEnabled(False)
+        
+        try:
+            # 제공자별 테스트 실행 (기존 text AI와 동일한 메서드 사용)
+            if self.current_summary_ai_provider == "openai":
+                result = self.test_openai_api_internal(api_key)
+            elif self.current_summary_ai_provider == "gemini":
+                result = self.test_gemini_api_internal(api_key)
+            elif self.current_summary_ai_provider == "claude":
+                result = self.test_claude_api_internal(api_key)
+            else:
+                result = (False, "지원되지 않는 AI 제공자입니다.")
+            
+            if result[0]:  # 테스트 성공시 자동 적용
+                selected_model = getattr(self, 'current_summary_ai_model', '')
+                if not selected_model:
+                    selected_model = self.summary_ai_model_combo.currentText()
+                
+                # 정보요약 AI 설정 저장
+                self.save_summary_ai_config(self.current_summary_ai_provider, api_key, selected_model)
+                
+                self.summary_ai_status.setText(f"✅ {selected_model} API가 적용되었습니다.")
+                self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['success']};")
+                self.api_settings_changed.emit()
+            else:
+                self.summary_ai_status.setText(f"❌ 연결 실패: {result[1]}")
+                self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['danger']};")
+                
+        except Exception as e:
+            self.summary_ai_status.setText(f"❌ 적용 오류: {str(e)}")
+            self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['danger']};")
+        finally:
+            self.summary_ai_apply_btn.setEnabled(True)
+    
+    def save_summary_ai_config(self, provider: str, api_key: str, selected_model: str):
+        """정보요약 AI API 설정 저장"""
+        try:
+            from src.foundation.config import config_manager
+            
+            api_config = config_manager.load_api_config()
+            
+            # 제공자별로 API 키 저장 (기존 키와 동일한 필드 사용)
+            if provider == "openai":
+                api_config.openai_api_key = api_key
+            elif provider == "gemini":
+                api_config.gemini_api_key = api_key
+            elif provider == "claude":
+                api_config.claude_api_key = api_key
+            
+            # 선택된 요약 AI API 저장
+            if provider == "openai":
+                api_config.current_summary_ai_provider = "openai"
+            elif provider == "gemini":
+                api_config.current_summary_ai_provider = "google"  # service.py에서 "google"로 확인
+            elif provider == "claude":
+                api_config.current_summary_ai_provider = "anthropic"  # service.py에서 "anthropic"으로 확인
+            
+            # 선택된 요약 모델 저장
+            api_config.current_summary_ai_model = selected_model
+            
+            success = config_manager.save_api_config(api_config)
+            
+            if success:
+                logger.info(f"정보요약 AI API 설정 저장 완료: {provider} - {selected_model}")
+            else:
+                logger.error("정보요약 AI API 설정 저장 실패")
+                
+        except Exception as e:
+            logger.error(f"정보요약 AI API 설정 저장 중 오류: {e}")
+    
+    def delete_summary_ai_key(self):
+        """정보요약 AI API 삭제"""
+        if not hasattr(self, 'current_summary_ai_provider') or not self.current_summary_ai_provider:
+            return
+            
+        from PySide6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, "확인", 
+            f"{self.summary_ai_provider_combo.currentText()} API 설정을 삭제하시겠습니까?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                from src.foundation.config import config_manager
+                
+                api_config = config_manager.load_api_config()
+                
+                # 현재 설정된 요약 모델 정보 삭제
+                api_config.current_summary_ai_model = ""
+                api_config.current_summary_ai_provider = ""
+                
+                config_manager.save_api_config(api_config)
+                
+                # UI 완전 초기화
+                self.summary_ai_api_key.clear()
+                self.summary_ai_provider_combo.setCurrentText("AI 제공자를 선택하세요")
+                self.summary_ai_model_combo.clear()
+                self.summary_model_label.setVisible(False)
+                self.summary_ai_model_combo.setVisible(False)
+                self.summary_ai_config_group.setVisible(False)
+                
+                # 현재 제공자 정보 초기화
+                self.current_summary_ai_provider = None
+                if hasattr(self, 'current_summary_ai_model'):
+                    self.current_summary_ai_model = None
+                
+                self.summary_ai_status.setText("🟡 API를 다시 설정해 주세요.")
+                self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['warning']};")
+                
+                self.api_settings_changed.emit()
+                QMessageBox.information(self, "완료", "정보요약 AI API 설정이 삭제되었습니다.")
+                
+            except Exception as e:
+                QMessageBox.critical(self, "오류", f"API 설정 삭제 실패: {str(e)}")
+    
+    def save_summary_ai_config_only(self):
+        """정보요약 AI 모델 선택만 저장 (API 키 테스트 없이)"""
+        try:
+            if not hasattr(self, 'current_summary_ai_provider') or not self.current_summary_ai_provider:
+                return
+            
+            selected_model = getattr(self, 'current_summary_ai_model', '')
+            if not selected_model:
+                selected_model = self.summary_ai_model_combo.currentText()
+            
+            if selected_model == "모델을 선택하세요":
+                return
+            
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+            
+            # 선택된 요약 AI API와 모델 저장
+            if self.current_summary_ai_provider == "openai":
+                api_config.current_summary_ai_provider = "openai"
+            elif self.current_summary_ai_provider == "gemini":
+                api_config.current_summary_ai_provider = "google"
+            elif self.current_summary_ai_provider == "claude":
+                api_config.current_summary_ai_provider = "anthropic"
+            
+            api_config.current_summary_ai_model = selected_model
+            
+            success = config_manager.save_api_config(api_config)
+            
+            if success:
+                logger.info(f"정보요약 AI 모델 선택 저장: {selected_model}")
+                
+        except Exception as e:
+            logger.error(f"정보요약 AI 모델 선택 저장 오류: {e}")
     
     def delete_text_ai_api(self):
         """글 작성 AI API 삭제"""
@@ -1309,6 +1787,9 @@ class APISettingsDialog(QDialog):
             # 글쓰기 AI API 설정 로드
             self.load_text_ai_settings(api_config)
             
+            # 정보요약 AI API 설정 로드
+            self.load_summary_ai_settings(api_config)
+            
             # 이미지 생성 AI API 설정 로드
             self.load_image_ai_settings(api_config)
             
@@ -1406,6 +1887,50 @@ class APISettingsDialog(QDialog):
         except Exception as e:
             logger.error(f"이미지 생성 AI 설정 로드 실패: {e}")
     
+    def load_summary_ai_settings(self, api_config):
+        """정보요약 AI 설정 로드 및 UI 복원"""
+        try:
+            # 현재 설정된 모델 확인
+            current_model = getattr(api_config, 'current_summary_ai_model', '')
+            
+            if current_model:
+                # 모델에서 제공자 추출
+                if 'GPT' in current_model:
+                    provider = "OpenAI (GPT)"
+                    self.current_summary_ai_provider = "openai"
+                elif 'Gemini' in current_model:
+                    provider = "Google (Gemini)"
+                    self.current_summary_ai_provider = "gemini"
+                elif 'Claude' in current_model:
+                    provider = "Anthropic (Claude)"
+                    self.current_summary_ai_provider = "claude"
+                else:
+                    return
+                
+                # 제공자 콤보박스 설정 (이벤트 트리거를 일시적으로 차단)
+                self.summary_ai_provider_combo.blockSignals(True)
+                self.summary_ai_provider_combo.setCurrentText(provider)
+                self.summary_ai_provider_combo.blockSignals(False)
+                
+                # 수동으로 제공자 변경 처리
+                self.on_summary_ai_provider_changed(provider)
+                
+                # 모델 콤보박스 설정
+                if hasattr(self, 'summary_ai_model_combo'):
+                    for i in range(self.summary_ai_model_combo.count()):
+                        if current_model in self.summary_ai_model_combo.itemText(i):
+                            self.summary_ai_model_combo.setCurrentIndex(i)
+                            # 수동으로 모델 변경 처리
+                            self.on_summary_ai_model_changed(current_model)
+                            break
+                
+                # 상태 표시
+                if hasattr(self, 'summary_ai_status'):
+                    self.summary_ai_status.setText(f"✅ {current_model} API가 설정되었습니다.")
+                    self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['success']};")
+                    
+        except Exception as e:
+            logger.error(f"정보요약 AI 설정 로드 실패: {e}")
     
     def save_settings(self):
         """설정 저장 (foundation config_manager 사용)"""
@@ -1782,6 +2307,14 @@ class APISettingsDialog(QDialog):
                 if hasattr(self, 'text_ai_config_group'):
                     self.text_ai_config_group.setVisible(False)
                 
+                # 정보요약 AI 설정 초기화
+                if hasattr(self, 'summary_ai_api_key'):
+                    self.summary_ai_api_key.clear()
+                if hasattr(self, 'summary_ai_provider_combo'):
+                    self.summary_ai_provider_combo.setCurrentText("AI 제공자를 선택하세요")
+                if hasattr(self, 'summary_ai_config_group'):
+                    self.summary_ai_config_group.setVisible(False)
+                
                 # 이미지 AI 설정 초기화
                 if hasattr(self, 'image_ai_api_key'):
                     self.image_ai_api_key.clear()
@@ -1799,6 +2332,10 @@ class APISettingsDialog(QDialog):
                 if hasattr(self, 'text_ai_status'):
                     self.text_ai_status.setText("🟡 API를 설정해 주세요.")
                     self.text_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['warning']};")
+                
+                if hasattr(self, 'summary_ai_status'):
+                    self.summary_ai_status.setText("🟡 API를 설정해 주세요.")
+                    self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['warning']};")
                 
                 if hasattr(self, 'image_ai_status'):
                     self.image_ai_status.setText("🟡 API를 설정해 주세요.")

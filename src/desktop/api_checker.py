@@ -139,6 +139,16 @@ class APIChecker:
             getattr(api_config, 'gemini_api_key', '').strip()
         ])
         
+        # 정보요약 AI 확인
+        summary_ai_configured = (
+            getattr(api_config, 'current_summary_ai_provider', '').strip() and
+            any([
+                getattr(api_config, 'openai_api_key', '').strip(),
+                getattr(api_config, 'claude_api_key', '').strip(),
+                getattr(api_config, 'gemini_api_key', '').strip()
+            ])
+        )
+        
         # 이미지 생성 AI 확인
         image_ai_configured = any([
             getattr(api_config, 'dalle_api_key', '').strip(),
@@ -147,6 +157,15 @@ class APIChecker:
         
         # 설정된 AI API 목록 생성
         configured_apis = []
+        
+        if summary_ai_configured:
+            # 현재 선택된 정보요약 AI 모델 확인
+            current_summary_model = getattr(api_config, 'current_summary_ai_model', '')
+            if current_summary_model and current_summary_model != "모델을 선택하세요":
+                configured_apis.append(f"정보요약AI({current_summary_model})")
+            else:
+                configured_apis.append("정보요약AI")
+        
         if text_ai_configured:
             # 현재 선택된 글 작성 AI 모델 확인
             current_text_model = getattr(api_config, 'current_text_ai_model', '')

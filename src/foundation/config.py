@@ -39,6 +39,10 @@ class APIConfig:
     current_text_ai_model: str = "GPT-4o (유료, 표준)"  # 현재 선택된 텍스트 AI 모델 (UI 표시명)
     current_ai_model: str = ""  # 기존 호환성을 위해 유지
     
+    # AI API - 정보요약
+    current_summary_ai_provider: str = ""  # openai, anthropic, google
+    current_summary_ai_model: str = ""  # 현재 선택된 정보요약 AI 모델 (UI 표시명)
+    
     # AI API - 이미지 생성
     dalle_api_key: str = ""
     imagen_api_key: str = ""
