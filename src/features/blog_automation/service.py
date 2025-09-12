@@ -517,12 +517,9 @@ class BlogAutomationService:
         for i, blog in enumerate(analyzed_blogs):
             title = blog.get('title', '제목 없음')
             text_content = blog.get('text_content', '')
-            url = blog.get('url', '')
             
             if text_content and text_content != '분석 실패':
                 blog_section = f"""=== {i+1}위 블로그: {title} ===
-URL: {url}
-글자수: {blog.get('content_length', 0)}자
 
 {text_content}
 
