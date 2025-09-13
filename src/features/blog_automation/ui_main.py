@@ -195,11 +195,11 @@ class BlogAutomationMainUI(QWidget):
         panel = QWidget()
         layout = QVBoxLayout()
         layout.setSpacing(tokens.spx(tokens.GAP_16))
-        
+
         # 블로그 글쓰기 테이블 UI 추가
         self.blog_table_ui = BlogWriteTableUI(parent=self)
         layout.addWidget(self.blog_table_ui)
-        
+
         panel.setLayout(layout)
         return panel
     
@@ -329,11 +329,6 @@ class BlogAutomationMainUI(QWidget):
         self.login_button.clicked.connect(self.on_login_clicked)
         layout.addWidget(self.login_button)
         
-        # 글쓰기 버튼 (로그인 후 활성화)
-        self.write_button = ModernSuccessButton("📝 글쓰기 페이지 열기")
-        self.write_button.clicked.connect(self.on_write_clicked)
-        self.write_button.setEnabled(False)  # 초기에는 비활성화
-        layout.addWidget(self.write_button)
         
         card.setLayout(layout)
         return card
@@ -708,14 +703,11 @@ class BlogAutomationMainUI(QWidget):
                         username = self.username_input.text().strip()
                         self.service.delete_saved_credentials(self.current_platform, username)
                 
-                # 글쓰기 버튼 활성화
-                self.write_button.setEnabled(True)
-                
                 # 성공 다이얼로그
                 dialog = ModernConfirmDialog(
                     self,
                     title="로그인 성공",
-                    message=f"{self.current_platform_text} 로그인이 완료되었습니다.\n이제 '글쓰기 페이지 열기' 버튼을 클릭하여 블로그 포스팅을 시작할 수 있습니다.",
+                    message=f"{self.current_platform_text} 로그인이 완료되었습니다.",
                     confirm_text="확인",
                     cancel_text=None,
                     icon="🎉"
@@ -779,80 +771,11 @@ class BlogAutomationMainUI(QWidget):
         except Exception as e:
             logger.error(f"2차 인증 처리 중 오류: {e}")
     
-    def on_write_clicked(self):
-        """글쓰기 버튼 클릭 이벤트"""
-        try:
-            logger.info("글쓰기 페이지 열기 버튼 클릭됨")
-            
-            if not self.is_logged_in:
-                dialog = ModernConfirmDialog(
-                    self,
-                    title="로그인 필요",
-                    message="먼저 로그인을 완료해주세요.",
-                    confirm_text="확인",
-                    cancel_text=None,
-                    icon="⚠️"
-                )
-                dialog.exec()
-                return
-            
-            # 글쓰기 페이지 열기
-            self.write_button.setText("🔄 글쓰기 페이지 여는 중...")
-            self.write_button.setEnabled(False)
-            
-            success = self.service.open_blog_write_page()
-            
-            if success:
-                self.status_label.setText("✅ 글쓰기 페이지가 열렸습니다")
-                
-                dialog = ModernConfirmDialog(
-                    self,
-                    title="글쓰기 페이지 열기 성공",
-                    message="새 창에서 블로그 글쓰기 페이지가 열렸습니다.\n브라우저를 확인해주세요.",
-                    confirm_text="확인",
-                    cancel_text=None,
-                    icon="✅"
-                )
-                dialog.exec()
-            else:
-                self.status_label.setText("❌ 글쓰기 페이지 열기 실패")
-                
-                dialog = ModernConfirmDialog(
-                    self,
-                    title="글쓰기 페이지 열기 실패",
-                    message="글쓰기 페이지를 열 수 없습니다.\n로그인 상태를 확인해주세요.",
-                    confirm_text="확인",
-                    cancel_text=None,
-                    icon="❌"
-                )
-                dialog.exec()
-            
-            # 버튼 상태 복원
-            self.write_button.setText("📝 글쓰기 페이지 열기")
-            self.write_button.setEnabled(True)
-            
-        except Exception as e:
-            logger.error(f"글쓰기 페이지 열기 오류: {e}")
-            
-            self.write_button.setText("📝 글쓰기 페이지 열기")
-            self.write_button.setEnabled(True)
-            self.status_label.setText("글쓰기 페이지 열기 오류")
-            
-            dialog = ModernConfirmDialog(
-                self,
-                title="오류",
-                message=f"글쓰기 페이지 열기 중 오류가 발생했습니다:\n{str(e)}",
-                confirm_text="확인",
-                cancel_text=None,
-                icon="❌"
-            )
-            dialog.exec()
     
     def reset_login_ui(self):
         """로그인 UI 상태 초기화"""
         self.login_button.setText("로그인")
         self.login_button.setEnabled(True)
-        self.write_button.setEnabled(False)  # 글쓰기 버튼 비활성화
         self.is_logged_in = False
     
     def closeEvent(self, event):

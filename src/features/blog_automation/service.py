@@ -231,29 +231,9 @@ class BlogAutomationService:
             return False
     
     def open_blog_write_page(self) -> bool:
-        """블로그 글쓰기 페이지 열기"""
-        try:
-            logger.info("블로그 글쓰기 페이지 열기 시작")
-            
-            if not self.adapter:
-                raise BusinessError("로그인되지 않았습니다")
-            
-            if not self.adapter.is_logged_in:
-                raise BusinessError("로그인 상태를 확인해주세요")
-            
-            # 글쓰기 버튼 클릭
-            success = self.adapter.click_write_button()
-            
-            if success:
-                logger.info("✅ 블로그 글쓰기 페이지 열기 성공")
-                return True
-            else:
-                logger.error("❌ 블로그 글쓰기 페이지 열기 실패")
-                return False
-                
-        except Exception as e:
-            logger.error(f"블로그 글쓰기 페이지 열기 오류: {e}")
-            raise BusinessError(f"글쓰기 페이지 열기 실패: {str(e)}")
+        """블로그 글쓰기 페이지 열기 (현재 비활성화)"""
+        logger.info("글쓰기 페이지 기능은 현재 비활성화되어 있습니다")
+        return True  # 일단 성공으로 처리
     
     def force_stop_browser_session(self):
         """브라우저 세션 강제 중단"""
