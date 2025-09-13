@@ -102,8 +102,8 @@ class BlogAutomationMainUI(QWidget):
     def setup_ui(self):
         """UI 구성"""
         main_layout = QVBoxLayout()
-        margin = tokens.GAP_16
-        spacing = tokens.GAP_10
+        margin = tokens.spx(tokens.GAP_16)
+        spacing = tokens.spx(tokens.GAP_10)
         main_layout.setContentsMargins(margin, margin, margin, margin)
         main_layout.setSpacing(spacing)
         
@@ -112,7 +112,7 @@ class BlogAutomationMainUI(QWidget):
         
         # 메인 콘텐츠 영역 (좌우 분할)
         content_layout = QHBoxLayout()
-        content_layout.setSpacing(tokens.GAP_20)
+        content_layout.setSpacing(tokens.spx(tokens.GAP_20))
         
         # 왼쪽 패널 (상태 + 플랫폼 선택 + 로그인)
         left_panel = self.create_left_panel()
@@ -131,7 +131,7 @@ class BlogAutomationMainUI(QWidget):
         
         # 제목과 사용법 버튼을 함께 배치
         title_help_layout = QHBoxLayout()
-        title_help_layout.setSpacing(tokens.GAP_8)
+        title_help_layout.setSpacing(tokens.spx(tokens.GAP_8))
         
         # 제목
         title_label = QLabel("📝 블로그 자동화")
@@ -157,12 +157,12 @@ class BlogAutomationMainUI(QWidget):
         self.ai_info_label = QLabel("")
         self.ai_info_label.setStyleSheet(f"""
             QLabel {{
-                font-size: {tokens.fpx(tokens.get_font_size('small'))}px;
+                font-size: {tokens.fpx(tokens.FONT_NORMAL)}px;
                 color: {ModernStyle.COLORS['text_secondary']};
                 background-color: {ModernStyle.COLORS['bg_muted']};
-                padding: 6px 12px;
-                border-radius: {tokens.RADIUS_SM}px;
-                border: 1px solid {ModernStyle.COLORS['border']};
+                padding: {tokens.spx(6)}px {tokens.spx(12)}px;
+                border-radius: {tokens.spx(tokens.RADIUS_SM)}px;
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
             }}
         """)
         header_layout.addWidget(self.ai_info_label)
@@ -176,7 +176,7 @@ class BlogAutomationMainUI(QWidget):
         """왼쪽 패널 생성 (상태 + 플랫폼 선택 + 로그인)"""
         panel = QWidget()
         layout = QVBoxLayout()
-        layout.setSpacing(tokens.GAP_16)
+        layout.setSpacing(tokens.spx(tokens.GAP_16))
         
         # 상태 표시 카드
         self.status_card = self.create_status_card()
@@ -194,7 +194,7 @@ class BlogAutomationMainUI(QWidget):
         """오른쪽 패널 생성 (블로그 분석 및 작성)"""
         panel = QWidget()
         layout = QVBoxLayout()
-        layout.setSpacing(tokens.GAP_16)
+        layout.setSpacing(tokens.spx(tokens.GAP_16))
         
         # 블로그 글쓰기 테이블 UI 추가
         self.blog_table_ui = BlogWriteTableUI(parent=self)
@@ -220,28 +220,28 @@ class BlogAutomationMainUI(QWidget):
         ])
         self.platform_combo.setStyleSheet(f"""
             QComboBox {{
-                padding: {tokens.GAP_8}px {tokens.GAP_12}px;
-                border: 1px solid {ModernStyle.COLORS['border']};
-                border-radius: {tokens.RADIUS_SM}px;
+                padding: {tokens.spx(tokens.GAP_8)}px {tokens.spx(tokens.GAP_12)}px;
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
+                border-radius: {tokens.spx(tokens.RADIUS_SM)}px;
                 background-color: {ModernStyle.COLORS['bg_card']};
                 color: {ModernStyle.COLORS['text_primary']};
-                font-size: 14px;
-                min-height: 20px;
+                font-size: {tokens.fpx(tokens.FONT_NORMAL)}px;
+                min-height: {tokens.spx(20)}px;
             }}
             QComboBox::drop-down {{
                 border: none;
-                width: 20px;
+                width: {tokens.spx(20)}px;
             }}
             QComboBox::down-arrow {{
                 image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 5px solid {ModernStyle.COLORS['text_secondary']};
-                margin-right: 5px;
+                border-left: {tokens.spx(5)}px solid transparent;
+                border-right: {tokens.spx(5)}px solid transparent;
+                border-top: {tokens.spx(5)}px solid {ModernStyle.COLORS['text_secondary']};
+                margin-right: {tokens.spx(5)}px;
             }}
             QComboBox QAbstractItemView {{
                 background-color: {ModernStyle.COLORS['bg_card']};
-                border: 1px solid {ModernStyle.COLORS['border']};
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
                 selection-background-color: {ModernStyle.COLORS['primary']};
                 selection-color: white;
             }}
@@ -257,10 +257,10 @@ class BlogAutomationMainUI(QWidget):
         self.platform_description.setStyleSheet(f"""
             QLabel {{
                 color: {ModernStyle.COLORS['text_muted']};
-                font-size: 12px;
-                padding: {tokens.GAP_8}px;
+                font-size: {tokens.fpx(tokens.FONT_NORMAL)}px;
+                padding: {tokens.spx(tokens.GAP_8)}px;
                 background-color: {ModernStyle.COLORS['bg_muted']};
-                border-radius: {tokens.RADIUS_SM}px;
+                border-radius: {tokens.spx(tokens.RADIUS_SM)}px;
             }}
         """)
         self.platform_description.setWordWrap(True)
@@ -277,10 +277,10 @@ class BlogAutomationMainUI(QWidget):
         login_section_label.setStyleSheet(f"""
             QLabel {{
                 color: {ModernStyle.COLORS['text_primary']};
-                font-size: 14px;
+                font-size: {tokens.fpx(tokens.FONT_NORMAL)}px;
                 font-weight: 600;
-                margin-top: {tokens.GAP_8}px;
-                margin-bottom: {tokens.GAP_8}px;
+                margin-top: {tokens.spx(tokens.GAP_8)}px;
+                margin-bottom: {tokens.spx(tokens.GAP_8)}px;
             }}
         """)
         layout.addWidget(login_section_label)
@@ -307,14 +307,14 @@ class BlogAutomationMainUI(QWidget):
         self.save_credentials_checkbox.setStyleSheet(f"""
             QCheckBox {{
                 color: {ModernStyle.COLORS['text_secondary']};
-                font-size: 12px;
-                spacing: 5px;
+                font-size: {tokens.fpx(tokens.FONT_NORMAL)}px;
+                spacing: {tokens.spx(5)}px;
             }}
             QCheckBox::indicator {{
-                width: 16px;
-                height: 16px;
-                border: 1px solid {ModernStyle.COLORS['border']};
-                border-radius: 3px;
+                width: {tokens.spx(16)}px;
+                height: {tokens.spx(16)}px;
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
+                border-radius: {tokens.spx(3)}px;
                 background-color: {ModernStyle.COLORS['bg_card']};
             }}
             QCheckBox::indicator:checked {{
@@ -348,12 +348,12 @@ class BlogAutomationMainUI(QWidget):
         self.status_label.setStyleSheet(f"""
             QLabel {{
                 color: {ModernStyle.COLORS['text_primary']};
-                font-size: 14px;
+                font-size: {tokens.fpx(tokens.FONT_NORMAL)}px;
                 font-weight: 600;
-                padding: {tokens.GAP_8}px;
+                padding: {tokens.spx(tokens.GAP_8)}px;
                 background-color: {ModernStyle.COLORS['bg_muted']};
-                border-radius: {tokens.RADIUS_SM}px;
-                border-left: 3px solid {ModernStyle.COLORS['primary']};
+                border-radius: {tokens.spx(tokens.RADIUS_SM)}px;
+                border-left: {tokens.spx(3)}px solid {ModernStyle.COLORS['primary']};
             }}
         """)
         layout.addWidget(self.status_label)

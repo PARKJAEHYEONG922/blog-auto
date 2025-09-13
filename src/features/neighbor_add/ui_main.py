@@ -48,9 +48,10 @@ class NeighborAddMainUI(QWidget):
     def setup_ui(self):
         """UI 구성 - 원본 통합관리프로그램 스타일"""
         main_layout = QVBoxLayout()
-        # 토큰 기반 마진과 간격
-        margin = tokens.GAP_16
-        spacing = tokens.GAP_10
+        # 토큰 기반 마진과 간격 - 반응형 적용
+        scale = tokens.get_screen_scale_factor()
+        margin = tokens.spx(tokens.GAP_16)
+        spacing = tokens.spx(tokens.GAP_10)
         main_layout.setContentsMargins(margin, margin, margin, margin)
         main_layout.setSpacing(spacing)
         
@@ -59,7 +60,7 @@ class NeighborAddMainUI(QWidget):
         
         # 메인 콘텐츠 영역 (좌우 분할)
         content_layout = QHBoxLayout()
-        content_layout.setSpacing(tokens.GAP_20)
+        content_layout.setSpacing(tokens.spx(tokens.GAP_20))
         
         # 왼쪽 패널 (좁게)
         left_panel = self.create_left_panel()
@@ -105,7 +106,7 @@ class NeighborAddMainUI(QWidget):
         """왼쪽 패널 - ModernCard 사용"""
         panel = QWidget()
         layout = QVBoxLayout()
-        layout.setSpacing(tokens.GAP_16)
+        layout.setSpacing(tokens.spx(tokens.GAP_16))
         
         # 1. 로그인 카드
         login_card = self.create_login_card()
@@ -123,7 +124,7 @@ class NeighborAddMainUI(QWidget):
         """오른쪽 패널 - ModernCard 사용"""
         panel = QWidget()
         layout = QVBoxLayout()
-        layout.setSpacing(tokens.GAP_16)
+        layout.setSpacing(tokens.spx(tokens.GAP_16))
         
         # 1. 검색 설정 카드
         search_card = self.create_search_card()
@@ -161,12 +162,12 @@ class NeighborAddMainUI(QWidget):
         self.status_label.setStyleSheet(f"""
             QLabel {{
                 color: {ModernStyle.COLORS['text_primary']};
-                font-size: 14px;
+                font-size: {tokens.fpx(tokens.FONT_NORMAL)}px;
                 font-weight: 600;
-                padding: {tokens.GAP_8}px;
+                padding: {tokens.spx(tokens.GAP_8)}px;
                 background-color: {ModernStyle.COLORS['bg_muted']};
-                border-radius: {tokens.RADIUS_SM}px;
-                border-left: 3px solid {ModernStyle.COLORS['primary']};
+                border-radius: {tokens.spx(tokens.RADIUS_SM)}px;
+                border-left: {tokens.spx(3)}px solid {ModernStyle.COLORS['primary']};
             }}
         """)
         layout.addWidget(self.status_label)
@@ -175,19 +176,19 @@ class NeighborAddMainUI(QWidget):
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
-        self.progress_bar.setFixedHeight(20)
+        self.progress_bar.setFixedHeight(tokens.spx(20))
         self.progress_bar.setStyleSheet(f"""
             QProgressBar {{
-                border: 1px solid {ModernStyle.COLORS['border']};
-                border-radius: {tokens.RADIUS_SM}px;
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
+                border-radius: {tokens.spx(tokens.RADIUS_SM)}px;
                 text-align: center;
                 background-color: {ModernStyle.COLORS['bg_muted']};
-                font-size: 12px;
+                font-size: {tokens.fpx(12)}px;
                 font-weight: 500;
             }}
             QProgressBar::chunk {{
                 background-color: {ModernStyle.COLORS['primary']};
-                border-radius: {tokens.RADIUS_SM}px;
+                border-radius: {tokens.spx(tokens.RADIUS_SM)}px;
             }}
         """)
         layout.addWidget(self.progress_bar)
@@ -197,22 +198,22 @@ class NeighborAddMainUI(QWidget):
         
         # 성공 카운트
         self.success_label = QLabel(self.get_success_text(0))
-        self.success_label.setStyleSheet(f"color: {ModernStyle.COLORS['success']}; font-weight: 600; font-size: 12px;")
+        self.success_label.setStyleSheet(f"color: {ModernStyle.COLORS['success']}; font-weight: 600; font-size: {tokens.fpx(tokens.FONT_NORMAL)}px;")
         stats_row.addWidget(self.success_label)
         
         # 실패 카운트  
         self.failed_label = QLabel(self.get_failed_text(0))
-        self.failed_label.setStyleSheet(f"color: {ModernStyle.COLORS['danger']}; font-weight: 600; font-size: 12px;")
+        self.failed_label.setStyleSheet(f"color: {ModernStyle.COLORS['danger']}; font-weight: 600; font-size: {tokens.fpx(tokens.FONT_NORMAL)}px;")
         stats_row.addWidget(self.failed_label)
         
         # 비활성화 카운트
         self.disabled_label = QLabel(self.get_disabled_text(0)) 
-        self.disabled_label.setStyleSheet(f"color: {ModernStyle.COLORS['warning']}; font-weight: 600; font-size: 12px;")
+        self.disabled_label.setStyleSheet(f"color: {ModernStyle.COLORS['warning']}; font-weight: 600; font-size: {tokens.fpx(tokens.FONT_NORMAL)}px;")
         stats_row.addWidget(self.disabled_label)
         
         # 이미 신청됨 카운트
         self.already_label = QLabel(self.get_already_text(0))
-        self.already_label.setStyleSheet(f"color: {ModernStyle.COLORS['text_secondary']}; font-weight: 600; font-size: 12px;")
+        self.already_label.setStyleSheet(f"color: {ModernStyle.COLORS['text_secondary']}; font-weight: 600; font-size: {tokens.fpx(tokens.FONT_NORMAL)}px;")
         stats_row.addWidget(self.already_label)
         
         stats_row.addStretch()
@@ -220,7 +221,7 @@ class NeighborAddMainUI(QWidget):
         
         # 현재 처리 중인 블로거
         self.current_blogger_label = QLabel("")
-        self.current_blogger_label.setStyleSheet(f"color: {ModernStyle.COLORS['text_muted']}; font-size: 11px;")
+        self.current_blogger_label.setStyleSheet(f"color: {ModernStyle.COLORS['text_muted']}; font-size: {tokens.fpx(tokens.FONT_NORMAL)}px;")
         layout.addWidget(self.current_blogger_label)
         
         card.setLayout(layout)
@@ -251,7 +252,7 @@ class NeighborAddMainUI(QWidget):
         
         # 로그인 정보 저장 체크박스
         self.save_credentials_checkbox = QCheckBox("로그인 정보 저장 (다음에도 사용)")
-        self.save_credentials_checkbox.setStyleSheet(f"color: {ModernStyle.COLORS['text_secondary']}; font-size: 12px;")
+        self.save_credentials_checkbox.setStyleSheet(f"color: {ModernStyle.COLORS['text_secondary']}; font-size: {tokens.fpx(tokens.FONT_NORMAL)}px;")
         layout.addWidget(self.save_credentials_checkbox)
         
         # 로그인 버튼
@@ -284,7 +285,7 @@ class NeighborAddMainUI(QWidget):
         # 메시지 입력 (기본적으로 비활성화)
         self.message_input = ModernTextEdit()
         self.message_input.setPlaceholderText("예: 안녕하세요! 서로이웃 해요 :)")
-        self.message_input.setMaximumHeight(60)
+        self.message_input.setMaximumHeight(tokens.spx(60))
         self.message_input.setEnabled(False)  # 기본적으로 비활성화
         layout.addWidget(self.message_input)
         
@@ -326,17 +327,17 @@ class NeighborAddMainUI(QWidget):
             QLabel {{
                 font-weight: 600;
                 color: {ModernStyle.COLORS['primary']};
-                padding: 4px 8px;
+                padding: {tokens.spx(4)}px {tokens.spx(8)}px;
                 background-color: {ModernStyle.COLORS['bg_muted']};
-                border-radius: 4px;
-                min-width: 50px;
+                border-radius: {tokens.spx(4)}px;
+                min-width: {tokens.spx(50)}px;
             }}
         """)
         target_layout.addWidget(self.total_target_label)
         
         # 자동 계산 설명
         auto_calc_label = QLabel("(키워드별 목표 합계)")
-        auto_calc_label.setStyleSheet(f"color: {ModernStyle.COLORS['text_muted']}; font-size: 11px;")
+        auto_calc_label.setStyleSheet(f"color: {ModernStyle.COLORS['text_muted']}; font-size: {tokens.fpx(tokens.FONT_NORMAL)}px;")
         target_layout.addWidget(auto_calc_label)
         
         target_layout.addStretch()
@@ -357,7 +358,7 @@ class NeighborAddMainUI(QWidget):
         keyword_layout.addWidget(self.keyword_target_input)
         
         add_keyword_btn = ModernSuccessButton("추가")
-        add_keyword_btn.setFixedWidth(80)
+        add_keyword_btn.setFixedWidth(tokens.spx(80))
         add_keyword_btn.clicked.connect(self.on_add_keyword_clicked)
         keyword_layout.addWidget(add_keyword_btn)
         layout.addLayout(keyword_layout)
@@ -371,16 +372,15 @@ class NeighborAddMainUI(QWidget):
         self.keyword_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
         self.keyword_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         # 반응형 컬럼 너비 설정
-        from src.toolbox.ui_kit.tokens import get_screen_scale_factor
-        scale = get_screen_scale_factor()
+        scale = tokens.get_screen_scale_factor()
         
-        self.keyword_table.setColumnWidth(0, int(500 * scale))  # 키워드: 반응형
-        self.keyword_table.setColumnWidth(1, int(100 * scale))  # 목표인원: 반응형
-        self.keyword_table.setColumnWidth(2, int(200 * scale))  # 삭제: 반응형 (최소 크기)
-        self.keyword_table.setMaximumHeight(300)
+        self.keyword_table.setColumnWidth(0, tokens.spx(500))  # 키워드: 반응형
+        self.keyword_table.setColumnWidth(1, tokens.spx(100))  # 목표인원: 반응형
+        self.keyword_table.setColumnWidth(2, tokens.spx(200))  # 삭제: 반응형 (최소 크기)
+        self.keyword_table.setMaximumHeight(tokens.spx(300))
         self.keyword_table.setAlternatingRowColors(True)
         # 행 높이 설정
-        self.keyword_table.verticalHeader().setDefaultSectionSize(36)
+        self.keyword_table.verticalHeader().setDefaultSectionSize(tokens.spx(36))
         self.keyword_table.verticalHeader().setVisible(False)
         layout.addWidget(self.keyword_table)
         
@@ -403,7 +403,7 @@ class NeighborAddMainUI(QWidget):
             "💡 자동화 시스템이 2개 창을 사용하여 효율적으로 작업합니다.\n"
             "성공률 30-40%를 고려하여 부족시 자동으로 더 많은 후보를 검색합니다."
         )
-        info_text.setStyleSheet(f"color: {ModernStyle.COLORS['text_muted']}; font-size: 11px; padding: 5px;")
+        info_text.setStyleSheet(f"color: {ModernStyle.COLORS['text_muted']}; font-size: {tokens.fpx(tokens.FONT_NORMAL)}px; padding: {tokens.spx(5)}px;")
         info_text.setWordWrap(True)
         layout.addWidget(info_text)
         
@@ -485,43 +485,43 @@ class NeighborAddMainUI(QWidget):
     
     
     def setup_styles(self):
-        """스타일 설정"""
+        """스타일 설정 - 반응형 적용"""
         self.setStyleSheet(f"""
             QGroupBox {{
                 font-weight: bold;
-                border: 2px solid {ModernStyle.COLORS['border']};
-                border-radius: 8px;
-                margin: 10px 0;
-                padding-top: 10px;
+                border: {tokens.spx(2)}px solid {ModernStyle.COLORS['border']};
+                border-radius: {tokens.spx(8)}px;
+                margin: {tokens.spx(10)}px 0;
+                padding-top: {tokens.spx(10)}px;
             }}
             QGroupBox::title {{
                 subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
+                left: {tokens.spx(10)}px;
+                padding: 0 {tokens.spx(5)}px 0 {tokens.spx(5)}px;
             }}
             QListWidget {{
-                border: 1px solid {ModernStyle.COLORS['border']};
-                border-radius: 4px;
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
+                border-radius: {tokens.spx(4)}px;
                 background-color: {ModernStyle.COLORS['bg_card']};
                 alternate-background-color: {ModernStyle.COLORS['bg_muted']};
             }}
             QListWidget::item {{
-                padding: 5px;
-                border-bottom: 1px solid {ModernStyle.COLORS['border']};
+                padding: {tokens.spx(5)}px;
+                border-bottom: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
             }}
             QListWidget::item:selected {{
                 background-color: {ModernStyle.COLORS['primary']};
                 color: white;
             }}
             QTableWidget {{
-                border: 1px solid {ModernStyle.COLORS['border']};
-                border-radius: 4px;
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
+                border-radius: {tokens.spx(4)}px;
                 background-color: {ModernStyle.COLORS['bg_card']};
                 alternate-background-color: {ModernStyle.COLORS['bg_muted']};
                 gridline-color: {ModernStyle.COLORS['border']};
             }}
             QTableWidget::item {{
-                padding: 5px;
+                padding: {tokens.spx(5)}px;
                 color: {ModernStyle.COLORS['text_primary']};
             }}
             QTableWidget::item:selected {{
@@ -531,8 +531,8 @@ class NeighborAddMainUI(QWidget):
             QHeaderView::section {{
                 background-color: {ModernStyle.COLORS['bg_muted']};
                 color: {ModernStyle.COLORS['text_primary']};
-                padding: 5px;
-                border: 1px solid {ModernStyle.COLORS['border']};
+                padding: {tokens.spx(5)}px;
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
                 font-weight: 600;
             }}
         """)
@@ -1217,10 +1217,10 @@ class NeighborAddMainUI(QWidget):
                     self.login_status_label.setStyleSheet(f"""
                         QLabel {{
                             color: {ModernStyle.COLORS['success']};
-                            font-size: 12px;
-                            padding: {tokens.GAP_8}px;
+                            font-size: {tokens.fpx(12)}px;
+                            padding: {tokens.spx(tokens.GAP_8)}px;
                             background-color: {ModernStyle.COLORS['success_bg']};
-                            border-radius: {tokens.RADIUS_SM}px;
+                            border-radius: {tokens.spx(tokens.RADIUS_SM)}px;
                         }}
                     """)
                 
@@ -1311,10 +1311,10 @@ class NeighborAddMainUI(QWidget):
                 self.login_status_label.setStyleSheet(f"""
                     QLabel {{
                         color: {ModernStyle.COLORS['warning']};
-                        font-size: 12px;
-                        padding: {tokens.GAP_8}px;
+                        font-size: {tokens.fpx(12)}px;
+                        padding: {tokens.spx(tokens.GAP_8)}px;
                         background-color: {ModernStyle.COLORS['warning_bg']};
-                        border-radius: {tokens.RADIUS_SM}px;
+                        border-radius: {tokens.spx(tokens.RADIUS_SM)}px;
                     }}
                 """)
             
@@ -1378,21 +1378,21 @@ class NeighborAddMainUI(QWidget):
             self.keyword_table.setItem(i, 1, QTableWidgetItem(f"{target_count}명"))
             # 삭제 버튼 - 작은 크기로 생성
             delete_button = ModernDangerButton("삭제")
-            delete_button.setFixedSize(60, 20)  # 고정 크기: 너비 60px, 높이 20px
+            delete_button.setFixedSize(tokens.spx(60), tokens.spx(20))  # 반응형 크기
             # 기본 스타일을 완전히 override하여 작은 버튼 적용
             delete_button.setStyleSheet(f"""
                 QPushButton {{
                     background-color: #dc3545;
                     color: white;
                     border: none;
-                    border-radius: 3px;
-                    padding: 2px 8px;
-                    font-size: 11px;
+                    border-radius: {tokens.spx(3)}px;
+                    padding: {tokens.spx(2)}px {tokens.spx(8)}px;
+                    font-size: {tokens.fpx(11)}px;
                     font-weight: bold;
-                    min-height: 20px;
-                    max-height: 20px;
-                    min-width: 60px;
-                    max-width: 60px;
+                    min-height: {tokens.spx(20)}px;
+                    max-height: {tokens.spx(20)}px;
+                    min-width: {tokens.spx(60)}px;
+                    max-width: {tokens.spx(60)}px;
                 }}
                 QPushButton:hover {{
                     background-color: #c82333;

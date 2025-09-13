@@ -150,7 +150,7 @@ class BlogWriteTableUI(QWidget):
                 color: {ModernStyle.COLORS['primary']};
                 font-size: {tokens.get_font_size('normal')}px;
                 font-weight: 600;
-                padding: 4px 0px;
+                padding: {tokens.spx(4)}px 0px;
                 margin-bottom: {tokens.GAP_8}px;
                 line-height: 1.4;
             }}
@@ -166,7 +166,7 @@ class BlogWriteTableUI(QWidget):
         
         self.main_keyword_input = ModernLineEdit()
         self.main_keyword_input.setPlaceholderText("메인키워드 필수 (예: 프로그래밍 학습법)")
-        self.main_keyword_input.setMinimumHeight(40)  # 높이 증가
+        self.main_keyword_input.setMinimumHeight(tokens.spx(40))  # 높이 증가
         main_keyword_layout.addWidget(self.main_keyword_input, 1)  # 확장 가능
         
         layout.addLayout(main_keyword_layout)
@@ -180,7 +180,7 @@ class BlogWriteTableUI(QWidget):
         
         self.sub_keyword_input = ModernLineEdit()
         self.sub_keyword_input.setPlaceholderText("보조 키워드들을 쉼표로 구분 (예: 개발자, 코딩, 입문)")
-        self.sub_keyword_input.setMinimumHeight(40)  # 높이 증가
+        self.sub_keyword_input.setMinimumHeight(tokens.spx(40))  # 높이 증가
         sub_keyword_layout.addWidget(self.sub_keyword_input, 1)  # 확장 가능
         
         layout.addLayout(sub_keyword_layout)
@@ -206,7 +206,7 @@ class BlogWriteTableUI(QWidget):
         card.setLayout(layout)
         
         # 카드 사이즈 최적화 - 2줄 설명 텍스트로 높이 증가
-        card.setMaximumHeight(250)
+        card.setMaximumHeight(tokens.spx(250))
         
         return card
     
@@ -247,7 +247,7 @@ class BlogWriteTableUI(QWidget):
                 color: {ModernStyle.COLORS['primary']};
                 font-size: {tokens.get_font_size('normal')}px;
                 font-weight: 600;
-                padding: 4px 0px;
+                padding: {tokens.spx(4)}px 0px;
                 margin-bottom: {tokens.GAP_4}px;
             }}
         """)
@@ -271,27 +271,27 @@ class BlogWriteTableUI(QWidget):
         combo_style = f"""
             QComboBox {{
                 padding: {tokens.GAP_8}px {tokens.GAP_12}px;
-                border: 1px solid {ModernStyle.COLORS['border']};
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
                 border-radius: {tokens.RADIUS_SM}px;
                 background-color: {ModernStyle.COLORS['bg_card']};
                 color: {ModernStyle.COLORS['text_primary']};
                 font-size: {tokens.get_font_size('normal')}px;
-                min-height: 20px;
+                min-height: {tokens.spx(20)}px;
             }}
             QComboBox::drop-down {{
                 border: none;
-                width: 20px;
+                width: {tokens.spx(20)}px;
             }}
             QComboBox::down-arrow {{
                 image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 5px solid {ModernStyle.COLORS['text_secondary']};
-                margin-right: 5px;
+                border-left: {tokens.spx(5)}px solid transparent;
+                border-right: {tokens.spx(5)}px solid transparent;
+                border-top: {tokens.spx(5)}px solid {ModernStyle.COLORS['text_secondary']};
+                margin-right: {tokens.spx(5)}px;
             }}
             QComboBox QAbstractItemView {{
                 background-color: {ModernStyle.COLORS['bg_card']};
-                border: 1px solid {ModernStyle.COLORS['border']};
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
                 selection-background-color: {ModernStyle.COLORS['primary']};
                 selection-color: white;
                 font-size: {tokens.get_font_size('normal')}px;
@@ -350,12 +350,12 @@ class BlogWriteTableUI(QWidget):
         self.blogger_identity_edit.setStyleSheet(f"""
             ModernLineEdit {{
                 padding: {tokens.GAP_8}px {tokens.GAP_12}px;
-                border: 1px solid {ModernStyle.COLORS['border']};
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
                 border-radius: {tokens.RADIUS_SM}px;
                 background-color: {ModernStyle.COLORS['bg_card']};
                 color: {ModernStyle.COLORS['text_primary']};
                 font-size: {tokens.get_font_size('normal')}px;
-                min-height: 20px;
+                min-height: {tokens.spx(20)}px;
             }}
             ModernLineEdit:focus {{
                 border-color: {ModernStyle.COLORS['primary']};
@@ -382,7 +382,7 @@ class BlogWriteTableUI(QWidget):
         card.setLayout(layout)
         
         # AI 설정 카드는 제일 위에 있어서 높이 제한 필요 (드롭박스 간격 정리)
-        card.setMaximumHeight(310)  # 블로그 소개 필드 추가로 높이 40px 증가
+        card.setMaximumHeight(tokens.spx(310))  # 블로그 소개 필드 추가로 높이 40px 증가
         
         return card
     

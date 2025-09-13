@@ -352,7 +352,7 @@ class ModernLineEdit(QLineEdit):
         border_radius = int(tokens.RADIUS_SM * scale)
         padding_v = int(tokens.GAP_8 * scale)
         padding_h = int(tokens.GAP_12 * scale)
-        font_size = tokens.fpx(tokens.get_font_size('small'))
+        font_size = tokens.fpx(tokens.FONT_NORMAL)
         
         self.setStyleSheet(f"""
             QLineEdit {{
@@ -414,7 +414,7 @@ class ModernCard(QGroupBox):
         """반응형 스타일 적용 - 모든 크기 속성 스케일링"""
         scale = tokens.get_screen_scale_factor()
         
-        font_size = tokens.fpx(tokens.get_font_size('small'))
+        font_size = tokens.fpx(tokens.FONT_NORMAL)
         border_width = int(tokens.BORDER_2 * scale)
         border_radius = int(tokens.RADIUS_LG * scale)
         margin_v = int(tokens.GAP_10 * scale)

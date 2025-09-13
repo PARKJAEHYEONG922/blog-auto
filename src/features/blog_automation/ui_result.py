@@ -57,18 +57,18 @@ class BlogResultTabWidget(QTabWidget):
         """탭 위젯 스타일 설정"""
         self.setStyleSheet(f"""
             QTabWidget::pane {{
-                border: 1px solid {ModernStyle.COLORS['border']};
-                border-radius: {tokens.RADIUS_SM}px;
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
+                border-radius: {tokens.spx(tokens.RADIUS_SM)}px;
                 background-color: {ModernStyle.COLORS['bg_card']};
             }}
             QTabBar::tab {{
                 background-color: {ModernStyle.COLORS['bg_muted']};
-                border: 1px solid {ModernStyle.COLORS['border']};
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
                 border-bottom: none;
-                border-top-left-radius: {tokens.RADIUS_SM}px;
-                border-top-right-radius: {tokens.RADIUS_SM}px;
-                padding: {tokens.GAP_8}px {tokens.GAP_16}px;
-                margin-right: 2px;
+                border-top-left-radius: {tokens.spx(tokens.RADIUS_SM)}px;
+                border-top-right-radius: {tokens.spx(tokens.RADIUS_SM)}px;
+                padding: {tokens.spx(tokens.GAP_8)}px {tokens.spx(tokens.GAP_16)}px;
+                margin-right: {tokens.spx(2)}px;
                 font-weight: 500;
             }}
             QTabBar::tab:selected {{
@@ -136,13 +136,13 @@ class AnalysisResultTab(QWidget):
         self.blog_table.setStyleSheet(f"""
             QTableWidget {{
                 background-color: {ModernStyle.COLORS['bg_card']};
-                border: 1px solid {ModernStyle.COLORS['border']};
-                border-radius: {tokens.RADIUS_SM}px;
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
+                border-radius: {tokens.spx(tokens.RADIUS_SM)}px;
                 gridline-color: {ModernStyle.COLORS['border']};
             }}
             QTableWidget::item {{
-                padding: {tokens.GAP_8}px;
-                border-bottom: 1px solid {ModernStyle.COLORS['border']};
+                padding: {tokens.spx(tokens.GAP_8)}px;
+                border-bottom: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
             }}
             QTableWidget::item:selected {{
                 background-color: {ModernStyle.COLORS['primary']};
@@ -150,8 +150,8 @@ class AnalysisResultTab(QWidget):
             }}
             QHeaderView::section {{
                 background-color: {ModernStyle.COLORS['bg_muted']};
-                padding: {tokens.GAP_8}px;
-                border: 1px solid {ModernStyle.COLORS['border']};
+                padding: {tokens.spx(tokens.GAP_8)}px;
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
                 font-weight: 600;
             }}
         """)
@@ -252,7 +252,7 @@ class PromptResultTab(QWidget):
         # 프롬프트 미리보기
         self.prompt_text = QTextEdit()
         self.prompt_text.setPlaceholderText("AI가 받은 프롬프트가 여기에 표시됩니다...")
-        self.prompt_text.setMinimumHeight(400)
+        self.prompt_text.setMinimumHeight(tokens.spx(400))
         self.prompt_text.setReadOnly(True)  # 읽기 전용
         layout.addWidget(self.prompt_text)
         
@@ -312,7 +312,7 @@ class ContentResultTab(QWidget):
         # 생성된 글 미리보기
         self.generated_text = QTextEdit()
         self.generated_text.setPlaceholderText("AI가 작성한 블로그 글이 여기에 표시됩니다...")
-        self.generated_text.setMinimumHeight(400)
+        self.generated_text.setMinimumHeight(tokens.spx(400))
         layout.addWidget(self.generated_text)
         
         self.setLayout(layout)
