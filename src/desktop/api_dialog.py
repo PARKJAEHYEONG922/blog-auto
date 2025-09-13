@@ -5,8 +5,9 @@ API 설정 다이얼로그
 import json
 from pathlib import Path
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
-    QTabWidget, QWidget, QGroupBox, QFormLayout, QMessageBox, QTextEdit, QComboBox
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
+    QTabWidget, QWidget, QGroupBox, QFormLayout, QMessageBox, QTextEdit, QComboBox,
+    QScrollArea, QFrame
 )
 from src.toolbox.ui_kit.components import ModernPrimaryButton, ModernDangerButton, ModernSuccessButton, ModernButton
 from PySide6.QtCore import Qt, Signal
@@ -226,8 +227,23 @@ class APISettingsDialog(QDialog):
     def setup_text_ai_tab(self):
         """글 작성 AI API 설정 탭"""
         tab = QWidget()
-        layout = QVBoxLayout()
+
+        # 메인 레이아웃
+        main_layout = QVBoxLayout(tab)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 스크롤 영역 생성
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+
+        # 스크롤 내용 위젯
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
         layout.setSpacing(20)
+        layout.setContentsMargins(10, 10, 10, 10)
         
         # 전체 설명과 도움말 버튼
         desc_layout = QHBoxLayout()
@@ -422,7 +438,11 @@ class APISettingsDialog(QDialog):
         layout.addWidget(text_ai_group)
         
         layout.addStretch()
-        tab.setLayout(layout)
+
+        # 스크롤 영역 설정 완료
+        scroll_area.setWidget(content_widget)
+        main_layout.addWidget(scroll_area)
+
         self.tab_widget.addTab(tab, "📝 글 작성 AI")
     
     def setup_image_ai_tab(self):
