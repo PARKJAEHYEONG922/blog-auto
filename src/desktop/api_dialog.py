@@ -254,7 +254,22 @@ class APISettingsDialog(QDialog):
         summary_ai_group = QGroupBox("📄 정보요약 AI")
         summary_ai_layout = QVBoxLayout()
         summary_ai_layout.setSpacing(10)
-        
+
+        # 정보요약 AI 추천 문구 추가
+        summary_recommend_label = QLabel("💡 추천: Gemini 2.0 Flash (무료, 빠른 분석)")
+        summary_recommend_label.setStyleSheet(f"""
+            QLabel {{
+                color: {ModernStyle.COLORS['primary']};
+                font-size: {tokens.get_font_size('small')}px;
+                font-weight: 600;
+                background-color: {ModernStyle.COLORS['primary']}15;
+                padding: 8px 12px;
+                border-radius: 6px;
+                margin-bottom: 8px;
+            }}
+        """)
+        summary_ai_layout.addWidget(summary_recommend_label)
+
         # 정보요약 AI 제공자 선택
         summary_provider_layout = QHBoxLayout()
         summary_provider_layout.addWidget(QLabel("AI 제공자:"))
@@ -323,6 +338,21 @@ class APISettingsDialog(QDialog):
         text_ai_group = QGroupBox("✍️ 글작성 AI")
         text_ai_layout = QVBoxLayout()
         text_ai_layout.setSpacing(10)
+
+        # 글작성 AI 추천 문구 추가
+        text_recommend_label = QLabel("💡 추천: Claude 3.5 Sonnet (자연스러운 한국어)")
+        text_recommend_label.setStyleSheet(f"""
+            QLabel {{
+                color: {ModernStyle.COLORS['primary']};
+                font-size: {tokens.get_font_size('small')}px;
+                font-weight: 600;
+                background-color: {ModernStyle.COLORS['primary']}15;
+                padding: 8px 12px;
+                border-radius: 6px;
+                margin-bottom: 8px;
+            }}
+        """)
+        text_ai_layout.addWidget(text_recommend_label)
 
         # 글작성 AI 제공자 선택
         text_provider_layout = QHBoxLayout()
