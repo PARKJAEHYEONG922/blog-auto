@@ -2693,6 +2693,265 @@ class NaverBlogAdapter:
             logger.error(f"form submit 방식 실패: {e}")
             return False
 
+    def navigate_to_write_page(self, user_id: str = None) -> bool:
+        """네이버 블로그 글쓰기 페이지로 이동"""
+        try:
+            if not self.is_logged_in:
+                logger.error("로그인이 필요합니다")
+                return False
+
+            # 사용자 ID가 없으면 현재 로그인된 사용자 ID 사용
+            if not user_id:
+                user_id = self.username
+                if not user_id:
+                    logger.error("사용자 ID를 찾을 수 없습니다")
+                    return False
+
+            write_url = f"https://blog.naver.com/{user_id}?Redirect=Write&"
+            logger.info(f"글쓰기 페이지로 이동: {write_url}")
+
+            self.helper.goto(write_url)
+            time.sleep(2)  # 페이지 로딩 대기
+
+            # 페이지 이동 확인
+            current_url = self.helper.current_url
+            if "Redirect=Write" in current_url or "PostWriteForm" in current_url:
+                logger.info("✅ 글쓰기 페이지 이동 성공")
+                return True
+            else:
+                logger.warning(f"⚠️ 글쓰기 페이지 이동 확인 필요: {current_url}")
+                return True  # 일단 성공으로 처리
+
+        except Exception as e:
+            logger.error(f"글쓰기 페이지 이동 실패: {e}")
+            return False
+
+    def handle_draft_popup(self) -> bool:
+        """작성 중인 글 팝업 처리 (취소 버튼 클릭)"""
+        try:
+            logger.info("작성 중인 글 팝업 확인 중...")
+
+            # 팝업이 나타날 때까지 잠시 대기
+            time.sleep(1)
+
+            # 다양한 셀렉터로 취소 버튼 찾기
+            cancel_selectors = [
+                "button:contains('취소')",  # 텍스트 기반
+                ".btn_cancel",  # 클래스 기반
+                "[onclick*='cancel']",  # onclick 속성 기반
+                ".popup_footer button:first-child",  # 팝업 푸터의 첫 번째 버튼
+                ".btn_area button:first-child",  # 버튼 영역의 첫 번째 버튼
+            ]
+
+            for selector in cancel_selectors:
+                try:
+                    if selector.startswith("button:contains"):
+                        # jQuery 스타일 텍스트 선택자를 JavaScript로 변환
+                        elements = self.helper.driver.execute_script("""
+                            var buttons = document.querySelectorAll('button');
+                            for (var i = 0; i < buttons.length; i++) {
+                                if (buttons[i].textContent.includes('취소')) {
+                                    return buttons[i];
+                                }
+                            }
+                            return null;
+                        """)
+                        if elements:
+                            elements.click()
+                            logger.info("✅ '취소' 버튼 클릭 성공 (텍스트 기반)")
+                            time.sleep(1)
+                            return True
+                    else:
+                        element = self.helper.find_element(selector)
+                        if element and element.is_displayed():
+                            element.click()
+                            logger.info(f"✅ 취소 버튼 클릭 성공: {selector}")
+                            time.sleep(1)
+                            return True
+                except:
+                    continue
+
+            logger.info("작성 중인 글 팝업이 없거나 취소 버튼을 찾을 수 없음")
+            return True  # 팝업이 없는 것도 정상 상황
+
+        except Exception as e:
+            logger.error(f"팝업 처리 실패: {e}")
+            return True  # 팝업 처리 실패해도 계속 진행
+
+    def switch_to_editor_iframe(self) -> bool:
+        """네이버 블로그 에디터 iframe으로 전환"""
+        try:
+            logger.info("에디터 iframe 감지 및 전환 시작...")
+
+            # iframe이 로드될 때까지 대기
+            time.sleep(2)
+
+            # iframe 감지를 위한 셀렉터들
+            iframe_selectors = [
+                "iframe[src*='blog.naver.com']",  # 네이버 블로그 에디터 iframe
+                "iframe[name*='editor']",  # 에디터 이름 포함
+                "iframe[id*='editor']",  # 에디터 ID 포함
+                "iframe[src*='PostWriteForm']",  # 글쓰기 폼 포함
+                "iframe",  # 모든 iframe (마지막 대안)
+            ]
+
+            for selector in iframe_selectors:
+                try:
+                    iframes = self.helper.find_elements(selector)
+                    if iframes:
+                        logger.info(f"iframe 발견: {selector} (개수: {len(iframes)})")
+
+                        for i, iframe in enumerate(iframes):
+                            try:
+                                # iframe 속성 로깅
+                                src = iframe.get_attribute('src') or ''
+                                name = iframe.get_attribute('name') or ''
+                                id_attr = iframe.get_attribute('id') or ''
+
+                                logger.info(f"iframe[{i}] - src: {src[:100]}..., name: {name}, id: {id_attr}")
+
+                                # 블로그 에디터와 관련된 iframe인지 확인
+                                if any(keyword in (src + name + id_attr).lower() for keyword in
+                                      ['blog.naver.com', 'editor', 'postwriteform', 'write']):
+
+                                    # iframe으로 전환 시도
+                                    self.helper.driver.switch_to.frame(iframe)
+                                    logger.info(f"✅ iframe으로 전환 성공: {selector}[{i}]")
+
+                                    # iframe 내부 확인 (body 태그 존재 여부)
+                                    try:
+                                        body = self.helper.driver.find_element(By.TAG_NAME, "body")
+                                        if body:
+                                            logger.info("iframe 내부 body 요소 확인됨")
+                                            return True
+                                    except:
+                                        logger.warning("iframe 내부 body 요소를 찾을 수 없음")
+
+                                    # 다시 기본 프레임으로 돌아가서 다른 iframe 시도
+                                    self.helper.driver.switch_to.default_content()
+
+                            except Exception as e:
+                                logger.warning(f"iframe[{i}] 전환 실패: {e}")
+                                # 실패했을 경우 기본 프레임으로 돌아가기
+                                self.helper.driver.switch_to.default_content()
+                                continue
+
+                except Exception as e:
+                    logger.warning(f"iframe 셀렉터 {selector} 실패: {e}")
+                    continue
+
+            logger.warning("적절한 에디터 iframe을 찾을 수 없음")
+            return False
+
+        except Exception as e:
+            logger.error(f"iframe 전환 실패: {e}")
+            # 안전을 위해 기본 프레임으로 돌아가기
+            try:
+                self.helper.driver.switch_to.default_content()
+            except:
+                pass
+            return False
+
+    def click_publish_button(self) -> bool:
+        """발행 버튼 클릭"""
+        try:
+            logger.info("발행 버튼 클릭 시도...")
+
+            # 발행 버튼을 위한 다양한 셀렉터
+            publish_selectors = [
+                "button:contains('발행')",  # 텍스트 기반
+                ".btn_publish",  # 클래스 기반
+                "#publish",  # ID 기반
+                "[value='발행']",  # value 속성 기반
+                "input[type='submit'][value*='발행']",  # submit 버튼
+                ".publish_btn",  # 발행 버튼 클래스
+                "button[onclick*='publish']",  # onclick 속성 기반
+                ".btn_area button:last-child",  # 버튼 영역의 마지막 버튼 (보통 발행)
+            ]
+
+            for selector in publish_selectors:
+                try:
+                    if selector.startswith("button:contains"):
+                        # jQuery 스타일 텍스트 선택자를 JavaScript로 변환
+                        element = self.helper.driver.execute_script("""
+                            var buttons = document.querySelectorAll('button, input[type="button"], input[type="submit"]');
+                            for (var i = 0; i < buttons.length; i++) {
+                                var text = buttons[i].textContent || buttons[i].value || '';
+                                if (text.includes('발행') || text.includes('게시') || text.includes('등록')) {
+                                    return buttons[i];
+                                }
+                            }
+                            return null;
+                        """)
+                        if element:
+                            # 스크롤해서 버튼을 화면에 표시
+                            self.helper.driver.execute_script("arguments[0].scrollIntoView(true);", element)
+                            time.sleep(0.5)
+
+                            # 클릭 시도
+                            self.helper.driver.execute_script("arguments[0].click();", element)
+                            logger.info("✅ 발행 버튼 클릭 성공 (텍스트 기반)")
+                            time.sleep(2)
+                            return True
+                    else:
+                        element = self.helper.find_element(selector)
+                        if element and element.is_displayed():
+                            # 스크롤해서 버튼을 화면에 표시
+                            self.helper.scroll_to_element(selector)
+                            time.sleep(0.5)
+
+                            # 클릭 시도
+                            if self.helper.click_element(selector):
+                                logger.info(f"✅ 발행 버튼 클릭 성공: {selector}")
+                                time.sleep(2)
+                                return True
+                except Exception as e:
+                    logger.debug(f"셀렉터 {selector} 실패: {e}")
+                    continue
+
+            logger.warning("발행 버튼을 찾을 수 없음")
+            return False
+
+        except Exception as e:
+            logger.error(f"발행 버튼 클릭 실패: {e}")
+            return False
+
+    def publish_post(self, user_id: str = None) -> bool:
+        """네이버 블로그 글 발행 전체 프로세스"""
+        try:
+            logger.info("==== 네이버 블로그 글 발행 시작 ====")
+
+            # 1. 글쓰기 페이지로 이동
+            if not self.navigate_to_write_page(user_id):
+                logger.error("글쓰기 페이지 이동 실패")
+                return False
+
+            # 2. 작성 중인 글 팝업 처리
+            if not self.handle_draft_popup():
+                logger.warning("팝업 처리 실패, 계속 진행...")
+
+            # 3. iframe으로 전환
+            if not self.switch_to_editor_iframe():
+                logger.warning("iframe 전환 실패, 기본 프레임에서 진행...")
+
+            # 4. 발행 버튼 클릭
+            if not self.click_publish_button():
+                logger.error("발행 버튼 클릭 실패")
+                return False
+
+            logger.info("✅ 네이버 블로그 글 발행 완료!")
+            return True
+
+        except Exception as e:
+            logger.error(f"글 발행 프로세스 실패: {e}")
+            return False
+        finally:
+            # 안전을 위해 기본 프레임으로 돌아가기
+            try:
+                self.helper.driver.switch_to.default_content()
+            except:
+                pass
+
 
 class TistoryAdapter:
     """티스토리 어댑터 (미구현)"""
