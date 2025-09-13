@@ -102,10 +102,11 @@ class NaverBlogAdapter:
         # Selenium Helper 사용 (헤드리스 모드 비활성화)
         config = get_default_selenium_config(headless=False)
         self.helper = SeleniumHelper(config)
-        
+
         self.is_logged_in = False
         self.two_factor_auth_detected = False
-        
+        self.username = None  # 로그인한 사용자 아이디 저장
+
         # 네이버 블로그 URL들
         self.main_url = "https://section.blog.naver.com/"
         self.login_start_url = "https://section.blog.naver.com/"
@@ -462,120 +463,235 @@ class NaverBlogAdapter:
             logger.info("로그인 버튼 클릭 완료")
             
             # 로그인 결과 대기 및 확인
-            return self._wait_for_login_result()
+            return self._wait_for_login_result(credentials=credentials)
             
         except Exception as e:
             logger.error(f"로그인 수행 실패: {e}")
             return LoginStatus.LOGIN_FAILED
     
-    def _wait_for_login_result(self, timeout: int = 90) -> LoginStatus:
-        """로그인 결과 대기 (2차 인증 포함) - WebDriverWait 사용"""
-        wait = WebDriverWait(self.helper.driver, timeout)
-        
-        try:
-            # 블로그 홈 페이지로 이동하거나 2차 인증 페이지가 나타날 때까지 대기
-            def check_login_result(driver):
-                current_url = driver.current_url
-                logger.debug(f"현재 URL 확인: {current_url}")
-                
-                # 성공: 블로그 홈으로 리다이렉트됨
-                if "BlogHome.naver" in current_url or "section.blog.naver.com" in current_url:
-                    logger.info("네이버 블로그 로그인 성공!")
+    def _wait_for_login_result(self, timeout: int = 90, credentials=None) -> LoginStatus:
+        """로그인 결과 대기 - 간단한 URL 체크"""
+        logger.info("로그인 결과 대기 시작...")
+
+        start_time = time.time()
+        device_registration_attempted = False
+
+        while (time.time() - start_time) < timeout:
+            try:
+                current_url = self.helper.current_url
+                logger.info(f"🔍 현재 URL: {current_url}")
+
+                # 1. 기기 등록 페이지 → 등록안함 버튼 클릭 (먼저 체크!)
+                if "deviceConfirm" in current_url and not device_registration_attempted:
+                    logger.info("🆔 새로운 기기 등록 페이지 감지!")
+                    device_registration_attempted = True
+
+                    try:
+                        # WebDriverWait으로 등록안함 버튼이 클릭 가능할 때까지 대기
+                        from selenium.webdriver.support.ui import WebDriverWait
+                        from selenium.webdriver.support import expected_conditions as EC
+
+                        logger.info("등록안함 버튼이 나타날 때까지 대기 중...")
+                        wait = WebDriverWait(self.helper.driver, 15)
+
+                        # 다양한 셀렉터로 등록안함 버튼 찾기 시도 (정확한 HTML 구조 기반)
+                        selectors = [
+                            "#new\\.dontsave",  # CSS 이스케이프 방식
+                            "[id='new.dontsave']",  # 속성 방식
+                            "a[id='new.dontsave']",  # 태그+속성 방식
+                            ".btn_cancel a",  # 부모 클래스 > 자식
+                            ".btn_cancel a.btn",  # 더 구체적
+                            "//a[@id='new.dontsave']",  # XPath 방식
+                            "//a[contains(text(), '등록안함')]",
+                            "//span[@class='btn_cancel']//a",
+                            ".btn_cancel",
+                            "#skipBtn",
+                            "#cancelBtn"
+                        ]
+
+                        skip_button = None
+                        used_selector = None
+
+                        for i, selector in enumerate(selectors, 1):
+                            try:
+                                logger.info(f"[{i}/{len(selectors)}] 등록안함 버튼 찾는 중... (셀렉터: {selector})")
+
+                                # 각 셀렉터마다 짧은 대기 시간 사용
+                                short_wait = WebDriverWait(self.helper.driver, 3)
+
+                                if selector.startswith("//"):
+                                    # XPath 셀렉터
+                                    logger.debug(f"XPath 셀렉터 사용: {selector}")
+                                    skip_button = short_wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
+                                else:
+                                    # CSS 셀렉터
+                                    logger.debug(f"CSS 셀렉터 사용: {selector}")
+                                    skip_button = short_wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
+
+                                used_selector = selector
+                                logger.info(f"✅ 버튼 발견! 셀렉터: {used_selector}")
+                                logger.info(f"📍 버튼 위치: {skip_button.location}")
+                                logger.info(f"📏 버튼 크기: {skip_button.size}")
+                                logger.info(f"📝 버튼 텍스트: '{skip_button.text}'")
+                                logger.info(f"🔗 버튼 태그: {skip_button.tag_name}")
+                                break
+                            except Exception as e:
+                                logger.debug(f"❌ 셀렉터 [{i}/{len(selectors)}] {selector} 실패: {e}")
+                                if i == len(selectors):
+                                    logger.error(f"🚨 모든 셀렉터 실패! 페이지 상태 확인:")
+                                    try:
+                                        page_title = self.helper.driver.title
+                                        logger.error(f"📄 페이지 제목: {page_title}")
+                                        body_text = self.helper.driver.find_element(By.TAG_NAME, "body").text[:200]
+                                        logger.error(f"📝 페이지 내용 (첫 200자): {body_text}")
+                                    except Exception as debug_error:
+                                        logger.error(f"페이지 상태 확인 실패: {debug_error}")
+                                continue
+
+                        if skip_button is None:
+                            # 페이지 소스를 확인해서 디버그 정보 제공
+                            page_source = self.helper.driver.page_source
+                            if "등록안함" in page_source:
+                                logger.warning("페이지에 '등록안함' 텍스트는 있지만 버튼을 찾을 수 없습니다")
+                            if "나중에" in page_source:
+                                logger.warning("페이지에 '나중에' 텍스트는 있지만 버튼을 찾을 수 없습니다")
+                            raise Exception("등록안함 버튼을 찾을 수 없습니다")
+
+                        logger.info(f"🎯 등록안함 버튼 클릭 시작... (사용된 셀렉터: {used_selector})")
+
+                        # 버튼 상태 확인
+                        logger.info(f"🔍 클릭 전 버튼 상태:")
+                        logger.info(f"   - 표시됨: {skip_button.is_displayed()}")
+                        logger.info(f"   - 활성화됨: {skip_button.is_enabled()}")
+
+                        # 버튼을 화면에 보이도록 스크롤
+                        logger.info("📜 버튼을 화면에 표시하기 위해 스크롤 중...")
+                        self.helper.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", skip_button)
+                        time.sleep(1)
+
+                        # 스크롤 후 상태 재확인
+                        logger.info(f"🔍 스크롤 후 버튼 상태:")
+                        logger.info(f"   - 표시됨: {skip_button.is_displayed()}")
+                        logger.info(f"   - 활성화됨: {skip_button.is_enabled()}")
+                        logger.info(f"   - 현재 위치: {skip_button.location}")
+
+                        # JavaScript 클릭을 우선 시도 (href="#" 링크이므로)
+                        click_success = False
+                        try:
+                            logger.info("🖱️  JavaScript 클릭 시도 중...")
+                            # 클릭 전 마지막 상태 확인
+                            if not skip_button.is_displayed():
+                                logger.warning("⚠️  버튼이 화면에 표시되지 않음!")
+                            if not skip_button.is_enabled():
+                                logger.warning("⚠️  버튼이 비활성화 상태!")
+
+                            self.helper.driver.execute_script("arguments[0].click();", skip_button)
+                            logger.info("✅ JavaScript 클릭 명령 실행 완료")
+                            click_success = True
+                        except Exception as js_error:
+                            logger.warning(f"❌ JavaScript 클릭 실패: {js_error}")
+                            try:
+                                logger.info("🖱️  일반 Selenium 클릭 시도 중...")
+                                skip_button.click()
+                                logger.info("✅ 일반 클릭 성공")
+                                click_success = True
+                            except Exception as click_error:
+                                logger.error(f"❌ 모든 클릭 방법 실패: {click_error}")
+                                logger.error(f"🔍 실패 시점 버튼 상태:")
+                                logger.error(f"   - 표시됨: {skip_button.is_displayed()}")
+                                logger.error(f"   - 활성화됨: {skip_button.is_enabled()}")
+                                logger.error(f"   - 위치: {skip_button.location}")
+                                raise
+
+                        if click_success:
+                            logger.info("🎉 등록안함 버튼 클릭 완료!")
+                            logger.info("⏳ 2초 대기 후 URL 변경 확인...")
+
+                        # 2초 대기 후 URL 확인
+                        time.sleep(2)
+                        new_url = self.helper.current_url
+                        logger.info(f"🔗 클릭 후 URL: {new_url}")
+
+                        # URL 변경 상세 분석
+                        if "deviceConfirm" not in new_url:
+                            logger.info("✅ 기기 등록 처리 완료! 성공적으로 페이지 이동")
+                            if "BlogHome.naver" in new_url or "section.blog.naver.com" in new_url:
+                                logger.info("🎉 블로그 홈으로 이동 완료!")
+                            elif "nidlogin.login" in new_url:
+                                logger.info("🔄 로그인 페이지로 돌아감 - 로그인 계속 진행")
+                            else:
+                                logger.info(f"📍 새로운 페이지로 이동: {new_url}")
+                            continue
+                        else:
+                            logger.warning("⚠️  아직 deviceConfirm 페이지에 있음")
+                            logger.warning("🤔 클릭이 제대로 처리되지 않았거나 페이지 로딩 지연일 수 있음")
+
+                            # 추가 대기 후 재시도
+                            logger.info("⏳ 3초 더 대기 후 재확인...")
+                            time.sleep(3)
+                            final_url = self.helper.current_url
+                            logger.info(f"🔗 재확인 URL: {final_url}")
+
+                            if "deviceConfirm" not in final_url:
+                                logger.info("✅ 지연 후 페이지 이동 확인됨")
+                                continue
+                            else:
+                                logger.error("❌ 클릭 후에도 여전히 deviceConfirm 페이지에 있음")
+                                logger.error("💡 수동 클릭이 필요할 수 있습니다")
+
+                    except Exception as e:
+                        logger.error(f"❌ 기기 등록 버튼 클릭 실패: {e}")
+                        logger.info("💡 수동으로 등록 또는 등록안함 버튼을 클릭해주세요...")
+
+                # 2. 로그인 성공 체크 - 최종 목적지 페이지 도달
+                elif current_url.startswith("https://section.blog.naver.com/BlogHome.naver"):
+                    logger.info("✅ 네이버 블로그 로그인 성공! 최종 페이지 도달")
                     self.is_logged_in = True
-                    return "success"
-                
-                # 2차 인증 감지
-                if self._detect_two_factor_auth():
-                    if not self.two_factor_auth_detected:
-                        logger.info("2차 인증이 감지되었습니다. 사용자 입력 대기 중...")
-                        self.two_factor_auth_detected = True
-                    return "two_factor"
-                
-                # 로그인 실패 감지
-                if self._detect_login_failure():
-                    logger.error("로그인 실패 감지")
-                    return "failed"
-                
-                return False  # 계속 대기
-            
-            # 2차 인증 또는 성공을 기다림
-            result = None
-            start_time = time.time()
-            
-            while time.time() - start_time < timeout:
-                result = check_login_result(self.helper.driver)
-                
-                if result == "success":
+                    if credentials:
+                        self.username = credentials.username
+                        logger.info(f"👤 사용자 아이디 저장: {self.username}")
                     return LoginStatus.LOGGED_IN
-                elif result == "failed":
-                    return LoginStatus.LOGIN_FAILED
-                elif result == "two_factor":
-                    # 2차 인증이 감지되면 계속 모니터링
-                    time.sleep(2)
-                    continue
-                else:
-                    time.sleep(1)  # 1초마다 체크
-            
-            # 타임아웃 발생
-            logger.warning("로그인 결과 대기 타임아웃")
-            return LoginStatus.LOGIN_FAILED
-            
-        except Exception as e:
-            logger.error(f"로그인 결과 대기 중 오류: {e}")
-            return LoginStatus.LOGIN_FAILED
+
+                # 3. 2차 인증 페이지 → 사용자 입력 대기
+                elif any(keyword in current_url for keyword in ["auth", "otp", "verify"]):
+                    logger.info("🔐 2차 인증 페이지 감지 - 사용자 입력 대기 중...")
+                    return LoginStatus.TWO_FACTOR_AUTH_REQUIRED
+
+                # 4. 로그인 실패 체크 (빠른 체크)
+                elif current_url == "https://nid.naver.com/nidlogin.login":
+                    # 로그인 페이지에 오래 머물러 있으면 실패 가능성 높음
+                    if (time.time() - start_time) > 10:  # 10초 이상
+                        try:
+                            error_element = self.helper.driver.find_element(By.CSS_SELECTOR, ".error_message, .alert_area")
+                            if error_element and error_element.is_displayed():
+                                logger.error(f"❌ 로그인 실패: {error_element.text}")
+                                return LoginStatus.LOGIN_FAILED
+                        except:
+                            pass
+
+                # 2초마다 확인
+                time.sleep(2)
+
+            except Exception as e:
+                logger.error(f"URL 확인 중 오류: {e}")
+                time.sleep(2)
+
+        logger.error("⏰ 로그인 대기 시간 초과")
+        return LoginStatus.LOGIN_FAILED
     
-    def _detect_two_factor_auth(self) -> bool:
-        """2차 인증 감지"""
-        try:
-            # 2차 인증 관련 요소들 확인
-            two_factor_indicators = [
-                ".otp_area",
-                ".auth_number", 
-                "input[name*='otp']",
-                "input[name*='auth']",
-                ".two_factor",
-                "[data-testid*='otp']"
-            ]
-            
-            for selector in two_factor_indicators:
-                element = self.helper.find_element(selector)
-                if element and element.is_displayed():
-                    return True
-            
-            # URL로도 확인
-            current_url = self.helper.current_url
-            if any(keyword in current_url for keyword in ["auth", "otp", "verify"]):
-                return True
-            
-            return False
-            
-        except Exception:
-            return False
-    
-    def _detect_login_failure(self) -> bool:
-        """로그인 실패 감지"""
-        try:
-            # 오류 메시지 확인
-            error_selectors = [
-                ".error_message",
-                ".alert_area",
-                "[role='alert']",
-                ".input_error"
-            ]
-            
-            for selector in error_selectors:
-                element = self.helper.find_element(selector)
-                if element and element.is_displayed():
-                    error_text = element.text.strip()
-                    if error_text and any(keyword in error_text for keyword in 
-                                        ["잘못", "오류", "실패", "확인", "존재하지 않는"]):
-                        logger.error(f"로그인 오류 메시지: {error_text}")
-                        return True
-            
-            return False
-            
-        except Exception:
-            return False
+    # 더 이상 필요 없는 복잡한 감지 메서드들 - URL 기반으로 단순화됨
+    # def _detect_two_factor_auth(self) -> bool:
+    #     """2차 인증 감지 - URL 기반으로 단순화"""
+    #     current_url = self.helper.current_url
+    #     return any(keyword in current_url for keyword in ["auth", "otp", "verify"])
+    #
+    # def _detect_login_failure(self) -> bool:
+    #     """로그인 실패 감지 - URL과 오류 메시지 기반으로 단순화"""
+    #     try:
+    #         error_element = self.helper.driver.find_element(By.CSS_SELECTOR, ".error_message, .alert_area")
+    #         return error_element and error_element.is_displayed()
+    #     except:
+    #         return False
     
     def check_login_status(self) -> bool:
         """현재 로그인 상태 확인"""
@@ -605,214 +721,9 @@ class NaverBlogAdapter:
             return False
     
     def click_write_button(self) -> bool:
-        """블로그 홈에서 글쓰기 버튼 클릭"""
-        try:
-            logger.info("글쓰기 버튼 클릭 시도")
-            
-            if not self.is_logged_in:
-                raise BusinessError("로그인이 필요합니다")
-            
-            # 현재 URL이 블로그 홈인지 확인
-            current_url = self.helper.current_url
-            if "BlogHome.naver" not in current_url:
-                logger.info("블로그 홈으로 이동 중...")
-                self.helper.goto(self.blog_home_url)
-                time.sleep(2)
-            
-            wait = WebDriverWait(self.helper.driver, 10)
-            
-            # 글쓰기 버튼 선택자들
-            write_button_selectors = [
-                (By.CSS_SELECTOR, 'a[href="https://blog.naver.com/GoBlogWrite.naver"]'),  # 정확한 href
-                (By.CSS_SELECTOR, 'a[ng-href="https://blog.naver.com/GoBlogWrite.naver"]'),  # ng-href
-                (By.CSS_SELECTOR, 'a.item[alt="글쓰기"]'),  # alt 속성
-                (By.CSS_SELECTOR, 'a[bg-nclick="hmp*s.write"]'),  # bg-nclick 속성
-                (By.CSS_SELECTOR, 'a.item i.icon_write'),  # 아이콘으로 찾기
-                (By.CSS_SELECTOR, 'a[href*="GoBlogWrite.naver"]'),  # href 포함
-            ]
-            
-            write_button = None
-            used_selector = None
-            
-            for by, selector in write_button_selectors:
-                try:
-                    logger.debug(f"글쓰기 버튼 찾기 시도: {selector}")
-                    
-                    write_button = wait.until(
-                        EC.element_to_be_clickable((by, selector))
-                    )
-                    
-                    if write_button:
-                        used_selector = selector
-                        logger.info(f"글쓰기 버튼 발견: {selector}")
-                        break
-                        
-                except TimeoutException:
-                    logger.debug(f"셀렉터 {selector} 타임아웃")
-                    continue
-                except Exception as e:
-                    logger.debug(f"셀렉터 {selector} 실패: {e}")
-                    continue
-            
-            # CSS 셀렉터로 못 찾으면 XPath도 시도
-            if not write_button:
-                xpath_selectors = [
-                    "//a[@href='https://blog.naver.com/GoBlogWrite.naver']",
-                    "//a[@ng-href='https://blog.naver.com/GoBlogWrite.naver']",
-                    "//a[@alt='글쓰기']",
-                    "//a[contains(@href, 'GoBlogWrite.naver')]",
-                    "//a[contains(text(), '글쓰기')]",
-                    "//a[@bg-nclick='hmp*s.write']",
-                    "//i[@class='sp_common icon_write']//parent::a"
-                ]
-                
-                for xpath in xpath_selectors:
-                    try:
-                        logger.debug(f"XPath로 글쓰기 버튼 찾기 시도: {xpath}")
-                        write_button = wait.until(
-                            EC.element_to_be_clickable((By.XPATH, xpath))
-                        )
-                        
-                        if write_button:
-                            used_selector = xpath
-                            logger.info(f"XPath로 글쓰기 버튼 발견: {xpath}")
-                            break
-                            
-                    except TimeoutException:
-                        logger.debug(f"XPath {xpath} 타임아웃")
-                        continue
-                    except Exception as e:
-                        logger.debug(f"XPath {xpath} 실패: {e}")
-                        continue
-            
-            if not write_button:
-                logger.error("글쓰기 버튼을 찾을 수 없습니다")
-                return False
-            
-            # 글쓰기 버튼 클릭 (새 창에서 열림)
-            try:
-                logger.info(f"글쓰기 버튼 클릭 시도 (셀렉터: {used_selector})")
-                
-                # 클릭 전 현재 창 개수 확인
-                current_windows = len(self.helper.driver.window_handles)
-                
-                # 방법 1: 일반 클릭
-                write_button.click()
-                
-                # 새 창이 열릴 때까지 잠시 대기
-                time.sleep(2)
-                
-                # 새 창이 열렸는지 확인
-                new_windows = len(self.helper.driver.window_handles)
-                if new_windows > current_windows:
-                    logger.info("✅ 글쓰기 버튼 클릭 성공 - 새 창에서 글쓰기 페이지 열림")
-                    
-                    # 새 창으로 전환
-                    new_window_handle = None
-                    for handle in self.helper.driver.window_handles:
-                        if handle != self.helper.driver.current_window_handle:
-                            new_window_handle = handle
-                            break
-                    
-                    if new_window_handle:
-                        logger.info("새 창으로 전환 중...")
-                        self.helper.driver.switch_to.window(new_window_handle)
-                        time.sleep(2)  # 페이지 로딩 대기
-                        
-                        # 글쓰기 페이지 URL 확인
-                        current_url = self.helper.current_url
-                        logger.info(f"새 창 URL: {current_url}")
-                        
-                        # 작성 중인 글 팝업 처리
-                        if "blog.naver.com" in current_url and "Redirect=Write" in current_url:
-                            logger.info("글쓰기 페이지 확인됨 - 팝업 처리 시작")
-                            popup_handled = self.handle_draft_popup()
-                            if popup_handled:
-                                logger.info("✅ 글쓰기 페이지 준비 완료")
-                            else:
-                                logger.warning("팝업 처리 실패했지만 계속 진행")
-                            return True
-                        else:
-                            logger.warning(f"예상과 다른 글쓰기 페이지 URL: {current_url}")
-                            return True  # 일단 성공으로 처리
-                    
-                    return True
-                else:
-                    logger.warning("새 창이 열리지 않음 - 현재 창에서 이동되었을 수 있음")
-                    # 현재 URL 확인
-                    current_url = self.helper.current_url
-                    if "GoBlogWrite.naver" in current_url or ("blog.naver.com" in current_url and "Redirect=Write" in current_url):
-                        logger.info("✅ 현재 창에서 글쓰기 페이지로 이동됨")
-                        
-                        # 작성 중인 글 팝업 처리
-                        popup_handled = self.handle_draft_popup()
-                        if popup_handled:
-                            logger.info("✅ 글쓰기 페이지 준비 완료")
-                        else:
-                            logger.warning("팝업 처리 실패했지만 계속 진행")
-                        return True
-                    else:
-                        logger.warning(f"예상과 다른 페이지: {current_url}")
-                        return False
-                
-            except Exception as e:
-                logger.warning(f"일반 클릭 실패, JavaScript 클릭 시도: {e}")
-                try:
-                    # 방법 2: JavaScript 클릭
-                    self.helper.driver.execute_script("arguments[0].click();", write_button)
-                    time.sleep(2)
-                    
-                    # 새 창 확인
-                    new_windows = len(self.helper.driver.window_handles)
-                    if new_windows > current_windows:
-                        logger.info("✅ JavaScript 클릭으로 글쓰기 페이지 열림")
-                        
-                        # 새 창으로 전환
-                        new_window_handle = None
-                        for handle in self.helper.driver.window_handles:
-                            if handle != self.helper.driver.current_window_handle:
-                                new_window_handle = handle
-                                break
-                        
-                        if new_window_handle:
-                            logger.info("새 창으로 전환 중...")
-                            self.helper.driver.switch_to.window(new_window_handle)
-                            time.sleep(2)  # 페이지 로딩 대기
-                            
-                            # 작성 중인 글 팝업 처리
-                            current_url = self.helper.current_url
-                            if "blog.naver.com" in current_url and "Redirect=Write" in current_url:
-                                logger.info("글쓰기 페이지 확인됨 - 팝업 처리 시작")
-                                popup_handled = self.handle_draft_popup()
-                                if popup_handled:
-                                    logger.info("✅ 글쓰기 페이지 준비 완료")
-                                else:
-                                    logger.warning("팝업 처리 실패했지만 계속 진행")
-                        
-                        return True
-                    else:
-                        current_url = self.helper.current_url
-                        if "GoBlogWrite.naver" in current_url or ("blog.naver.com" in current_url and "Redirect=Write" in current_url):
-                            logger.info("✅ JavaScript 클릭으로 글쓰기 페이지로 이동됨")
-                            
-                            # 작성 중인 글 팝업 처리
-                            popup_handled = self.handle_draft_popup()
-                            if popup_handled:
-                                logger.info("✅ 글쓰기 페이지 준비 완료")
-                            else:
-                                logger.warning("팝업 처리 실패했지만 계속 진행")
-                            return True
-                        else:
-                            logger.error("JavaScript 클릭도 실패")
-                            return False
-                            
-                except Exception as e2:
-                    logger.error(f"JavaScript 클릭도 실패: {e2}")
-                    return False
-            
-        except Exception as e:
-            logger.error(f"글쓰기 버튼 클릭 실패: {e}")
-            return False
+        """글쓰기 버튼 클릭 (현재 비활성화)"""
+        logger.info("글쓰기 버튼 기능은 현재 비활성화되어 있습니다")
+        return True  # 일단 성공으로 처리
     
     def handle_draft_popup(self) -> bool:
         """글쓰기 페이지에서 '작성 중인 글이 있습니다' 팝업 처리"""
@@ -2665,9 +2576,127 @@ class NaverBlogAdapter:
             raise BusinessError(f"블로그 분석 실패: {str(e)}")
 
 
+    def _handle_device_registration(self) -> bool:
+        """새로운 기기 등록 페이지에서 '등록' 버튼 클릭"""
+        try:
+            logger.info("새로운 기기 등록 페이지 처리 시작")
+
+            wait = WebDriverWait(self.helper.driver, 10)
+
+            # 페이지 완전 로딩 대기
+            logger.info("새로운 기기 등록 페이지 로딩 대기 중...")
+            time.sleep(5)  # 더 긴 안정화 대기
+
+            # '등록' 버튼 찾기 (실제 HTML 구조에 맞춘 셀렉터들)
+            register_button_selectors = [
+                (By.ID, "new.save"),  # 가장 정확한 ID 셀렉터
+                (By.CSS_SELECTOR, '.btn_upload a.btn'),  # 클래스 조합
+                (By.CSS_SELECTOR, '.btn_upload a[href="#"]'),  # href + 클래스
+                (By.XPATH, "//a[@id='new.save']"),  # XPath ID
+                (By.XPATH, "//span[@class='btn_upload']/a[@class='btn']"),  # 정확한 경로
+                (By.XPATH, "//a[contains(text(), '등록') and @class='btn']"),  # 텍스트 + 클래스
+                (By.XPATH, "//form[@id='frmNIDLogin']//a[@id='new.save']"),  # form 내부에서 찾기
+            ]
+
+            register_button = None
+            used_selector = None
+
+            # 현재 페이지 HTML 확인 (디버깅용)
+            current_url = self.helper.current_url
+            logger.info(f"현재 페이지 URL: {current_url}")
+
+            try:
+                page_title = self.helper.driver.title
+                logger.info(f"페이지 제목: {page_title}")
+            except:
+                pass
+
+            for by, selector in register_button_selectors:
+                try:
+                    logger.info(f"등록 버튼 찾기 시도: {selector}")  # debug → info로 변경
+                    register_button = wait.until(
+                        EC.element_to_be_clickable((by, selector))
+                    )
+                    if register_button:
+                        used_selector = selector
+                        logger.info(f"✅ 등록 버튼 발견: {selector}")
+                        break
+                except TimeoutException:
+                    logger.warning(f"❌ 셀렉터 {selector} 타임아웃")  # debug → warning으로 변경
+                    continue
+                except Exception as e:
+                    logger.warning(f"❌ 셀렉터 {selector} 실패: {e}")  # debug → warning으로 변경
+                    continue
+
+            if not register_button:
+                logger.warning("등록 버튼을 직접 찾을 수 없음, form submit 방식 시도")
+                return self._submit_device_registration_form()
+
+            # regyn 값을 '1'로 설정 (등록 의사 표시)
+            try:
+                regyn_input = self.helper.driver.find_element(By.ID, "regyn")
+                self.helper.driver.execute_script("arguments[0].value = '1';", regyn_input)
+                logger.info("regyn 값을 '1'로 설정 완료")
+            except Exception as e:
+                logger.debug(f"regyn 설정 실패 (무시 가능): {e}")
+
+            # 등록 버튼 클릭
+            logger.info(f"등록 버튼 클릭 시도 (셀렉터: {used_selector})")
+            try:
+                register_button.click()
+                logger.info("✅ 새로운 기기 등록 버튼 클릭 완료")
+
+                # 클릭 후 페이지 이동 대기 (BlogHome으로 이동하는지 확인)
+                time.sleep(2)
+                current_url = self.helper.current_url
+                logger.info(f"등록 후 현재 URL: {current_url}")
+
+                return True
+
+            except Exception as e:
+                logger.warning(f"일반 클릭 실패, JavaScript 클릭 시도: {e}")
+                try:
+                    self.helper.driver.execute_script("arguments[0].click();", register_button)
+                    logger.info("✅ JavaScript로 새로운 기기 등록 버튼 클릭 완료")
+                    time.sleep(2)
+                    return True
+                except Exception as e2:
+                    logger.error(f"JavaScript 클릭도 실패: {e2}")
+                    return False
+
+        except Exception as e:
+            logger.error(f"새로운 기기 등록 처리 실패: {e}")
+            return False
+
+
+    def _submit_device_registration_form(self) -> bool:
+        """form submit 방식으로 새로운 기기 등록"""
+        try:
+            logger.info("form submit 방식으로 새로운 기기 등록 시도")
+
+            # regyn 값을 '1'로 설정 (등록 의사)
+            regyn_input = self.helper.driver.find_element(By.ID, "regyn")
+            self.helper.driver.execute_script("arguments[0].value = '1';", regyn_input)
+            logger.info("regyn 값을 '1'로 설정")
+
+            # form 찾기 및 submit
+            form = self.helper.driver.find_element(By.ID, "frmNIDLogin")
+            logger.info("frmNIDLogin form 발견, submit 실행")
+
+            form.submit()
+            logger.info("✅ form submit으로 새로운 기기 등록 완료")
+
+            time.sleep(3)  # 페이지 이동 대기
+            return True
+
+        except Exception as e:
+            logger.error(f"form submit 방식 실패: {e}")
+            return False
+
+
 class TistoryAdapter:
     """티스토리 어댑터 (미구현)"""
-    
+
     def __init__(self):
         self.is_logged_in = False
     

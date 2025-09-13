@@ -13,7 +13,7 @@ from src.foundation.logging import get_logger
 from src.foundation.version import version_info
 from src.desktop.sidebar import Sidebar
 from src.desktop.common_log import CommonLogWidget
-from src.desktop.updater import get_auto_updater
+# from src.desktop.updater import get_auto_updater  # 업데이트 기능 비활성화
 from .components import PlaceholderWidget, ErrorWidget
 from .styles import AppStyles, WindowConfig, apply_global_styles
 from src.toolbox.ui_kit import tokens
@@ -33,7 +33,7 @@ class MainWindow(QMainWindow):
         self.feature_widgets = {}  # 등록된 기능 위젯들
         self.setup_ui()
         self.setup_window()
-        self.setup_updater()
+        # self.setup_updater()  # 업데이트 기능 비활성화
     
     def setup_window(self):
         """윈도우 기본 설정 - 반응형"""
@@ -79,39 +79,40 @@ class MainWindow(QMainWindow):
         # 전체 윈도우 스타일
         self.setStyleSheet(AppStyles.get_main_window_style())
     
-    def setup_updater(self):
-        """자동 업데이트 시스템 설정"""
-        try:
-            self.auto_updater = get_auto_updater()
-            
-            # 업데이트 관련 시그널 연결
-            self.auto_updater.update_available.connect(self.on_update_available)
-            self.auto_updater.update_check_failed.connect(self.on_update_check_failed)
-            
-            # 앱 시작 후 3초 뒤에 업데이트 체크 (백그라운드)
-            QTimer.singleShot(3000, lambda: self.auto_updater.check_for_updates(force=False))
-            
-            logger.info("자동 업데이트 시스템 초기화 완료")
-            
-        except Exception as e:
-            logger.error(f"업데이트 시스템 설정 실패: {e}")
-    
-    def on_update_available(self, update_info):
-        """업데이트 발견 시 처리"""
-        try:
-            from src.desktop.common_log import log_manager
-            log_manager.add_log(f"🆙 새로운 버전 {update_info.latest_version}이 출시되었습니다!", "info")
-            
-            # 업데이트 다이얼로그 표시
-            self.auto_updater.show_update_dialog(update_info)
-            
-        except Exception as e:
-            logger.error(f"업데이트 알림 처리 오류: {e}")
-    
-    def on_update_check_failed(self, error_message):
-        """업데이트 체크 실패 시 처리"""
-        # 로그에만 기록 (사용자에게는 방해하지 않음)
-        logger.debug(f"업데이트 체크 실패: {error_message}")
+    # 업데이트 기능 비활성화
+    # def setup_updater(self):
+    #     """자동 업데이트 시스템 설정"""
+    #     try:
+    #         self.auto_updater = get_auto_updater()
+    #
+    #         # 업데이트 관련 시그널 연결
+    #         self.auto_updater.update_available.connect(self.on_update_available)
+    #         self.auto_updater.update_check_failed.connect(self.on_update_check_failed)
+    #
+    #         # 앱 시작 후 3초 뒤에 업데이트 체크 (백그라운드)
+    #         QTimer.singleShot(3000, lambda: self.auto_updater.check_for_updates(force=False))
+    #
+    #         logger.info("자동 업데이트 시스템 초기화 완료")
+    #
+    #     except Exception as e:
+    #         logger.error(f"업데이트 시스템 설정 실패: {e}")
+    #
+    # def on_update_available(self, update_info):
+    #     """업데이트 발견 시 처리"""
+    #     try:
+    #         from src.desktop.common_log import log_manager
+    #         log_manager.add_log(f"🆙 새로운 버전 {update_info.latest_version}이 출시되었습니다!", "info")
+    #
+    #         # 업데이트 다이얼로그 표시
+    #         self.auto_updater.show_update_dialog(update_info)
+    #
+    #     except Exception as e:
+    #         logger.error(f"업데이트 알림 처리 오류: {e}")
+    #
+    # def on_update_check_failed(self, error_message):
+    #     """업데이트 체크 실패 시 처리"""
+    #     # 로그에만 기록 (사용자에게는 방해하지 않음)
+    #     logger.debug(f"업데이트 체크 실패: {error_message}")
     
     def setup_ui(self):
         """UI 구성"""
