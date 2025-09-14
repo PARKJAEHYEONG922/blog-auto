@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell:*)",
+      "Bash(git commit:*)",
+      "Bash(python:*)",
+      "Read(//c/Users/wogud/OneDrive/사진/Screenshots/**)",
+      "Bash(del temp_service.py)",
+      "Bash(del \"C:\\Users\\wogud\\OneDrive\\Desktop\\블로그자동화\\blog-auto\\src\\features\\blog_automation\\ui_table.py\")",
+      "Bash(dir:*)",
+      "Bash(git restore:*)",
+      "Bash(git add:*)",
+      "Bash(git rm:*)",
+      "Bash(git push:*)",
+      "WebSearch",
+      "Bash(del \"C:\\Users\\wogud\\OneDrive\\Desktop\\블로그자동화\\temp_delete_key.py\")",
+      "WebFetch(domain:platform.openai.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(git init:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
