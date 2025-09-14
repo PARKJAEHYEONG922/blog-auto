@@ -3,7 +3,8 @@
 """
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QProgressBar, QTabWidget, QTextEdit, QTableWidget, QTableWidgetItem, QHeaderView
+    QPushButton, QProgressBar, QTabWidget, QTextEdit, QTableWidget, QTableWidgetItem, QHeaderView,
+    QLineEdit
 )
 from PySide6.QtCore import Qt, Signal
 import traceback
@@ -168,23 +169,7 @@ class BlogAutomationStep2UI(QWidget):
         """)
         info_layout.addWidget(title_label)
 
-        # 검색어 정보 (제목과 다른 경우에만 표시)
-        if search_query != selected_title and search_query != main_keyword:
-            search_query_label = QLabel(f"🔍 최적화된 검색어: {search_query}")
-            search_query_label.setStyleSheet(f"""
-                QLabel {{
-                    color: {ModernStyle.COLORS['text_primary']};
-                    font-size: {tokens.get_font_size('small')}px;
-                    font-weight: 500;
-                    background-color: {ModernStyle.COLORS['bg_muted']};
-                    padding: {tokens.spx(6)}px;
-                    border-radius: {tokens.RADIUS_SM}px;
-                    border-left: 3px solid {ModernStyle.COLORS['primary']};
-                }}
-            """)
-            info_layout.addWidget(search_query_label)
-
-        # 키워드, 컨텐츠 유형, 말투 스타일
+        # 키워드, 컨텐츠 유형, 말투 스타일 (2번째 줄로 이동)
         tone = ai_settings.get('tone', '정중한 존댓말체')
         details_label = QLabel(f"🔍 메인키워드: {main_keyword}   📝 컨텐츠 유형: {content_type}   💬 말투 스타일: {tone}")
         details_label.setStyleSheet(f"""
@@ -195,6 +180,69 @@ class BlogAutomationStep2UI(QWidget):
             }}
         """)
         info_layout.addWidget(details_label)
+
+        # 최적화된 검색어 (3번째 줄, 수정 가능)
+        search_layout = QHBoxLayout()
+        search_layout.setSpacing(tokens.GAP_8)
+
+        search_label = QLabel("🔍 최적화된 검색어:")
+        search_label.setStyleSheet(f"""
+            QLabel {{
+                color: {ModernStyle.COLORS['text_primary']};
+                font-size: {tokens.get_font_size('small')}px;
+                font-weight: 500;
+                min-width: 120px;
+            }}
+        """)
+        search_layout.addWidget(search_label)
+
+        # 검색어 입력 필드
+        self.search_query_input = QLineEdit(search_query)
+        self.search_query_input.setStyleSheet(f"""
+            QLineEdit {{
+                color: {ModernStyle.COLORS['text_primary']};
+                font-size: {tokens.get_font_size('small')}px;
+                background-color: {ModernStyle.COLORS['bg_card']};
+                border: 1px solid {ModernStyle.COLORS['border']};
+                border-radius: {tokens.RADIUS_SM}px;
+                padding: {tokens.spx(6)}px;
+            }}
+            QLineEdit:focus {{
+                border: 2px solid {ModernStyle.COLORS['primary']};
+            }}
+        """)
+        search_layout.addWidget(self.search_query_input)
+
+        # 초기화 버튼
+        reset_btn = QPushButton("초기화")
+        reset_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {ModernStyle.COLORS['bg_secondary']};
+                color: {ModernStyle.COLORS['text_secondary']};
+                border: 1px solid {ModernStyle.COLORS['border']};
+                border-radius: {tokens.RADIUS_SM}px;
+                padding: {tokens.spx(4)}px {tokens.spx(8)}px;
+                font-size: {tokens.get_font_size('small')}px;
+            }}
+            QPushButton:hover {{
+                background-color: {ModernStyle.COLORS['bg_primary']};
+            }}
+        """)
+        reset_btn.clicked.connect(lambda: self.search_query_input.setText(search_query))
+        search_layout.addWidget(reset_btn)
+
+        # 검색어 레이아웃을 카드 스타일로 감싸기
+        search_container = QWidget()
+        search_container.setLayout(search_layout)
+        search_container.setStyleSheet(f"""
+            QWidget {{
+                background-color: {ModernStyle.COLORS['bg_muted']};
+                border-radius: {tokens.RADIUS_SM}px;
+                border-left: 3px solid {ModernStyle.COLORS['primary']};
+                padding: {tokens.spx(6)}px;
+            }}
+        """)
+        info_layout.addWidget(search_container)
 
         layout.addLayout(info_layout)
         card.setLayout(layout)
@@ -865,15 +913,27 @@ class BlogAutomationStep2UI(QWidget):
             self.start_ai_writing_btn.setText("🔄 AI가 작업 중...")
             self.start_ai_writing_btn.setEnabled(False)
 
-            # 분석 시작 (최적화된 검색어 사용)
+            # 분석 시작 (사용자가 수정한 검색어 사용)
             selected_title = self.step1_data.get('selected_title', '')
-            search_keyword = self.step1_data.get('search_query', selected_title)  # 검색어 우선 사용
+            # 사용자가 수정한 검색어를 search_keyword로 사용
+            search_keyword = self.search_query_input.text().strip()
+
+            if not search_keyword:
+                # 입력이 비어있으면 기본 검색어 사용
+                search_keyword = self.step1_data.get('search_query', selected_title)
 
             if not search_keyword:
                 raise Exception("검색할 키워드가 없습니다.")
 
+            # 로그용으로만 원래 검색어 저장
+            original_query = self.step1_data.get('search_query', selected_title)
+
             # 검색어 정보 로그
-            if search_keyword != selected_title:
+            if search_keyword != original_query:
+                logger.info(f"🎯 제목: {selected_title}")
+                logger.info(f"🔍 AI 추천 검색어: {original_query}")
+                logger.info(f"✏️  사용자 수정 검색어: {search_keyword}")
+            else:
                 logger.info(f"🎯 제목: {selected_title}")
                 logger.info(f"🔍 검색어: {search_keyword}")
 

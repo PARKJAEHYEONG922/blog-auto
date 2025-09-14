@@ -249,32 +249,6 @@ class BlogAutomationService:
         except Exception as e:
             logger.error(f"브라우저 세션 강제 중단 실패: {e}")
     
-    def analyze_top_blogs(self, keyword: str) -> list:
-        """상위 블로그 분석"""
-        try:
-            logger.info(f"상위 블로그 분석 시작: {keyword}")
-            
-            # 키워드 정리
-            cleaned_keyword = clean_keyword(keyword)
-            if not cleaned_keyword:
-                raise ValidationError("유효한 키워드를 입력해주세요")
-            
-            # 어댑터 생성 (분석 전용)
-            if not self.adapter:
-                self.adapter = create_blog_adapter(BlogPlatform.NAVER)
-            
-            # 분석 전용 브라우저 시작
-            self.adapter.start_browser_for_analysis()
-            
-            # 상위 블로그 분석 수행
-            analyzed_blogs = self.adapter.analyze_top_blogs(cleaned_keyword)
-            
-            logger.info(f"상위 블로그 분석 완료: {len(analyzed_blogs)}개")
-            return analyzed_blogs
-            
-        except Exception as e:
-            logger.error(f"상위 블로그 분석 오류: {e}")
-            raise BusinessError(f"블로그 분석 실패: {str(e)}")
 
     def analyze_top_blogs_with_ai_selection(self, search_keyword: str, target_title: str, main_keyword: str, content_type: str = "정보/가이드형", max_results: int = 3) -> list:
         """AI 제목 선별을 사용한 상위 블로그 분석"""
@@ -329,71 +303,9 @@ class BlogAutomationService:
                 logger.warning("분석할 URL이 없습니다")
                 return []
 
-            # 3단계: 선별된 URL들을 순차적으로 크롤링 (광고 필터링하면서 3개까지)
-            logger.info(f"📝 3단계: 선별된 {len(selected_urls)}개 URL 순차 분석 중...")
-            analyzed_blogs = []
-
-            for i, url in enumerate(selected_urls):
-                if len(analyzed_blogs) >= max_results:
-                    logger.info(f"🎯 목표 개수 {max_results}개 달성, 분석 중단")
-                    break
-
-                try:
-                    logger.info(f"📝 {i+1}/{len(selected_urls)} - URL 분석 중: {url}")
-
-                    # HTTP 방식으로 먼저 시도
-                    analysis_result = None
-                    try:
-                        analysis_result = self.adapter.analyze_blog_content_http(url)
-                        if analysis_result and analysis_result.get('title') != '분석 실패' and analysis_result.get('content_length', 0) > 0:
-                            logger.info(f"✅ HTTP 방식 분석 성공")
-                        else:
-                            analysis_result = None
-                    except Exception:
-                        analysis_result = None
-
-                    # HTTP 실패 시 Selenium으로 백업
-                    if not analysis_result:
-                        try:
-                            analysis_result = self.adapter.analyze_blog_content(url)
-                            logger.info(f"✅ Selenium 방식 분석 성공")
-                        except Exception as selenium_error:
-                            logger.error(f"❌ 분석 실패: {selenium_error}")
-                            continue
-
-                    if not analysis_result:
-                        continue
-
-                    # 결과 정리
-                    integrated_result = {
-                        'rank': len(analyzed_blogs) + 1,
-                        'title': analysis_result.get('title', '제목 없음'),
-                        'url': url,
-                        'content_length': analysis_result.get('content_length', 0),
-                        'image_count': analysis_result.get('image_count', 0),
-                        'gif_count': analysis_result.get('gif_count', 0),
-                        'video_count': analysis_result.get('video_count', 0),
-                        'tags': analysis_result.get('tags', []),
-                        'text_content': analysis_result.get('text_content', ''),
-                        'content_structure': analysis_result.get('content_structure', [])
-                    }
-
-                    # 광고/협찬 글 필터링 체크
-                    text_content = integrated_result.get('text_content', '')
-                    title = integrated_result.get('title', '')
-
-                    from .adapters import is_advertisement_content
-                    if is_advertisement_content(text_content, title):
-                        logger.warning(f"🚫 {i+1}번째 URL 제외: 광고/협찬/체험단 글로 판단됨")
-                        continue
-
-                    # 정상적인 정보성 글만 추가
-                    analyzed_blogs.append(integrated_result)
-                    logger.info(f"✅ {i+1}번째 URL 분석 완료 (정보성 글)")
-
-                except Exception as e:
-                    logger.error(f"❌ {i+1}번째 URL 분석 실패: {e}")
-                    continue
+            # 3단계: 선별된 URL들을 어댑터에서 필터링과 함께 분석
+            logger.info(f"📝 3단계: 선별된 {len(selected_urls)}개 URL 분석 시작...")
+            analyzed_blogs = self.adapter.analyze_selected_urls_with_filtering(selected_urls, max_results)
 
             logger.info(f"🎯 AI 선별 기반 블로그 분석 완료: {len(analyzed_blogs)}개")
             return analyzed_blogs

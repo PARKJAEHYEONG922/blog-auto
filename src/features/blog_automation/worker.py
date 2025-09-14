@@ -299,65 +299,6 @@ class WorkerThread:
         }
 
 
-class BlogAnalysisWorker(QObject):
-    """블로그 분석 워커 - 상위 블로그 분석 처리"""
-    
-    # 시그널 정의
-    analysis_started = Signal()  # 분석 시작
-    analysis_progress = Signal(str, int)  # 분석 진행 상황 (메시지, 진행률)
-    analysis_completed = Signal(list)  # 분석 완료 (분석된 블로그 리스트)
-    error_occurred = Signal(str)  # 오류 발생
-    blog_found = Signal(int)  # 블로그 발견 (개수)
-    
-    def __init__(self, service: BlogAutomationService, keyword: str):
-        super().__init__()
-        self.service = service
-        self.keyword = keyword
-        self.is_cancelled = False
-        
-    def run(self):
-        """블로그 분석 작업 실행"""
-        try:
-            logger.info(f"📊 블로그 분석 워커 시작: {self.keyword}")
-            self.analysis_started.emit()
-            
-            # 세밀한 진행 상황 업데이트
-            self.analysis_progress.emit("브라우저 준비 중...", 10)
-            time.sleep(0.5)
-            
-            if self.is_cancelled:
-                return
-                
-            self.analysis_progress.emit("키워드 검색 중...", 30)
-            time.sleep(0.5)
-            
-            if self.is_cancelled:
-                return
-                
-            self.analysis_progress.emit("상위 블로그 수집 중...", 50)
-            
-            # 실제 블로그 분석 수행
-            analyzed_blogs = self.service.analyze_top_blogs(self.keyword)
-            
-            if not self.is_cancelled:
-                self.analysis_progress.emit("블로그 내용 분석 중...", 80)
-                time.sleep(1)  # 분석 시뮬레이션
-                
-                self.blog_found.emit(len(analyzed_blogs))
-                self.analysis_progress.emit("분석 완료", 100)
-                self.analysis_completed.emit(analyzed_blogs)
-                logger.info(f"✅ 블로그 분석 워커 완료: {len(analyzed_blogs)}개 블로그")
-            
-        except Exception as e:
-            logger.error(f"❌ 블로그 분석 워커 오류: {e}")
-            if not self.is_cancelled:
-                self.error_occurred.emit(str(e))
-    
-    def cancel(self):
-        """워커 취소"""
-        self.is_cancelled = True
-        logger.info("블로그 분석 워커 취소됨")
-
 
 class AIBlogAnalysisWorker(QObject):
     """AI 기반 블로그 분석 워커 - AI 제목 선별 사용"""
@@ -632,10 +573,6 @@ def create_blog_login_worker(service: BlogAutomationService, credentials: BlogCr
     """블로그 로그인 워커 생성"""
     return BlogLoginWorker(service, credentials)
 
-
-def create_blog_analysis_worker(service: BlogAutomationService, keyword: str) -> BlogAnalysisWorker:
-    """블로그 분석 워커 생성"""
-    return BlogAnalysisWorker(service, keyword)
 
 
 def create_ai_blog_analysis_worker(service: BlogAutomationService, search_keyword: str, target_title: str, main_keyword: str, content_type: str = "정보/가이드형") -> AIBlogAnalysisWorker:

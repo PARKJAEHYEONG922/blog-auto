@@ -95,6 +95,42 @@ def handle_web_automation_errors(operation_name: str):
     return decorator
 
 
+def is_low_quality_content(text_content: str) -> bool:
+    """콘텐츠 품질이 낮은 글인지 판단 (숫자만 나열, 특수문자 과다)"""
+    if not text_content:
+        return False
+
+    import re
+
+    # 텍스트 전처리 (공백 제거)
+    cleaned_text = text_content.strip()
+    if len(cleaned_text) < 100:  # 너무 짧은 글은 별도 체크
+        return False
+
+    # 1. 숫자만 나열된 글 체크 (전화번호, 가격표, 주소 등)
+    # 숫자, 공백, 하이픈, 콤마, 괄호, 원화표시 외에는 거의 없는 경우
+    numbers_and_symbols = re.sub(r'[0-9\s\-,()원₩\.\+#]', '', cleaned_text)
+    if len(numbers_and_symbols) / len(cleaned_text) < 0.3:  # 의미있는 문자가 30% 미만
+        logger.info(f"품질 낮은 글 감지: 숫자/기호만 나열됨 (의미있는 문자 비율: {len(numbers_and_symbols) / len(cleaned_text) * 100:.1f}%)")
+        return True
+
+    # 2. 특수문자 비율이 너무 높은 글 체크
+    # 한글, 영문, 숫자, 공백을 제외한 특수문자 비율
+    special_chars = re.sub(r'[가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9\s]', '', cleaned_text)
+    special_char_ratio = len(special_chars) / len(cleaned_text)
+    if special_char_ratio > 0.15:  # 특수문자가 15% 초과
+        logger.info(f"품질 낮은 글 감지: 특수문자 과다 (비율: {special_char_ratio * 100:.1f}%)")
+        return True
+
+    # 3. 반복 패턴 체크 (같은 문자나 기호의 반복)
+    # 같은 문자 5개 이상 연속 반복 체크
+    if re.search(r'(.)\1{4,}', cleaned_text):  # 같은 문자 5개 이상 반복
+        logger.info("품질 낮은 글 감지: 같은 문자 반복 패턴")
+        return True
+
+    return False
+
+
 class NaverBlogAdapter:
     """네이버 블로그 자동화 어댑터"""
     
@@ -2451,130 +2487,92 @@ class NaverBlogAdapter:
         except Exception as e:
             logger.error(f"iframe 복귀 오류: {e}")
     
-    def analyze_top_blogs(self, keyword: str, max_results: int = 3) -> list:
-        """상위 블로그 검색 및 분석 통합 (광고/협찬 글 필터링 포함)"""
+
+    def analyze_selected_urls_with_filtering(self, selected_urls: list, max_results: int = 3) -> list:
+        """선별된 URL들을 순차 분석하면서 모든 필터링 적용"""
         try:
-            logger.info(f"📊 상위 블로그 통합 분석 시작: '{keyword}' (광고 제외 상위 {max_results}개)")
-            
-            # 1단계: 블로그 검색 (광고 글 필터링을 위해 충분히 많이 검색)
-            search_count = max(15, max_results * 5)  # 최소 15개, 또는 5배 많이 검색 (광고 필터링 여유분)
-            logger.info(f"🔍 1단계: 블로그 검색 중... (광고 필터링을 위해 {search_count}개 검색)")
-            blog_list = self.search_top_blogs(keyword, search_count)
-            
-            if not blog_list:
-                logger.warning("검색된 블로그가 없습니다")
-                return []
-            
-            logger.info(f"✅ {len(blog_list)}개 블로그 검색 완료")
-            
-            # 2단계: 각 블로그 상세 분석 (HTTP 우선, Selenium 백업)
+            logger.info(f"📝 선별된 {len(selected_urls)}개 URL 순차 분석 시작 (필터링 포함)")
             analyzed_blogs = []
-            for i, blog in enumerate(blog_list):
+
+            for i, url in enumerate(selected_urls):
+                if len(analyzed_blogs) >= max_results:
+                    logger.info(f"🎯 목표 개수 {max_results}개 달성, 분석 중단")
+                    break
+
                 try:
-                    logger.info(f"📝 2단계: {i+1}/{len(blog_list)} - '{blog['title'][:30]}...' 분석 중...")
-                    
+                    logger.info(f"📝 {i+1}/{len(selected_urls)} - URL 분석 중: {url}")
+
                     # HTTP 방식으로 먼저 시도
                     analysis_result = None
                     try:
-                        logger.info(f"🌐 HTTP 방식으로 블로그 분석 시도: {blog['url']}")
-                        analysis_result = self.analyze_blog_content_http(blog['url'])
-                        
-                        # HTTP 분석이 성공했는지 확인 (제목이 '분석 실패'가 아니고 콘텐츠가 있으면 성공)
+                        analysis_result = self.analyze_blog_content_http(url)
                         if analysis_result and analysis_result.get('title') != '분석 실패' and analysis_result.get('content_length', 0) > 0:
                             logger.info(f"✅ HTTP 방식 분석 성공")
                         else:
-                            logger.warning(f"⚠️ HTTP 분석 결과가 부실함, Selenium 백업 시도")
                             analysis_result = None
-                    except Exception as http_error:
-                        logger.warning(f"⚠️ HTTP 방식 실패: {http_error}, Selenium 백업 시도")
+                    except Exception:
                         analysis_result = None
-                    
+
                     # HTTP 실패 시 Selenium으로 백업
                     if not analysis_result:
                         try:
-                            logger.info(f"🖥️ Selenium 방식으로 블로그 분석 시도: {blog['url']}")
-                            analysis_result = self.analyze_blog_content(blog['url'])
+                            analysis_result = self.analyze_blog_content(url)
                             logger.info(f"✅ Selenium 방식 분석 성공")
                         except Exception as selenium_error:
-                            logger.error(f"❌ Selenium 방식도 실패: {selenium_error}")
-                            analysis_result = None
-                    
-                    # 분석 결과가 있으면 통합, 없으면 기본 정보만
-                    if analysis_result:
-                        # 검색 결과와 분석 결과 통합
-                        integrated_result = {
-                            'rank': blog['rank'],
-                            'title': analysis_result.get('title', blog['title']),
-                            'url': blog['url'],
-                            'content_length': analysis_result.get('content_length', 0),
-                            'image_count': analysis_result.get('image_count', 0),
-                            'gif_count': analysis_result.get('gif_count', 0),
-                            'video_count': analysis_result.get('video_count', 0),
-                            'tags': analysis_result.get('tags', []),
-                            'text_content': analysis_result.get('text_content', ''),
-                            'content_structure': analysis_result.get('content_structure', [])
-                        }
-                    else:
-                        # 모든 방식 실패 시 기본 정보만
-                        integrated_result = {
-                            'rank': blog['rank'],
-                            'title': blog['title'],
-                            'url': blog['url'],
-                            'content_length': 0,
-                            'image_count': 0,
-                            'gif_count': 0,
-                            'video_count': 0,
-                            'tags': [],
-                            'text_content': '분석 실패',
-                            'content_structure': []
-                        }
-                    
-                    # 🚫 광고/협찬 글 필터링 체크
+                            logger.error(f"❌ 분석 실패: {selenium_error}")
+                            continue
+
+                    if not analysis_result:
+                        continue
+
+                    # 결과 정리
+                    integrated_result = {
+                        'rank': len(analyzed_blogs) + 1,
+                        'title': analysis_result.get('title', '제목 없음'),
+                        'url': url,
+                        'content_length': analysis_result.get('content_length', 0),
+                        'image_count': analysis_result.get('image_count', 0),
+                        'gif_count': analysis_result.get('gif_count', 0),
+                        'video_count': analysis_result.get('video_count', 0),
+                        'tags': analysis_result.get('tags', []),
+                        'text_content': analysis_result.get('text_content', ''),
+                        'content_structure': analysis_result.get('content_structure', [])
+                    }
+
+                    # 모든 필터링 적용
                     text_content = integrated_result.get('text_content', '')
                     title = integrated_result.get('title', '')
-                    
-                    if is_advertisement_content(text_content, title):
-                        logger.warning(f"🚫 {i+1}번째 블로그 제외: 광고/협찬/체험단 글로 판단됨")
-                        continue  # 이 블로그는 결과에 포함하지 않음
-                    
-                    # 💚 정상적인 정보성 글만 추가
-                    analyzed_blogs.append(integrated_result)
-                    logger.info(f"✅ {i+1}번째 블로그 분석 완료 (정보성 글)")
-                    
-                    # 🎯 원하는 개수만큼 수집했으면 중단
-                    if len(analyzed_blogs) >= max_results:
-                        logger.info(f"🎯 광고 제외 상위 {max_results}개 블로그 수집 완료")
-                        break
-                    
-                except Exception as e:
-                    logger.error(f"❌ {i+1}번째 블로그 분석 실패: {e}")
-                    # 분석 실패해도 기본 정보는 포함
-                    failed_result = {
-                        'rank': blog['rank'],
-                        'title': blog['title'],
-                        'url': blog['url'],
-                        'content_length': 0,
-                        'image_count': 0,
-                        'gif_count': 0,
-                        'video_count': 0,
-                        'tags': [],
-                        'text_content': '분석 실패',
-                        'content_structure': []
-                    }
-                    analyzed_blogs.append(failed_result)
-                    continue
-            
-            # 🔢 최종 결과 순위 재정렬 (광고 제외된 순위로 1, 2, 3...)
-            for idx, blog in enumerate(analyzed_blogs):
-                blog['rank'] = idx + 1  # 1부터 시작하는 순위로 재설정
-            
-            logger.info(f"🎉 상위 블로그 통합 분석 완료: {len(analyzed_blogs)}개 (광고/협찬 글 필터링 완료)")
-            return analyzed_blogs
-            
-        except Exception as e:
-            logger.error(f"❌ 상위 블로그 통합 분석 실패: {e}")
-            raise BusinessError(f"블로그 분석 실패: {str(e)}")
 
+                    # 1. 광고/협찬 글 필터링
+                    if is_advertisement_content(text_content, title):
+                        logger.warning(f"🚫 {i+1}번째 URL 제외: 광고/협찬/체험단 글로 판단됨")
+                        continue
+
+                    # 2. 본문 길이 필터링 (1000자 미만 제외)
+                    content_length = integrated_result.get('content_length', 0)
+                    if content_length < 1000:
+                        logger.warning(f"🚫 {i+1}번째 URL 제외: 본문이 너무 짧음 ({content_length}자 < 1000자)")
+                        continue
+
+                    # 3. 콘텐츠 품질 필터링 (숫자만 나열, 특수문자 과다)
+                    if is_low_quality_content(text_content):
+                        logger.warning(f"🚫 {i+1}번째 URL 제외: 저품질 콘텐츠로 판단됨")
+                        continue
+
+                    # 모든 필터를 통과한 양질의 글만 추가
+                    analyzed_blogs.append(integrated_result)
+                    logger.info(f"✅ {i+1}번째 URL 분석 완료 (고품질 정보성 글)")
+
+                except Exception as e:
+                    logger.error(f"❌ {i+1}번째 URL 분석 실패: {e}")
+                    continue
+
+            logger.info(f"🎯 선별된 URL 분석 완료: {len(analyzed_blogs)}개 (모든 필터링 적용)")
+            return analyzed_blogs
+
+        except Exception as e:
+            logger.error(f"선별된 URL 분석 오류: {e}")
+            raise BusinessError(f"선별된 URL 분석 실패: {str(e)}")
 
     def _handle_device_registration(self) -> bool:
         """새로운 기기 등록 페이지에서 '등록' 버튼 클릭"""
