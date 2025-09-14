@@ -644,9 +644,10 @@ class BlogAutomationStep2UI(QWidget):
             # AI 프롬프트 생성을 위한 구조화된 데이터 준비
             from .ai_prompts import create_ai_request_data
 
+            selected_title = self.step1_data.get('selected_title', '')
             ai_data = create_ai_request_data(
                 main_keyword, sub_keywords, self.analyzed_blogs,
-                content_type, tone, review_detail, "", ""
+                content_type, tone, review_detail, "", "", selected_title
             )
 
             if not ai_data:
@@ -1049,6 +1050,7 @@ class BlogAutomationStep2UI(QWidget):
             ai_settings = self.step1_data.get('ai_settings', {})
             main_keyword = self.step1_data.get('main_keyword', '')
             sub_keywords = self.step1_data.get('sub_keywords', '')
+            selected_title = self.step1_data.get('selected_title', '')
             content_type = ai_settings.get('content_type', '정보/가이드형')
             tone = ai_settings.get('tone', '정중한 존댓말체')
             review_detail = ai_settings.get('review_detail', '')
@@ -1056,7 +1058,7 @@ class BlogAutomationStep2UI(QWidget):
 
             ai_data = create_ai_request_data(
                 main_keyword, sub_keywords, self.analyzed_blogs,
-                content_type, tone, review_detail, blogger_identity, summary_result
+                content_type, tone, review_detail, blogger_identity, summary_result, selected_title
             )
 
             if not ai_data:

@@ -697,8 +697,15 @@ class BlogWriteTableUI(QWidget):
             tone = settings.get('tone', '정중한 존댓말체')
             review_detail = settings.get('review_detail', '')
             
+            # 선택된 제목 가져오기
+            selected_title = ""
+            if hasattr(self, 'title_suggestion_combo'):
+                current_title = self.title_suggestion_combo.currentText()
+                if current_title != "먼저 제목 추천을 받아보세요":
+                    selected_title = current_title
+
             # AI 요청 데이터 생성 (메인키워드와 보조키워드 분리)
-            ai_data = create_ai_request_data(main_keyword, sub_keywords, analyzed_blogs, content_type, tone, review_detail, "", "")
+            ai_data = create_ai_request_data(main_keyword, sub_keywords, analyzed_blogs, content_type, tone, review_detail, "", "", selected_title)
             
             if ai_data:
                 self.ai_prompt_data = {

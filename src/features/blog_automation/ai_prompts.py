@@ -421,7 +421,7 @@ class BlogAIPrompts:
     """2차 가공: 글작성 AI를 위한 프롬프트 템플릿"""
     
     @staticmethod
-    def generate_content_analysis_prompt(main_keyword: str, sub_keywords: str, structured_data: Dict, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", blogger_identity: str = "", summary_result: str = "") -> str:
+    def generate_content_analysis_prompt(main_keyword: str, sub_keywords: str, structured_data: Dict, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", blogger_identity: str = "", summary_result: str = "", selected_title: str = "") -> str:
         """네이버 SEO 최적화 콘텐츠 분석 기반 AI 프롬프트 생성 (컨텐츠 유형과 말투, 후기 세부 유형 반영)"""
         
         competitor_info = structured_data.get("competitor_analysis", {})
@@ -455,9 +455,10 @@ class BlogAIPrompts:
 4️⃣ **글 작성 전 모든 지침을 재확인하고, 단계별로 검토하며 작성하세요**
 
 # 📝 작업 목표
+**작성할 글 제목**: "{selected_title if selected_title.strip() else '[메인키워드가 자연스럽게 포함된 매력적인 제목]'}"
 **메인 키워드**: "{main_keyword}"
 **보조 키워드**: "{sub_keywords if sub_keywords.strip() else '메인 키워드와 관련된 보조 키워드들을 3-5개 직접 생성하여 활용'}"
-**목표**: 위 키워드로 네이버 검색 상위 노출을 위한 완성도 높은 블로그 글 작성
+**목표**: 위 제목과 키워드로 네이버 검색 상위 노출을 위한 완성도 높은 블로그 글 작성
 
 ## 📊 참고할 경쟁 블로그 요약 정보
 '{main_keyword}'로 검색시 노출되는 상위 {len(top_blogs)}개 블로그 글을 요약한 결과입니다. 이를 참고하여 더 나은 독창적인 콘텐츠를 작성해주세요:
@@ -494,7 +495,7 @@ class BlogAIPrompts:
         prompt += f"""
 
 ## 📋 SEO 최적화 원칙 (반드시 준수)
-1. **제목 작성**: 위 요약 정보의 경쟁 블로그 제목들과 유사하지 않으면서도 독창적이고 매력적인 제목을 생성해 주세요. 메인키워드는 넣되 자연스럽게 배치
+1. **제목 고정**: 반드시 다음 제목을 그대로 사용해주세요 - "{selected_title if selected_title.strip() else '[메인키워드가 자연스럽게 포함된 매력적인 제목]'}" (이 제목을 변경하지 마세요)
 2. **글자 수**: 최소 1,500자 이상 작성 필수입니다. 상위 노출된 1~3위 블로그 포스팅의 평균 글자 수({summary.get('avg_content_length', 1500)}자)보다 더 풍부하고 상세하게 작성해 주세요. 이상적으로는 1,700자에서 2,000자(공백 제외) 사이로 적절히 길게 작성하여 검색 알고리즘에 유리하도록 해주세요
 3. **키워드 반복**: 메인 키워드 5-6회, 보조 키워드들 각각 3-4회 자연스럽게 반복 (보조키워드가 제공되지 않은 경우 메인 키워드와 관련된 보조 키워드를 3-5개 직접 생성하여 활용)
 4. **3초의 법칙**: 글 초반에 독자가 원하는 핵심 정보를 명확히 제시하여 흥미를 유발합니다
@@ -535,7 +536,7 @@ class BlogAIPrompts:
 **다른 설명 없이 아래 형식으로만 출력하세요:**
 
 ```
-제목: [메인키워드가 자연스럽게 포함된 매력적인 제목]
+제목: {selected_title if selected_title.strip() else '[메인키워드가 자연스럽게 포함된 매력적인 제목]'}
 
 [서론 - 3초의 법칙으로 핵심 답변 즉시 제시]
 
@@ -557,16 +558,16 @@ class BlogAIPrompts:
         return prompt.strip()
     
 
-def create_ai_request_data(main_keyword: str, sub_keywords: str, analyzed_blogs: List[Dict], content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", blogger_identity: str = "", summary_result: str = "") -> Dict:
+def create_ai_request_data(main_keyword: str, sub_keywords: str, analyzed_blogs: List[Dict], content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", blogger_identity: str = "", summary_result: str = "", selected_title: str = "") -> Dict:
     """AI 요청용 데이터 생성 (컨텐츠 유형과 말투, 후기 세부 유형 포함)"""
     try:
         structure_analyzer = BlogContentStructure()
         structured_data = structure_analyzer.analyze_blog_structure(analyzed_blogs)
         structured_data["keyword"] = main_keyword  # 기존 호환성을 위해 메인 키워드 저장
-        
+
         # AI 프롬프트 생성 (스타일 옵션 포함)
         prompt_generator = BlogAIPrompts()
-        ai_prompt = prompt_generator.generate_content_analysis_prompt(main_keyword, sub_keywords, structured_data, content_type, tone, review_detail, blogger_identity, summary_result)
+        ai_prompt = prompt_generator.generate_content_analysis_prompt(main_keyword, sub_keywords, structured_data, content_type, tone, review_detail, blogger_identity, summary_result, selected_title)
         
         return {
             "structured_data": structured_data,
