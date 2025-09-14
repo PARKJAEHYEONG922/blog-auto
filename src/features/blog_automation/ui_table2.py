@@ -1016,6 +1016,7 @@ class BlogAutomationStep2UI(QWidget):
                 self.ai_writer_thread = WorkerThread(self.ai_writer_worker)
 
                 # 시그널 연결
+                self.ai_writer_worker.writing_progress.connect(self.on_analysis_progress)
                 self.ai_writer_worker.writing_completed.connect(self.on_writing_ai_completed)
                 self.ai_writer_worker.error_occurred.connect(self.on_writing_ai_error)
 
