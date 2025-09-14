@@ -586,9 +586,9 @@ class APISettingsDialog(QDialog):
             elif provider_text == "Anthropic (Claude)":
                 self.text_ai_model_combo.addItems([
                     "모델을 선택하세요",
-                    "Claude 3.5 Sonnet (유료, 고품질)", 
+                    "Claude Sonnet 4 (유료, 최신 고품질)",
                     "Claude 3.5 Haiku (유료, 빠름)",
-                    "Claude 3 Opus (유료, 최고품질)"
+                    "Claude Opus 4.1 (유료, 최고품질)"
                 ])
                 self.current_text_ai_provider = "claude"
                 if hasattr(self, 'text_ai_api_key'):
@@ -635,9 +635,9 @@ class APISettingsDialog(QDialog):
             elif provider_text == "Anthropic (Claude)":
                 self.summary_ai_model_combo.addItems([
                     "모델을 선택하세요",
-                    "Claude 3.5 Sonnet (유료, 고품질)", 
+                    "Claude Sonnet 4 (유료, 최신 고품질)",
                     "Claude 3.5 Haiku (유료, 빠름)",
-                    "Claude 3 Opus (유료, 최고품질)"
+                    "Claude Opus 4.1 (유료, 최고품질)"
                 ])
                 self.current_summary_ai_provider = "claude"
                 if hasattr(self, 'summary_ai_api_key'):
@@ -1670,7 +1670,7 @@ class APISettingsDialog(QDialog):
             
             # Claude API 테스트 (최소 토큰으로)
             data = {
-                "model": "claude-3-haiku-20240307",  # 가장 저렴한 모델로 테스트
+                "model": "claude-3-5-haiku-20241022",  # 가장 저렴한 모델로 테스트
                 "max_tokens": 5,  # 최소 토큰으로 제한
                 "messages": [{"role": "user", "content": "Hi"}]
             }

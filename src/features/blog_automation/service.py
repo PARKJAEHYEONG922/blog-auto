@@ -349,9 +349,9 @@ class BlogAutomationService:
             "Gemini 2.0 Flash (무료, 최신)": "gemini-2.0-flash-exp",
             
             # Anthropic Claude 모델들
-            "Claude 3.5 Sonnet (유료, 고품질)": "claude-3-5-sonnet-20241022",
+            "Claude 3.5 Sonnet (유료, 고품질)": "claude-sonnet-4-20250514",
             "Claude 3.5 Haiku (유료, 빠름)": "claude-3-5-haiku-20241022",
-            "Claude 3 Opus (유료, 최고품질)": "claude-3-opus-20240229"
+            "Claude Opus 4.1 (유료, 최고품질)": "claude-opus-4-1-20250805"
         }
         
         mapped_model = model_mapping.get(ui_model_name, ui_model_name)

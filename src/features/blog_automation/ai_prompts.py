@@ -464,38 +464,40 @@ class BlogAIPrompts:
 # AI 역할 설정
 {role_description}
 
-## 중요한 지시사항
-1. **먼저 호흡을 가다듬고, 아래 모든 요구사항을 천천히 단계별로 분석하세요**
-2. **각 요구사항을 하나씩 체크하며 절대 놓치지 마세요**
-3. **글 작성 전 모든 지침을 재확인하고, 단계별로 검토하며 작성하세요**
+## 참고할 경쟁 블로그 요약 정보
+'{search_keyword}'로 검색시 노출되는 상위 {len(top_blogs)}개 블로그 글을 요약한 결과입니다. 이를 참고하여 더 나은 독창적인 컨텐츠를 작성해주세요:
 
-# 작업 목표
-**작성할 글 제목**: "{selected_title}"
-**메인 키워드**: "{main_keyword}"
-**보조 키워드**: "{sub_keywords if sub_keywords.strip() else '메인 키워드와 관련된 보조 키워드들을 3-5개 직접 생성하여 활용'}"
-**컨텐츠 유형**: {content_type} ({current_content['approach']})
-**말투 스타일**: {tone} ({current_tone['style']})
-**구조**: {current_content['structure']}
-**핵심 표현**: {', '.join(current_content['keywords'])}
-**예시 표현**: {', '.join(current_tone['examples'])}
-**문장 특징**: {current_tone['sentence_style']}
-**마무리 문구**: {current_tone['ending']}
-**SEO 최적화**:
-  - 글자 수: 1,700-2,000자 (공백 제외)
-  - 메인 키워드: 5-6회 자연 반복
-  - 보조 키워드: 각각 3-4회 사용
-  - 이미지: {avg_image_count}개 이상 (이미지) 표시로 배치, 필요시 연속 4개 배치 가능
-  - 동영상: 1개 (동영상) 표시로 배치
-**완전한 내용**: XX공원, OO병원 같은 placeholder 사용 금지. 구체적인 정보가 없다면 "근처 공원", "동네 병원" 등 일반적 표현 사용
-**자연스러운 문체**: AI 생성티 없는 개성 있고 자연스러운 어투로 작성
+{summary_result if summary_result.strip() else '참고할 만한 경쟁사 분석 정보가 없으니, 자연스럽고 유용한 컨텐츠로 작성해주세요.'}
 
-## 작성 전 체크리스트:
-- [ ] **제목에 정확히 부합하는 내용으로 글 작성** (가장 중요!)
-- [ ] 글자 수 1,700-2,000자 목표
-- [ ] 메인 키워드 5-6회, 보조 키워드 3-4회 자연 반복
-- [ ] 이미지/동영상 배치 표시 완료
-- [ ] AI티 없는 자연스러운 문체 사용
-- [ ] 구체적 정보 사용 (placeholder 금지)"""
+# 작성 지침
+
+## 가장 중요: 제목 부합성
+**"제목에 정확히 부합하는 내용으로 글 작성"** - 이것이 가장 중요합니다.
+
+## 기본 정보
+- **작성할 글 제목**: "{selected_title}"
+- **메인 키워드**: "{main_keyword}"
+- **보조 키워드**: "{sub_keywords if sub_keywords.strip() else '메인 키워드와 관련된 보조 키워드들을 3-5개 직접 생성하여 활용'}"
+- **컨텐츠 유형**: {content_type} ({current_content['approach']})
+- **말투 스타일**: {tone} ({current_tone['style']})
+
+## 글 구성 방식
+- **구조**: {current_content['structure']}
+- **핵심 표현**: {', '.join(current_content['keywords'])}
+- **예시 표현**: {', '.join(current_tone['examples'])}
+- **문장 특징**: {current_tone['sentence_style']}
+- **마무리 문구**: {current_tone['ending']}
+
+## SEO 및 기술적 요구사항
+- 글자 수: 1,700-2,000자 (공백 제외)
+- 메인 키워드: 5-6회 자연 반복
+- 보조 키워드: 각각 3-4회 사용
+- 이미지: {avg_image_count}개 이상 (이미지) 표시로 배치, 필요시 연속 4개 배치 가능
+- 동영상: 1개 (동영상) 표시로 배치
+
+## 글쓰기 품질 요구사항
+- **자연스러운 문체**: AI 생성티 없는 개성 있고 자연스러운 어투로 작성
+- **완전한 내용**: XX공원, OO병원 같은 placeholder 사용 금지. 구체적인 정보가 없다면 "근처 공원", "동네 병원" 등 일반적 표현 사용"""
 
         # 후기 세부 유형 가이드라인 추가 (후기/리뷰형일 때만)
         if current_review_detail:
@@ -516,8 +518,9 @@ class BlogAIPrompts:
         prompt += f"""
 
 
-## 최종 출력 (블로그에 바로 사용)
-**다른 설명 없이 아래 형식으로만 출력하세요:**
+# 출력 형식
+
+다른 설명 없이 아래 형식으로만 출력하세요:
 
 ```
 제목: {selected_title}

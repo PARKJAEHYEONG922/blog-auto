@@ -14,9 +14,9 @@ logger = get_logger("vendors.anthropic.text")
 
 # 지원하는 Claude 모델들
 SUPPORTED_MODELS = {
-    "claude-3-5-sonnet-20241022": {
-        "name": "Claude 3.5 Sonnet",
-        "description": "최신 Claude 3.5 Sonnet 모델 (최고 성능)",
+    "claude-sonnet-4-20250514": {
+        "name": "Claude Sonnet 4",
+        "description": "최신 Claude Sonnet 4 모델 (최고 성능)",
         "max_tokens": 8192,
         "context_window": 200000
     },
@@ -26,10 +26,10 @@ SUPPORTED_MODELS = {
         "max_tokens": 8192,
         "context_window": 200000
     },
-    "claude-3-opus-20240229": {
-        "name": "Claude 3 Opus",
-        "description": "가장 강력한 Claude 3 모델",
-        "max_tokens": 4096,
+    "claude-opus-4-1-20250805": {
+        "name": "Claude Opus 4.1",
+        "description": "가장 강력한 Claude 4.1 모델 (최고 성능)",
+        "max_tokens": 8192,
         "context_window": 200000
     },
     "claude-3-sonnet-20240229": {
@@ -79,7 +79,7 @@ class ClaudeTextClient:
     @handle_api_exception
     def generate_text(self,
                      messages: List[Dict[str, str]],
-                     model: str = "claude-3-5-sonnet-20241022",
+                     model: str = "claude-sonnet-4-20250514",
                      temperature: float = 0.7,
                      max_tokens: Optional[int] = None) -> str:
         """
@@ -104,7 +104,7 @@ class ClaudeTextClient:
         # 모델별 기본 max_tokens 설정 (출력용)
         if max_tokens is None:
             model_info = SUPPORTED_MODELS.get(model, {})
-            if model in ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"]:
+            if model in ["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022"]:
                 # Claude 3.5는 충분히 긴 블로그 글 생성을 위해 더 큰 토큰 수 사용
                 max_tokens = 6000  # 약 4,500-6,000자 블로그 글 생성 가능
             else:
