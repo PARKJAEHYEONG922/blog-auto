@@ -54,6 +54,10 @@ class WorkerPool(QObject):
             worker.analysis_completed.connect(lambda result: self._on_worker_completed(worker_id, True))
         elif hasattr(worker, 'writing_completed'):
             worker.writing_completed.connect(lambda result: self._on_worker_completed(worker_id, True))
+        elif hasattr(worker, 'titles_generated'):
+            worker.titles_generated.connect(lambda result: self._on_worker_completed(worker_id, True))
+        elif hasattr(worker, 'completed'):
+            worker.completed.connect(lambda result: self._on_worker_completed(worker_id, True))
             
         # 워커 오류 시그널 연결
         if hasattr(worker, 'error_occurred'):
@@ -377,76 +381,44 @@ class AIBlogAnalysisWorker(QObject):
 
 
 class SummaryAIWorker(QObject):
-    """정보요약 AI 공용 워커 - 제목 추천, 콘텐츠 요약 등 처리"""
+    """통합 정보요약 AI 워커 - 프롬프트만 받아서 처리"""
 
-    # 시그널 정의
-    titles_generated = Signal(list)  # 제목 추천 완료 (제목 리스트)
-    content_summarized = Signal(str)  # 콘텐츠 요약 완료 (요약된 텍스트)
-    error_occurred = Signal(str)     # 오류 발생
+    # 통합 시그널 정의
+    completed = Signal(object)  # 작업 완료 (결과 데이터)
+    error_occurred = Signal(str)  # 오류 발생
 
-    def __init__(self, service: BlogAutomationService, task_type: str, **kwargs):
+    def __init__(self, service: BlogAutomationService, prompt: str, response_format: str = "text", context: str = "정보요약"):
         super().__init__()
         self.service = service
-        self.task_type = task_type  # "titles" 또는 "summary"
-        self.kwargs = kwargs
+        self.prompt = prompt
+        self.response_format = response_format
+        self.context = context
         self.is_cancelled = False
 
     def run(self):
-        """정보요약 AI 작업 실행"""
+        """통합 정보요약 AI 작업 실행"""
         try:
             if self.is_cancelled:
                 return
 
-            if self.task_type == "titles":
-                self._run_title_suggestion()
-            elif self.task_type == "summary":
-                self._run_content_summary()
-            else:
-                raise ValueError(f"지원하지 않는 작업 타입: {self.task_type}")
+            logger.info(f"통합 정보요약 워커 시작: {self.context}")
+
+            # 통합 AI 호출
+            result = self.service.call_summary_ai(
+                prompt=self.prompt,
+                response_format=self.response_format,
+                context=self.context
+            )
+
+            if self.is_cancelled:
+                return
+
+            logger.info(f"통합 정보요약 워커 완료: {self.context}")
+            self.completed.emit(result)
 
         except Exception as e:
-            logger.error(f"정보요약 AI 워커 오류: {e}")
+            logger.error(f"통합 정보요약 워커 오류 ({self.context}): {e}")
             self.error_occurred.emit(str(e))
-
-    def _run_title_suggestion(self):
-        """제목 추천 실행"""
-        logger.info(f"제목 추천 시작: {self.kwargs.get('main_keyword', '')}")
-
-        titles = self.service.generate_titles_with_summary_ai(
-            prompt=self.kwargs['prompt'],
-            main_keyword=self.kwargs['main_keyword'],
-            content_type=self.kwargs['content_type']
-        )
-
-        if self.is_cancelled:
-            return
-
-        if titles and len(titles) > 0:
-            logger.info(f"제목 추천 완료: {len(titles)}개")
-            self.titles_generated.emit(titles)
-        else:
-            logger.warning("제목 추천 결과가 비어있음")
-            self.error_occurred.emit("AI가 제목을 생성하지 못했습니다.")
-
-    def _run_content_summary(self):
-        """콘텐츠 요약 실행"""
-        logger.info("콘텐츠 요약 시작")
-
-        summary = self.service.generate_content_summary(
-            content=self.kwargs['content'],
-            main_keyword=self.kwargs.get('main_keyword', ''),
-            content_type=self.kwargs.get('content_type', '정보/가이드형')
-        )
-
-        if self.is_cancelled:
-            return
-
-        if summary:
-            logger.info(f"콘텐츠 요약 완료: {len(summary)}자")
-            self.content_summarized.emit(summary)
-        else:
-            logger.warning("콘텐츠 요약 결과가 비어있음")
-            self.error_occurred.emit("AI가 콘텐츠를 요약하지 못했습니다.")
 
     def cancel(self):
         """워커 취소"""
@@ -454,9 +426,105 @@ class SummaryAIWorker(QObject):
         logger.info("정보요약 AI 워커 취소됨")
 
 
+class TitleSuggestionWorker(QObject):
+    """제목 추천 AI 워커 - 제목 추천 API 호출 처리"""
+
+    # 시그널 정의
+    titles_generated = Signal(list)  # 제목 생성 완료 (제목 리스트)
+    error_occurred = Signal(str)  # 오류 발생
+
+    def __init__(self, service: BlogAutomationService, prompt: str, main_keyword: str, content_type: str):
+        super().__init__()
+        self.service = service
+        self.prompt = prompt
+        self.main_keyword = main_keyword
+        self.content_type = content_type
+        self.is_cancelled = False
+
+    def _extract_titles_from_json(self, json_result) -> list:
+        """JSON 결과에서 제목들을 추출"""
+        try:
+            titles_data = []
+
+            if isinstance(json_result, dict):
+                # {"titles_with_search": [{"title": "...", "search_query": "..."}, ...]} 형식
+                if 'titles_with_search' in json_result:
+                    for item in json_result['titles_with_search']:
+                        if isinstance(item, dict) and 'title' in item:
+                            title = item['title']
+                            search_query = item.get('search_query', title)
+                            titles_data.append({"title": title, "search_query": search_query})
+                    logger.info(f"titles_with_search 구조로 파싱: {len(titles_data)}개")
+
+                # {"titles": ["title1", "title2", ...]} 형식 (fallback)
+                elif 'titles' in json_result:
+                    for title in json_result['titles']:
+                        if isinstance(title, str):
+                            titles_data.append(title)
+                    logger.info(f"titles 구조로 파싱: {len(titles_data)}개")
+
+            elif isinstance(json_result, list):
+                # 리스트 형태 JSON
+                for item in json_result:
+                    if isinstance(item, dict) and 'title' in item:
+                        title = item['title']
+                        search_query = item.get('search_query', title)
+                        titles_data.append({"title": title, "search_query": search_query})
+                    elif isinstance(item, str):
+                        titles_data.append(item)
+                logger.info(f"리스트 구조로 파싱: {len(titles_data)}개")
+
+            return titles_data
+
+        except Exception as e:
+            logger.error(f"JSON 제목 추출 오류: {e}")
+            return []
+
+    def run(self):
+        """제목 추천 작업 실행"""
+        try:
+            logger.info(f"🎯 제목 추천 AI 워커 시작: {self.main_keyword} ({self.content_type})")
+
+            if self.is_cancelled:
+                return
+
+            # 통합 AI 호출을 사용하여 제목 추천 (JSON 형식으로 받기)
+            result = self.service.call_summary_ai(
+                prompt=self.prompt,
+                response_format="json",
+                context="제목 추천"
+            )
+
+            if self.is_cancelled:
+                return
+
+            # JSON 결과에서 제목과 검색어 추출
+            titles = []
+            if result:
+                titles = self._extract_titles_from_json(result)
+            else:
+                logger.warning("AI 응답이 비어있거나 None입니다")
+
+            if titles:
+                logger.info(f"✅ 제목 추천 완료: {len(titles)}개")
+                self.titles_generated.emit(titles)
+            else:
+                self.error_occurred.emit("제목 추천 결과가 비어있습니다.")
+
+        except Exception as e:
+            logger.error(f"❌ 제목 추천 워커 오류: {e}")
+            if not self.is_cancelled:
+                self.error_occurred.emit(str(e))
+
+    def cancel(self):
+        """워커 취소"""
+        self.is_cancelled = True
+        logger.info("제목 추천 워커 취소됨")
+
+
 class AIWritingWorker(QObject):
     """AI 블로그 글쓰기 워커 - AI API 호출 처리"""
-    
+
     # 시그널 정의
     writing_started = Signal()  # 글쓰기 시작
     writing_progress = Signal(str, int)  # 글쓰기 진행 상황 (메시지, 진행률%)
@@ -468,7 +536,7 @@ class AIWritingWorker(QObject):
     summary_completed = Signal(str)  # 정보요약 AI 결과 완료
     writing_prompt_generated = Signal(str)  # 글작성 AI 프롬프트 생성
     
-    def __init__(self, service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, analyzed_blogs: list = None, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = ""):
+    def __init__(self, service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, analyzed_blogs: list = None, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", search_keyword: str = ""):
         super().__init__()
         self.service = service
         self.main_keyword = main_keyword
@@ -478,6 +546,7 @@ class AIWritingWorker(QObject):
         self.content_type = content_type
         self.tone = tone
         self.review_detail = review_detail
+        self.search_keyword = search_keyword or main_keyword
         self.is_cancelled = False
         
     def run(self):
@@ -504,11 +573,12 @@ class AIWritingWorker(QObject):
                 # 2단계 파이프라인으로 콘텐츠 생성 (상세 정보 포함)
                 detailed_results = self.service.generate_blog_content_with_summary_detailed(
                     self.main_keyword,
-                    self.sub_keywords, 
+                    self.sub_keywords,
                     self.analyzed_blogs,
                     self.content_type,
                     self.tone,
-                    self.review_detail
+                    self.review_detail,
+                    self.search_keyword
                 )
                 
                 # 각 단계별 시그널 발송
@@ -583,29 +653,22 @@ def create_ai_blog_analysis_worker(service: BlogAutomationService, search_keywor
     return AIBlogAnalysisWorker(service, search_keyword, target_title, main_keyword, content_type, sub_keywords)
 
 
-def create_ai_writing_worker(service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, analyzed_blogs: list = None, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "") -> AIWritingWorker:
+def create_ai_writing_worker(service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, analyzed_blogs: list = None, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", search_keyword: str = "") -> AIWritingWorker:
     """AI 글쓰기 워커 생성 (2단계 파이프라인 지원)"""
-    return AIWritingWorker(service, main_keyword, sub_keywords, structured_data, analyzed_blogs, content_type, tone, review_detail)
+    return AIWritingWorker(service, main_keyword, sub_keywords, structured_data, analyzed_blogs, content_type, tone, review_detail, search_keyword)
 
-def create_title_suggestion_worker(service: BlogAutomationService, prompt: str, main_keyword: str, content_type: str) -> SummaryAIWorker:
-    """제목 추천 워커 생성 팩토리 함수"""
+def create_summary_worker(service: BlogAutomationService, prompt: str, response_format: str = "text", context: str = "정보요약") -> SummaryAIWorker:
+    """통합 정보요약 워커 생성 팩토리 함수"""
     return SummaryAIWorker(
         service=service,
-        task_type="titles",
         prompt=prompt,
-        main_keyword=main_keyword,
-        content_type=content_type
+        response_format=response_format,
+        context=context
     )
 
-def create_content_summary_worker(service: BlogAutomationService, content: str, main_keyword: str = "", content_type: str = "정보/가이드형") -> SummaryAIWorker:
-    """콘텐츠 요약 워커 생성 팩토리 함수"""
-    return SummaryAIWorker(
-        service=service,
-        task_type="summary",
-        content=content,
-        main_keyword=main_keyword,
-        content_type=content_type
-    )
+def create_title_suggestion_worker(service: BlogAutomationService, prompt: str, main_keyword: str, content_type: str) -> TitleSuggestionWorker:
+    """제목 추천 워커 생성 팩토리 함수"""
+    return TitleSuggestionWorker(service, prompt, main_keyword, content_type)
 
 
 def create_worker_pool(max_workers: int = 3) -> WorkerPool:

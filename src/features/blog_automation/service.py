@@ -272,8 +272,17 @@ class BlogAutomationService:
             blog_titles_data = self.adapter.get_blog_titles_for_ai_selection(cleaned_keyword, 30)
 
             if not blog_titles_data:
-                logger.warning("수집된 블로그 제목이 없습니다")
-                return []
+                logger.warning(f"'{cleaned_keyword}' 검색 결과가 없습니다. 메인키워드로 재시도...")
+
+                # 폴백 1: 메인키워드만으로 다시 검색
+                main_keyword_cleaned = clean_keyword(main_keyword)
+                if main_keyword_cleaned and main_keyword_cleaned != cleaned_keyword:
+                    blog_titles_data = self.adapter.get_blog_titles_for_ai_selection(main_keyword_cleaned, 30)
+                    logger.info(f"메인키워드 '{main_keyword_cleaned}'로 재검색 시도")
+
+                if not blog_titles_data:
+                    logger.warning("메인키워드 검색도 실패. 분석 없이 AI 글쓰기로 진행")
+                    return []  # 빈 분석 결과 반환 (폴백 처리는 상위에서)
 
             logger.info(f"✅ {len(blog_titles_data)}개 블로그 제목 수집 완료")
 
@@ -349,8 +358,8 @@ class BlogAutomationService:
             logger.info(f"모델 매핑: '{ui_model_name}' -> '{mapped_model}'")
         return mapped_model
     
-    def _call_summary_ai(self, messages: list, context: str = "") -> str:
-        """정보요약 AI 공용 호출 함수"""
+    def call_summary_ai(self, prompt: str, response_format: str = "text", context: str = "정보요약") -> Any:
+        """통합 정보요약 AI 호출 함수 - 프롬프트만 받아서 처리"""
         try:
             # API 설정 로드
             from src.foundation.config import config_manager
@@ -360,11 +369,15 @@ class BlogAutomationService:
             summary_provider = api_config.current_summary_ai_provider or "openai"
             summary_ui_model = api_config.current_summary_ai_model or "GPT-4o Mini (유료, 저렴)"
 
-            logger.info(f"정보요약 AI 호출 ({context}) - Provider: {summary_provider}, Model: {summary_ui_model}")
+            logger.info(f"통합 정보요약 AI 호출 ({context}) - Provider: {summary_provider}, Model: {summary_ui_model}")
 
             # UI 모델명을 기술적 모델명으로 변환
             technical_model = self._map_ui_model_to_technical_name(summary_ui_model)
 
+            # 메시지 구성
+            messages = [{"role": "user", "content": prompt}]
+
+            # AI 호출
             if summary_provider == "openai" and api_config.openai_api_key and api_config.openai_api_key.strip():
                 logger.info(f"OpenAI API 사용 ({context}): {summary_ui_model} -> {technical_model}")
                 from src.vendors.openai.text_client import openai_text_client
@@ -387,212 +400,62 @@ class BlogAutomationService:
             if not response or not response.strip():
                 raise BusinessError("AI 응답이 비어있습니다")
 
-            return response.strip()
+            response = response.strip()
+
+            # 응답 형식에 따른 처리
+            if response_format == "json":
+                return self._parse_json_response(response)
+            else:
+                return response
 
         except BusinessError:
             raise
         except Exception as e:
-            logger.error(f"정보요약 AI 호출 실패 ({context}): {e}")
+            logger.error(f"통합 정보요약 AI 호출 실패 ({context}): {e}")
             raise BusinessError(f"정보요약 AI 처리 중 오류가 발생했습니다: {str(e)}")
 
-    def generate_content_summary(self, content: str, main_keyword: str = "", content_type: str = "정보/가이드형") -> str:
-        """정보요약 AI를 사용하여 블로그 콘텐츠 요약"""
+    def _parse_json_response(self, response: str) -> Any:
+        """JSON 응답 파싱"""
         try:
-            logger.info(f"정보요약 AI를 사용한 콘텐츠 요약 시작 - 키워드: {main_keyword}")
-
-            # ai_prompts.py에서 1차 가공 프롬프트 생성
-            from .ai_prompts import BlogSummaryPrompts
-            summary_prompt = BlogSummaryPrompts.generate_content_summary_prompt(content, main_keyword, content_type)
-
-            messages = [{"role": "user", "content": summary_prompt}]
-
-            # 공용 정보요약 AI 호출
-            response = self._call_summary_ai(messages, "콘텐츠 요약")
-
-            logger.info(f"콘텐츠 요약 완료: {len(response)}자")
-            return response
-                
-        except BusinessError:
-            # BusinessError는 그대로 재발생
-            raise
-        except Exception as e:
-            logger.error(f"콘텐츠 요약 실패: {e}")
-            raise BusinessError(f"정보요약 AI 처리 중 오류가 발생했습니다: {str(e)}")
-
-    def generate_titles_with_summary_ai(self, prompt: str, main_keyword: str, content_type: str) -> list:
-        """정보요약 AI를 사용하여 제목 추천 (사용자 설정 AI 사용)"""
-        try:
-            logger.info(f"정보요약 AI를 사용한 제목 추천 시작 - 키워드: {main_keyword}")
-
-            # 공용 정보요약 AI 호출
-            messages = [{"role": "user", "content": prompt}]
-            response = self._call_summary_ai(messages, "제목 추천")
-
-            # JSON 응답 파싱하여 제목 리스트 추출
             import json
 
             # 마크다운 코드 블록 제거 (```json...``` 또는 ```...```)
             cleaned_response = response.strip()
             if cleaned_response.startswith('```'):
-                # 첫번째 ```와 마지막 ``` 제거
                 lines = cleaned_response.split('\n')
                 if len(lines) > 2 and lines[0].startswith('```') and lines[-1].strip() == '```':
                     cleaned_response = '\n'.join(lines[1:-1])
-                elif len(lines) > 1 and lines[0].startswith('```'):
-                    # 마지막 ```가 별도 라인에 없는 경우
-                    cleaned_response = '\n'.join(lines[1:])
-                    if cleaned_response.endswith('```'):
-                        cleaned_response = cleaned_response[:-3]
 
-            try:
-                result = json.loads(cleaned_response.strip())
+            return json.loads(cleaned_response)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON 파싱 실패: {e}\n응답: {response}")
+            raise BusinessError(f"AI 응답을 JSON으로 파싱할 수 없습니다: {str(e)}")
 
-                # 새로운 JSON 구조 처리 (제목 + 검색어)
-                if isinstance(result, dict) and "titles_with_search" in result:
-                    titles_data = result["titles_with_search"]
-                    if isinstance(titles_data, list) and len(titles_data) > 0:
-                        # 제목과 검색어가 함께 있는 구조
-                        clean_data = []
-                        for item in titles_data[:10]:  # 최대 10개
-                            if isinstance(item, dict) and "title" in item and "search_query" in item:
-                                title = str(item["title"]).strip()
-                                search_query = str(item["search_query"]).strip()
-                                if title and search_query:
-                                    clean_data.append({
-                                        "title": title,
-                                        "search_query": search_query
-                                    })
-
-                        if clean_data:
-                            logger.info(f"제목 추천 완료: {len(clean_data)}개 (제목+검색어)")
-                            return clean_data
-
-                # 기존 JSON 구조 처리 (제목만)
-                elif isinstance(result, dict) and "titles" in result:
-                    titles = result["titles"]
-                elif isinstance(result, list):
-                    titles = result
-                else:
-                    # JSON이 아닌 경우 문자열에서 제목 추출 시도
-                    titles = self._extract_titles_from_text(response)
-
-                # 기존 제목 리스트 검증 및 정리 (하위 호환성)
-                if isinstance(titles, list) and len(titles) > 0:
-                    # 문자열만 추출하고 빈 값 제거
-                    clean_titles = [str(title).strip() for title in titles if str(title).strip()]
-                    logger.info(f"제목 추천 완료: {len(clean_titles)}개 (제목만)")
-                    return clean_titles[:10]  # 최대 10개
-                else:
-                    logger.warning("유효한 제목이 추출되지 않음")
-                    return []
-
-            except json.JSONDecodeError:
-                logger.warning("JSON 파싱 실패, 텍스트에서 제목 추출 시도")
-                titles = self._extract_titles_from_text(response)
-                return titles[:10] if titles else []
-
-        except Exception as e:
-            logger.error(f"제목 추천 AI 처리 실패: {e}")
-            raise BusinessError(f"제목 추천 생성 실패: {e}")
-
-    def _extract_titles_from_text(self, text: str) -> list:
-        """텍스트에서 제목 리스트 추출 (JSON 파싱 실패시 폴백)"""
+    def generate_content_summary(self, combined_content: str, main_keyword: str, content_type: str, search_keyword: str = "") -> str:
+        """콘텐츠 요약 생성 - ai_prompts의 BlogSummaryPrompts 사용"""
         try:
-            titles = []
-            lines = text.strip().split('\n')
+            from .ai_prompts import BlogSummaryPrompts
 
-            for line in lines:
-                line = line.strip()
-                # 번호나 기호로 시작하는 라인에서 제목 추출
-                if line and (
-                    line[0].isdigit() or
-                    line.startswith('-') or
-                    line.startswith('•') or
-                    line.startswith('*')
-                ):
-                    # 번호나 기호 제거
-                    clean_title = line
-                    for prefix in ['1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.', '10.', '-', '•', '*']:
-                        if clean_title.startswith(prefix):
-                            clean_title = clean_title[len(prefix):].strip()
-                            break
+            # 임시 블로그 데이터 구성 (combined_content 기반)
+            temp_blogs = [{
+                'title': f"{main_keyword} 관련 콘텐츠",
+                'text_content': combined_content
+            }] if combined_content.strip() else []
 
-                    if clean_title:
-                        titles.append(clean_title)
-
-            return titles[:10]  # 최대 10개
-
-        except Exception as e:
-            logger.error(f"텍스트에서 제목 추출 실패: {e}")
-            return []
-
-    def select_blog_titles_with_ai(self, target_title: str, search_keyword: str, main_keyword: str, content_type: str, blog_titles: List[str], sub_keywords: str = "") -> List[Dict]:
-        """AI를 사용하여 블로그 제목들 중 관련도 높은 상위 10개 선별"""
-        try:
-            logger.info(f"AI 블로그 제목 선별 시작 - 대상: {len(blog_titles)}개 제목")
-
-            # ai_prompts.py에서 제목 선별 프롬프트 생성
-            from .ai_prompts import BlogPromptComponents
-            selection_prompt = BlogPromptComponents.generate_blog_title_selection_prompt(
-                target_title, search_keyword, main_keyword, content_type, blog_titles, sub_keywords
+            # ai_prompts의 정식 프롬프트 사용
+            summary_prompt = BlogSummaryPrompts.generate_content_summary_prompt(
+                selected_title=f"{main_keyword} 관련 정보",
+                search_keyword=search_keyword or main_keyword,
+                main_keyword=main_keyword,
+                content_type=content_type,
+                competitor_blogs=temp_blogs,
+                sub_keywords=""
             )
 
-            # 정보요약 AI를 사용하여 제목 선별 (기존 API 재사용)
-            messages = [{"role": "user", "content": selection_prompt}]
-            response = self._call_summary_ai(messages, "블로그 제목 선별")
-
-            # JSON 응답 파싱
-            import json
-
-            # 마크다운 코드 블록 제거
-            cleaned_response = response.strip()
-            if cleaned_response.startswith('```'):
-                lines = cleaned_response.split('\n')
-                if len(lines) > 2 and lines[0].startswith('```') and lines[-1].strip() == '```':
-                    cleaned_response = '\n'.join(lines[1:-1])
-                elif len(lines) > 1 and lines[0].startswith('```'):
-                    cleaned_response = '\n'.join(lines[1:])
-                    if cleaned_response.endswith('```'):
-                        cleaned_response = cleaned_response[:-3]
-
-            try:
-                result = json.loads(cleaned_response.strip())
-
-                if isinstance(result, dict) and "selected_titles" in result:
-                    selected_data = result["selected_titles"]
-                    if isinstance(selected_data, list) and len(selected_data) > 0:
-                        # 선별된 제목 데이터 검증 및 정리
-                        clean_selections = []
-                        for item in selected_data[:10]:  # 최대 10개
-                            if isinstance(item, dict) and all(key in item for key in ["rank", "original_index", "title"]):
-                                rank = item.get("rank", 0)
-                                original_index = item.get("original_index", 0)
-                                title = str(item.get("title", "")).strip()
-                                reason = str(item.get("relevance_reason", "")).strip()
-
-                                # 인덱스 유효성 검사 (1-based에서 0-based로 변환)
-                                if 1 <= original_index <= len(blog_titles) and title:
-                                    clean_selections.append({
-                                        "rank": rank,
-                                        "original_index": original_index - 1,  # 0-based로 변환
-                                        "title": title,
-                                        "relevance_reason": reason
-                                    })
-
-                        if clean_selections:
-                            logger.info(f"AI 제목 선별 완료: {len(clean_selections)}개 선별됨")
-                            return clean_selections
-
-                logger.warning("AI 응답에서 유효한 제목 선별 결과를 찾을 수 없음")
-                return []
-
-            except json.JSONDecodeError as e:
-                logger.warning(f"JSON 파싱 실패: {e}")
-                return []
-
+            return self.call_summary_ai(summary_prompt, "text", "콘텐츠요약")
         except Exception as e:
-            logger.error(f"AI 제목 선별 실패: {e}")
-            raise BusinessError(f"AI 제목 선별 처리 실패: {str(e)}")
+            logger.error(f"콘텐츠 요약 실패: {e}")
+            return f"{main_keyword}에 대한 요약 정보"
 
     def generate_blog_content(self, prompt: str) -> str:
         """API 설정에서 선택된 AI를 사용하여 블로그 콘텐츠 생성"""
@@ -659,62 +522,63 @@ class BlogAutomationService:
         except Exception as e:
             logger.error(f"AI 콘텐츠 생성 실패: {e}")
             raise BusinessError(f"AI 콘텐츠 생성 실패: {str(e)}")
-    
-    def generate_blog_content_with_summary(self, main_keyword: str, sub_keywords: str, analyzed_blogs: list, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "") -> str:
+
+    def generate_blog_content_with_summary(self, main_keyword: str, sub_keywords: str, analyzed_blogs: list, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", search_keyword: str = "") -> str:
         """2단계 파이프라인: 정보요약 AI → 글작성 AI"""
         try:
             logger.info("2단계 파이프라인으로 블로그 콘텐츠 생성 시작")
-            
+
             # 1단계: 분석된 블로그들의 콘텐츠를 하나의 텍스트로 통합
             logger.info("1단계: 경쟁 블로그 콘텐츠 통합")
             combined_content = self._combine_blog_contents(analyzed_blogs)
-            
+
             if not combined_content.strip():
                 logger.warning("통합할 블로그 콘텐츠가 없습니다.")
                 combined_content = "분석할 콘텐츠가 없습니다."
-            
+
             logger.info(f"통합된 콘텐츠 길이: {len(combined_content)}자")
-            
+
             # 2단계: 정보요약 AI로 콘텐츠 요약
             logger.info("2단계: 정보요약 AI로 콘텐츠 요약")
-            summarized_content = self.generate_content_summary(combined_content, main_keyword, content_type)
+            summarized_content = self.generate_content_summary(combined_content, main_keyword, content_type, search_keyword)
             logger.info(f"요약된 콘텐츠 길이: {len(summarized_content)}자")
-            
+
             # 3단계: 요약된 내용을 포함한 프롬프트로 글작성 AI 호출
             logger.info("3단계: 요약 내용 기반 최종 블로그 글 생성")
-            
+
             # 블로그 구조 분석
             from .ai_prompts import BlogContentStructure, BlogAIPrompts
             structure_analyzer = BlogContentStructure()
             structured_data = structure_analyzer.analyze_blog_structure(analyzed_blogs)
-            
+
             # 블로거 정체성 가져오기
             from src.foundation.config import config_manager
             api_config = config_manager.load_api_config()
             blogger_identity = getattr(api_config, 'ai_writing_blogger_identity', '')
-            
+
             # 1차 결과를 포함한 완전한 프롬프트 생성
             enhanced_prompt = BlogAIPrompts.generate_content_analysis_prompt(
                 main_keyword=main_keyword,
-                sub_keywords=sub_keywords, 
+                sub_keywords=sub_keywords,
                 structured_data=structured_data,
                 content_type=content_type,
                 tone=tone,
                 review_detail=review_detail,
                 blogger_identity=blogger_identity,
-                summary_result=summarized_content
+                summary_result=summarized_content,
+                search_keyword=search_keyword
             )
 
             # 글작성 AI로 최종 콘텐츠 생성
             final_content = self.generate_blog_content(enhanced_prompt)
-            
+
             logger.info("2단계 파이프라인 완료")
             return final_content
-            
+
         except Exception as e:
             logger.error(f"2단계 파이프라인 실패: {e}")
             raise BusinessError(f"블로그 콘텐츠 생성 실패: {str(e)}")
-    
+
     def _combine_blog_contents(self, analyzed_blogs: list) -> str:
         """분석된 블로그들의 텍스트 콘텐츠를 하나로 통합 (전체 내용 포함)"""
         combined_parts = []
@@ -739,31 +603,90 @@ class BlogAutomationService:
         combined_content = '\n'.join(combined_parts)
         logger.info(f"최종 결합된 전체 콘텐츠 길이: {len(combined_content)}자 (길이 제한 없음)")
         return combined_content
+
+    def _generate_content_without_analysis(self, main_keyword: str, sub_keywords: str, content_type: str, tone: str, review_detail: str, search_keyword: str = "") -> Dict[str, str]:
+        """분석 없이 AI 글쓰기만으로 콘텐츠 생성"""
+        try:
+            logger.info("분석 없이 AI 글쓰기로 콘텐츠 생성")
+
+            # 블로거 정체성 가져오기
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+            blogger_identity = getattr(api_config, 'ai_writing_blogger_identity', '')
+
+            # 분석 없는 글쓰기 프롬프트 생성 (기존 메서드 활용)
+            from .ai_prompts import BlogAIPrompts
+            # 빈 구조화 데이터로 직접 글쓰기 프롬프트 생성
+            empty_structured_data = {"competitor_analysis": {"top_blogs": [], "summary": {}}}
+            writing_prompt = BlogAIPrompts.generate_content_analysis_prompt(
+                main_keyword=main_keyword,
+                sub_keywords=sub_keywords,
+                structured_data=empty_structured_data,
+                content_type=content_type,
+                tone=tone,
+                review_detail=review_detail,
+                blogger_identity=blogger_identity,
+                summary_result="경쟁 블로그 분석 결과가 없어 직접 작성합니다.",
+                search_keyword=search_keyword
+            )
+
+            # AI로 직접 콘텐츠 생성
+            final_content = self.generate_blog_content(writing_prompt)
+
+            logger.info("분석 없는 AI 글쓰기 완료")
+
+            return {
+                "summary_prompt": "분석 없음 - 직접 글쓰기",
+                "summary_result": "경쟁 블로그 분석 결과가 없어 생략됨",
+                "writing_prompt": writing_prompt,
+                "final_content": final_content,
+                "combined_content": "분석된 블로그 콘텐츠 없음"
+            }
+
+        except Exception as e:
+            logger.error(f"분석 없는 AI 글쓰기 실패: {e}")
+            raise BusinessError(f"AI 글쓰기 실패: {str(e)}")
     
-    def generate_blog_content_with_summary_detailed(self, main_keyword: str, sub_keywords: str, analyzed_blogs: list, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "") -> Dict[str, str]:
+    def generate_blog_content_with_summary_detailed(self, main_keyword: str, sub_keywords: str, analyzed_blogs: list, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", search_keyword: str = "") -> Dict[str, str]:
         """2단계 파이프라인: 정보요약 AI → 글작성 AI (상세 정보 포함)"""
         try:
             logger.info("2단계 파이프라인으로 블로그 콘텐츠 생성 시작 (상세 정보 포함)")
             
+            # 분석 결과가 없는 경우 폴백 처리
+            if not analyzed_blogs or len(analyzed_blogs) == 0:
+                logger.warning("분석된 블로그가 없습니다. 분석 없이 AI 글쓰기로 진행")
+                return self._generate_content_without_analysis(main_keyword, sub_keywords, content_type, tone, review_detail, search_keyword)
+
             # 1단계: 분석된 블로그들의 콘텐츠를 하나의 텍스트로 통합
             logger.info("1단계: 경쟁 블로그 콘텐츠 통합")
             combined_content = self._combine_blog_contents(analyzed_blogs)
-            
+
             if not combined_content.strip():
-                logger.warning("통합할 블로그 콘텐츠가 없습니다.")
-                combined_content = "분석할 콘텐츠가 없습니다."
-            
+                logger.warning("통합할 블로그 콘텐츠가 없습니다. 분석 없이 진행")
+                return self._generate_content_without_analysis(main_keyword, sub_keywords, content_type, tone, review_detail, search_keyword)
+
             logger.info(f"통합된 콘텐츠 길이: {len(combined_content)}자")
-            
+
             # 2단계: 정보요약 AI로 콘텐츠 요약
             logger.info("2단계: 정보요약 AI로 콘텐츠 요약")
-            
-            # 기존 generate_content_summary 메서드 사용
-            summarized_content = self.generate_content_summary(combined_content, main_keyword, content_type)
-            
+
+            # 요약 내용 생성
+            summarized_content = self.generate_content_summary(combined_content, main_keyword, content_type, search_keyword)
+
             # UI용 프롬프트 생성 (ai_prompts.py에서)
             from .ai_prompts import BlogSummaryPrompts
-            summary_prompt = BlogSummaryPrompts.generate_content_summary_prompt(combined_content, main_keyword, content_type)
+            temp_blogs = [{
+                'title': f"{main_keyword} 관련 콘텐츠",
+                'text_content': combined_content
+            }] if combined_content.strip() else []
+            summary_prompt = BlogSummaryPrompts.generate_content_summary_prompt(
+                f"{main_keyword} 관련 정보",
+                search_keyword or main_keyword,
+                main_keyword,
+                content_type,
+                temp_blogs,
+                ""
+            )
             logger.info(f"요약된 콘텐츠 길이: {len(summarized_content)}자")
             
             # 3단계: 요약된 내용을 포함한 프롬프트로 글작성 AI 호출
@@ -782,13 +705,14 @@ class BlogAutomationService:
             # 1차 결과를 포함한 완전한 프롬프트 생성
             enhanced_prompt = BlogAIPrompts.generate_content_analysis_prompt(
                 main_keyword=main_keyword,
-                sub_keywords=sub_keywords, 
+                sub_keywords=sub_keywords,
                 structured_data=structured_data,
                 content_type=content_type,
                 tone=tone,
                 review_detail=review_detail,
                 blogger_identity=blogger_identity,
-                summary_result=summarized_content
+                summary_result=summarized_content,
+                search_keyword=search_keyword
             )
 
             # 글작성 AI로 최종 콘텐츠 생성
@@ -821,6 +745,40 @@ class BlogAutomationService:
         }
         
         return image_model_mapping.get(ui_model_name, ui_model_name)
+
+    def select_blog_titles_with_ai(self, target_title: str, search_keyword: str, main_keyword: str, content_type: str, blog_titles: list, sub_keywords: str = "") -> list:
+        """AI를 사용하여 30개 블로그 제목 중 관련도 높은 10개 선별"""
+        try:
+            logger.info("🤖 AI 블로그 제목 선별 시작")
+
+            # ai_prompts에서 프롬프트 가져오기
+            from .ai_prompts import BlogPromptComponents
+            prompt = BlogPromptComponents.generate_blog_title_selection_prompt(
+                target_title, search_keyword, main_keyword, content_type, blog_titles, sub_keywords
+            )
+
+            logger.info(f"제목 선별 프롬프트 생성 완료: {len(blog_titles)}개 제목 중 10개 선별 요청")
+
+            # AI 호출 (JSON 응답 받기) - ai_prompts의 프롬프트가 JSON 형식으로 응답하도록 설계됨
+            result = self.call_summary_ai(prompt, "json", "제목선별")
+
+            # JSON에서 선별된 제목들 추출
+            selected_titles = []
+            if result and isinstance(result, dict) and 'selected_titles' in result:
+                for item in result['selected_titles']:
+                    if isinstance(item, dict) and 'title' in item and 'original_index' in item:
+                        selected_titles.append({
+                            'title': item['title'],
+                            'original_index': item['original_index'],
+                            'relevance_reason': item.get('relevance_reason', '')
+                        })
+
+            logger.info(f"✅ AI 제목 선별 완료: {len(selected_titles)}개")
+            return selected_titles
+
+        except Exception as e:
+            logger.error(f"AI 제목 선별 실패: {e}")
+            return []
 
     def generate_blog_images(self, prompt: str, image_count: int = 1) -> list:
         """API 설정에서 선택된 이미지 생성 AI를 사용하여 블로그 이미지 생성"""
@@ -860,4 +818,4 @@ class BlogAutomationService:
         except Exception as e:
             logger.error(f"AI 이미지 생성 실패: {e}")
             raise BusinessError(f"AI 이미지 생성 실패: {str(e)}")
-    
+

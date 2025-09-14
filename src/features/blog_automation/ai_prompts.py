@@ -421,7 +421,7 @@ class BlogAIPrompts:
     """2차 가공: 글작성 AI를 위한 프롬프트 템플릿"""
     
     @staticmethod
-    def generate_content_analysis_prompt(main_keyword: str, sub_keywords: str, structured_data: Dict, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", blogger_identity: str = "", summary_result: str = "", selected_title: str = "") -> str:
+    def generate_content_analysis_prompt(main_keyword: str, sub_keywords: str, structured_data: Dict, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", blogger_identity: str = "", summary_result: str = "", selected_title: str = "", search_keyword: str = "") -> str:
         """네이버 SEO 최적화 콘텐츠 분석 기반 AI 프롬프트 생성 (컨텐츠 유형과 말투, 후기 세부 유형 반영)"""
         
         competitor_info = structured_data.get("competitor_analysis", {})
@@ -445,52 +445,42 @@ class BlogAIPrompts:
         
         
         prompt = f"""
-# 🎭 AI 역할 설정
+# AI 역할 설정
 당신은 네이버 블로그에서 인기 있는 글을 쓰는 블로거입니다. 독자들이 진짜 도움이 되고 재미있게 읽을 수 있는 글을 쓰는 것이 목표입니다.
 
-## 🧠 중요한 지시사항
-1️⃣ **먼저 호흡을 가다듬고, 아래 모든 요구사항을 천천히 단계별로 분석하세요**
-2️⃣ **각 요구사항을 하나씩 체크하며 절대 놓치지 마세요**  
-3️⃣ **협찬/체험단 후기의 경우, 절대 "구매했다"는 표현을 사용하지 마세요**
-4️⃣ **글 작성 전 모든 지침을 재확인하고, 단계별로 검토하며 작성하세요**
+## 중요한 지시사항
+1. **먼저 호흡을 가다듬고, 아래 모든 요구사항을 천천히 단계별로 분석하세요**
+2. **각 요구사항을 하나씩 체크하며 절대 놓치지 마세요**
+3. **글 작성 전 모든 지침을 재확인하고, 단계별로 검토하며 작성하세요**
 
-# 📝 작업 목표
+# 작업 목표
 **작성할 글 제목**: "{selected_title if selected_title.strip() else '[메인키워드가 자연스럽게 포함된 매력적인 제목]'}"
 **메인 키워드**: "{main_keyword}"
 **보조 키워드**: "{sub_keywords if sub_keywords.strip() else '메인 키워드와 관련된 보조 키워드들을 3-5개 직접 생성하여 활용'}"
-**목표**: 위 제목과 키워드로 네이버 검색 상위 노출을 위한 완성도 높은 블로그 글 작성
+**블로그 소개**: {blogger_identity if blogger_identity.strip() else '다양한 정보를 공유하는 일반적인 블로그'}
+**컨텐츠 유형**: {content_type} ({current_content['approach']})
+**말투 스타일**: {tone} ({current_tone['style']})
+**구조**: {current_content['structure']}
+**핵심 표현**: {', '.join(current_content['keywords'])}
+**예시 표현**: {', '.join(current_tone['examples'])}
+**문장 특징**: {current_tone['sentence_style']}
+**마무리 문구**: {current_tone['ending']}"""
 
-## 📊 참고할 경쟁 블로그 요약 정보
-'{main_keyword}'로 검색시 노출되는 상위 {len(top_blogs)}개 블로그 글을 요약한 결과입니다. 이를 참고하여 더 나은 독창적인 콘텐츠를 작성해주세요:
-
-{summary_result if summary_result.strip() else '참고할 만한 경쟁사 분석 정보가 없으니, 자연스럽고 유용한 콘텐츠로 작성해주세요.'}
-"""
-        
-        prompt += f"""
-
-## 🎨 글쓰기 스타일 가이드라인
-**블로그 소개:** {blogger_identity if blogger_identity.strip() else '다양한 정보를 공유하는 일반적인 블로그'}
-
-**컨텐츠 유형:** {content_type}
-- **접근법:** {current_content['approach']}
-- **구조:** {current_content['structure']}
-- **핵심 표현:** {', '.join(current_content['keywords'])}
-
-**말투 스타일:** {tone}
-- **스타일:** {current_tone['style']}
-- **예시 표현:** {', '.join(current_tone['examples'])}
-- **문장 특징:** {current_tone['sentence_style']}
-- **마무리 문구:** {current_tone['ending']}"""
-        
         # 후기 세부 유형 가이드라인 추가 (후기/리뷰형일 때만)
         if current_review_detail:
             prompt += f"""
+**후기 세부 유형**: {review_detail}
+**후기 설명**: {current_review_detail['description']}
+**후기 투명성**: {current_review_detail['transparency']}
+**후기 핵심 포인트**: {', '.join(current_review_detail['key_points'])}"""
 
-**후기 세부 유형:** {review_detail}
-- **설명:** {current_review_detail['description']}
-- **투명성:** {current_review_detail['transparency']}
-- **핵심 포인트:**
-  {chr(10).join(f'  {point}' for point in current_review_detail['key_points'])}"""
+        prompt += f"""
+
+## 참고할 경쟁 블로그 요약 정보
+'{search_keyword}'로 검색시 노출되는 상위 {len(top_blogs)}개 블로그 글을 요약한 결과입니다. 이를 참고하여 더 나은 독창적인 콘텐츠를 작성해주세요:
+
+{summary_result if summary_result.strip() else '참고할 만한 경쟁사 분석 정보가 없으니, 자연스럽고 유용한 콘텐츠로 작성해주세요.'}
+"""
 
         prompt += f"""
 
@@ -532,7 +522,7 @@ class BlogAIPrompts:
 - [ ] 동영상 삽입 위치 최소 1개 표시 완료
 - [ ] 모바일 가독성 고려한 문단 구성
 
-## 🎯 최종 출력 (블로그에 바로 사용)
+## 최종 출력 (블로그에 바로 사용)
 **다른 설명 없이 아래 형식으로만 출력하세요:**
 
 ```
@@ -551,7 +541,7 @@ class BlogAIPrompts:
 [결론 - 요약 및 독자 행동 유도]
 
 추천 태그: 
-{'[상위 블로그 인기 태그 참고: ' + ', '.join([f'#{tag.lstrip("#")}' for tag in summary.get("common_tags", [])]) + ']' if summary.get("common_tags") else ''}
+{'[상위 블로그 인기 태그 참고: ' + ', '.join(['#' + tag.lstrip("#") for tag in summary.get("common_tags", [])]) + ']' if summary.get("common_tags") else ''}
 [메인키워드와 보조키워드를 활용하여 글 내용에 적합한 태그 5개 이상 작성]
 ```
 """

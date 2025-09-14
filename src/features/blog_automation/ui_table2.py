@@ -66,6 +66,8 @@ class BlogAutomationStep2UI(QWidget):
         self.analyzed_blogs = []
         self.analysis_worker = None
         self.analysis_thread = None
+        self.summary_worker = None
+        self.summary_thread = None
         self.ai_writer_worker = None
         self.ai_writer_thread = None
         self.generated_content = ""
@@ -653,11 +655,12 @@ class BlogAutomationStep2UI(QWidget):
             if not ai_data:
                 raise Exception("AI 프롬프트 데이터 생성 실패")
 
-            # AI 글쓰기 워커 생성
+            # AI 글쓰기 워커 생성 - 사용자가 수정한 검색어 사용
+            search_keyword = self.search_query_input.text().strip() or self.step1_data.get('search_query', main_keyword)
             self.ai_writer_worker = create_ai_writing_worker(
                 self.parent.service, main_keyword, sub_keywords,
                 ai_data['structured_data'], self.analyzed_blogs,
-                content_type, tone, review_detail
+                content_type, tone, review_detail, search_keyword
             )
             self.ai_writer_thread = WorkerThread(self.ai_writer_worker)
 
@@ -1014,17 +1017,26 @@ class BlogAutomationStep2UI(QWidget):
             # 3단계: 정보요약 AI 호출
             logger.info("3단계: 정보요약 AI를 호출합니다...")
 
-            # 3단계: 실제 정보요약 AI 호출 (새로운 JSON 구조 직접 사용)
+            # 3단계: 통합 정보요약 AI 워커 호출
             if hasattr(self.parent, 'service') and self.parent.service:
-                try:
-                    # 새로운 JSON 구조로 직접 AI 호출
-                    messages = [{"role": "user", "content": summary_prompt}]
-                    summary_result = self.parent.service._call_summary_ai(messages, "JSON 구조 정보요약")
-                    logger.info(f"✅ 정보요약 AI 완료: {len(summary_result)}자")
-                    self.on_summary_ai_completed(summary_result)
-                except Exception as ai_error:
-                    logger.error(f"❌ 정보요약 AI 호출 실패: {ai_error}")
-                    raise Exception(f"정보요약 AI 호출 실패: {str(ai_error)}")
+                from .worker import create_summary_worker, WorkerThread
+
+                # 통합 정보요약 워커 생성
+                self.summary_worker = create_summary_worker(
+                    service=self.parent.service,
+                    prompt=summary_prompt,
+                    response_format="text",
+                    context="JSON 구조 정보요약"
+                )
+                self.summary_thread = WorkerThread(self.summary_worker)
+
+                # 시그널 연결
+                self.summary_worker.completed.connect(self.on_summary_ai_completed)
+                self.summary_worker.error_occurred.connect(self.on_summary_ai_error)
+
+                # 워커 시작
+                self.summary_thread.start()
+                logger.info("✅ 정보요약 AI 워커 시작됨")
             else:
                 raise Exception("AI 서비스가 설정되지 않았습니다.")
 
@@ -1072,21 +1084,49 @@ class BlogAutomationStep2UI(QWidget):
             # 5단계: 글쓰기 AI 호출
             logger.info("5단계: 글쓰기 AI가 블로그 글을 생성합니다...")
 
-            # 5단계: 실제 글쓰기 AI 호출
+            # 5단계: 비동기 글쓰기 AI 워커 호출
             if hasattr(self.parent, 'service') and self.parent.service:
-                try:
-                    generated_content = self.parent.service.generate_blog_content(writing_prompt)
-                    logger.info(f"✅ 글쓰기 AI 완료: {len(generated_content)}자")
-                    self.on_writing_ai_completed(generated_content)
-                except Exception as ai_error:
-                    logger.error(f"❌ 글쓰기 AI 호출 실패: {ai_error}")
-                    raise Exception(f"글쓰기 AI 호출 실패: {str(ai_error)}")
+                from .worker import create_ai_writing_worker, WorkerThread
+
+                # 글쓰기 워커 생성 (기본 매개변수로 호출) - 사용자가 수정한 검색어 사용
+                search_keyword = self.search_query_input.text().strip() or self.step1_data.get('search_query', main_keyword)
+                self.ai_writer_worker = create_ai_writing_worker(
+                    self.parent.service,
+                    main_keyword,
+                    sub_keywords,
+                    ai_data['structured_data'],
+                    self.analyzed_blogs,
+                    content_type,
+                    tone,
+                    review_detail,
+                    search_keyword
+                )
+                self.ai_writer_thread = WorkerThread(self.ai_writer_worker)
+
+                # 시그널 연결
+                self.ai_writer_worker.writing_completed.connect(self.on_writing_ai_completed)
+                self.ai_writer_worker.error_occurred.connect(self.on_writing_ai_error)
+
+                # 워커 시작
+                self.ai_writer_thread.start()
+                logger.info("✅ 글쓰기 AI 워커 시작됨")
             else:
                 raise Exception("AI 서비스가 설정되지 않았습니다.")
 
         except Exception as e:
             logger.error(f"정보요약 AI 완료 처리 오류: {e}")
             self.reset_integrated_ui()
+
+    def on_summary_ai_error(self, error_message: str):
+        """정보요약 AI 오류 처리"""
+        try:
+            logger.error(f"❌ 정보요약 AI 오류: {error_message}")
+            self.reset_integrated_ui()
+            TableUIDialogHelper.show_error_dialog(
+                self, "정보요약 AI 오류", f"정보요약 AI 처리 중 오류가 발생했습니다:\n{error_message}"
+            )
+        except Exception as e:
+            logger.error(f"정보요약 AI 오류 처리 중 오류: {e}")
 
     def on_writing_ai_completed(self, generated_content: str):
         """글쓰기 AI 완료 후 처리"""
@@ -1117,3 +1157,14 @@ class BlogAutomationStep2UI(QWidget):
         except Exception as e:
             logger.error(f"글쓰기 AI 완료 처리 오류: {e}")
             self.reset_integrated_ui()
+
+    def on_writing_ai_error(self, error_message: str):
+        """글쓰기 AI 오류 처리"""
+        try:
+            logger.error(f"❌ 글쓰기 AI 오류: {error_message}")
+            self.reset_integrated_ui()
+            TableUIDialogHelper.show_error_dialog(
+                self, "글쓰기 AI 오류", f"글쓰기 AI 처리 중 오류가 발생했습니다:\n{error_message}"
+            )
+        except Exception as e:
+            logger.error(f"글쓰기 AI 오류 처리 중 오류: {e}")
