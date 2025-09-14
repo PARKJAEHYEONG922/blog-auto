@@ -351,6 +351,11 @@ class BlogSummaryPrompts:
     def generate_content_summary_prompt(selected_title: str, search_keyword: str, main_keyword: str, content_type: str, competitor_blogs: list, sub_keywords: str = "") -> str:
         """정보요약 AI용 1차 가공 프롬프트 생성 - JSON 입력 구조화"""
 
+        # DEBUG: 파라미터 값 확인
+        from src.foundation.logging import get_logger
+        logger = get_logger("ai_prompts.summary_debug")
+        logger.info(f"🔍 DEBUG summary_prompt: search_keyword='{search_keyword}', main_keyword='{main_keyword}'")
+
         import json
 
         # JSON 입력 데이터 구조화
@@ -423,7 +428,12 @@ class BlogAIPrompts:
     @staticmethod
     def generate_content_analysis_prompt(main_keyword: str, sub_keywords: str, structured_data: Dict, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", blogger_identity: str = "", summary_result: str = "", selected_title: str = "", search_keyword: str = "") -> str:
         """네이버 SEO 최적화 콘텐츠 분석 기반 AI 프롬프트 생성 (컨텐츠 유형과 말투, 후기 세부 유형 반영)"""
-        
+
+        # DEBUG: 파라미터 값 확인
+        from src.foundation.logging import get_logger
+        logger = get_logger("ai_prompts.debug")
+        logger.info(f"🔍 DEBUG ai_prompts: search_keyword='{search_keyword}', main_keyword='{main_keyword}'")
+
         competitor_info = structured_data.get("competitor_analysis", {})
         top_blogs = competitor_info.get("top_blogs", [])
         summary = competitor_info.get("summary", {})

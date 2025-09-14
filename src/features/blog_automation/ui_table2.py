@@ -655,8 +655,11 @@ class BlogAutomationStep2UI(QWidget):
             if not ai_data:
                 raise Exception("AI 프롬프트 데이터 생성 실패")
 
-            # AI 글쓰기 워커 생성 - 사용자가 수정한 검색어 사용
-            search_keyword = self.search_query_input.text().strip() or self.step1_data.get('search_query', main_keyword)
+            # AI 글쓰기 워커 생성 - 사용자가 수정한 검색어 사용 (1단계와 동일한 로직)
+            search_keyword = self.search_query_input.text().strip()
+            if not search_keyword:
+                search_keyword = self.step1_data.get('search_query', main_keyword)
+            logger.info(f"🔍 AI 글쓰기 워커 search_keyword: '{search_keyword}'")
             self.ai_writer_worker = create_ai_writing_worker(
                 self.parent.service, main_keyword, sub_keywords,
                 ai_data['structured_data'], self.analyzed_blogs,
@@ -1088,8 +1091,11 @@ class BlogAutomationStep2UI(QWidget):
             if hasattr(self.parent, 'service') and self.parent.service:
                 from .worker import create_ai_writing_worker, WorkerThread
 
-                # 글쓰기 워커 생성 (기본 매개변수로 호출) - 사용자가 수정한 검색어 사용
-                search_keyword = self.search_query_input.text().strip() or self.step1_data.get('search_query', main_keyword)
+                # 글쓰기 워커 생성 (기본 매개변수로 호출) - 사용자가 수정한 검색어 사용 (1단계와 동일한 로직)
+                search_keyword = self.search_query_input.text().strip()
+                if not search_keyword:
+                    search_keyword = self.step1_data.get('search_query', main_keyword)
+                logger.info(f"🔍 통합 AI 글쓰기 워커 search_keyword: '{search_keyword}'")
                 self.ai_writer_worker = create_ai_writing_worker(
                     self.parent.service,
                     main_keyword,

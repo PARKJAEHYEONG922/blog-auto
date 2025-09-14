@@ -548,11 +548,15 @@ class AIWritingWorker(QObject):
         self.review_detail = review_detail
         self.search_keyword = search_keyword or main_keyword
         self.is_cancelled = False
+
+        # DEBUG: 워커 초기화 시 search_keyword 확인
+        logger.info(f"🔍 DEBUG AIWritingWorker init: received search_keyword='{search_keyword}', final search_keyword='{self.search_keyword}'")
         
     def run(self):
         """AI 글쓰기 작업 실행 (2단계 파이프라인)"""
         try:
             logger.info(f"🤖 AI 글쓰기 워커 시작 (2단계 파이프라인): {self.main_keyword}")
+            logger.info(f"🔍 DEBUG: search_keyword='{self.search_keyword}', main_keyword='{self.main_keyword}'")
             self.writing_started.emit()
             
             # 분석된 블로그 데이터가 있는지 확인
