@@ -558,7 +558,7 @@ class BlogAIPrompts:
         return prompt.strip()
     
 
-def create_ai_request_data(main_keyword: str, sub_keywords: str, analyzed_blogs: List[Dict], content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", blogger_identity: str = "", summary_result: str = "", selected_title: str = "") -> Dict:
+def create_ai_request_data(main_keyword: str, sub_keywords: str, analyzed_blogs: List[Dict], content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", blogger_identity: str = "", summary_result: str = "", selected_title: str = "", search_keyword: str = "") -> Dict:
     """AI 요청용 데이터 생성 (컨텐츠 유형과 말투, 후기 세부 유형 포함)"""
     try:
         structure_analyzer = BlogContentStructure()
@@ -567,7 +567,7 @@ def create_ai_request_data(main_keyword: str, sub_keywords: str, analyzed_blogs:
 
         # AI 프롬프트 생성 (스타일 옵션 포함)
         prompt_generator = BlogAIPrompts()
-        ai_prompt = prompt_generator.generate_content_analysis_prompt(main_keyword, sub_keywords, structured_data, content_type, tone, review_detail, blogger_identity, summary_result, selected_title)
+        ai_prompt = prompt_generator.generate_content_analysis_prompt(main_keyword, sub_keywords, structured_data, content_type, tone, review_detail, blogger_identity, summary_result, selected_title, search_keyword)
         
         return {
             "structured_data": structured_data,

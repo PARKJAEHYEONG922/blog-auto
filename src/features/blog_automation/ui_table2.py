@@ -630,107 +630,6 @@ class BlogAutomationStep2UI(QWidget):
             self.start_ai_writing_btn.setEnabled(True)
 
 
-    def start_ai_writing(self):
-        """AI 글쓰기 워커 시작"""
-        try:
-            from .worker import create_ai_writing_worker, WorkerThread
-
-            # Step 1 데이터에서 필요한 정보 추출
-            ai_settings = self.step1_data.get('ai_settings', {})
-            main_keyword = self.step1_data.get('main_keyword', '')
-            sub_keywords = self.step1_data.get('sub_keywords', '')
-            content_type = ai_settings.get('content_type', '정보/가이드형')
-            tone = ai_settings.get('tone', '정중한 존댓말체')
-            review_detail = ai_settings.get('review_detail', '')
-
-            # AI 프롬프트 생성을 위한 구조화된 데이터 준비
-            from .ai_prompts import create_ai_request_data
-
-            selected_title = self.step1_data.get('selected_title', '')
-            ai_data = create_ai_request_data(
-                main_keyword, sub_keywords, self.analyzed_blogs,
-                content_type, tone, review_detail, "", "", selected_title
-            )
-
-            if not ai_data:
-                raise Exception("AI 프롬프트 데이터 생성 실패")
-
-            # AI 글쓰기 워커 생성 - 사용자가 수정한 검색어 사용 (1단계와 동일한 로직)
-            search_keyword = self.search_query_input.text().strip()
-            if not search_keyword:
-                search_keyword = self.step1_data.get('search_query', main_keyword)
-            logger.info(f"🔍 AI 글쓰기 워커 search_keyword: '{search_keyword}'")
-            self.ai_writer_worker = create_ai_writing_worker(
-                self.parent.service, main_keyword, sub_keywords,
-                ai_data['structured_data'], self.analyzed_blogs,
-                content_type, tone, review_detail, search_keyword
-            )
-            self.ai_writer_thread = WorkerThread(self.ai_writer_worker)
-
-            # 시그널 연결
-            self.ai_writer_worker.writing_started.connect(self.on_writing_started)
-            self.ai_writer_worker.writing_completed.connect(self.on_writing_completed)
-            self.ai_writer_worker.error_occurred.connect(self.on_writing_error)
-
-            # 워커 시작
-            self.ai_writer_thread.start()
-            logger.info("✅ AI 글쓰기 워커 시작됨")
-
-        except Exception as e:
-            logger.error(f"❌ AI 글쓰기 워커 시작 실패: {e}")
-            self.reset_analysis_ui()
-
-    def on_writing_started(self):
-        """AI 글쓰기 시작 시그널 처리"""
-        logger.info("🤖 AI 글쓰기 시작됨")
-
-    def on_writing_completed(self, generated_content: str):
-        """AI 글쓰기 완료 처리"""
-        try:
-            logger.info("✅ AI 글쓰기 완료!")
-
-            self.generated_content = generated_content
-
-            # UI 업데이트
-            self.next_step_btn.setEnabled(True)
-
-            # 생성된 글을 탭에 표시
-            self.generated_content_display.setPlainText(generated_content)
-
-            # 생성된 글 탭으로 자동 전환
-            self.result_tabs.setCurrentWidget(self.generated_content_tab)
-
-            # 생성된 글을 메인 UI에 전달
-            self.content_generated.emit(generated_content)
-
-            # 성공 다이얼로그
-            content_length = len(generated_content.replace(' ', ''))
-            TableUIDialogHelper.show_success_dialog(
-                self, "글 생성 완료",
-                f"AI 블로그 글 생성이 완료되었습니다!\n\n글자수: {content_length}자\n\n생성된 글을 결과 탭에서 확인하고 3단계로 진행하세요.",
-                "🎉"
-            )
-
-        except Exception as e:
-            logger.error(f"AI 글쓰기 완료 처리 중 오류: {e}")
-            self.reset_analysis_ui()
-
-    def on_writing_error(self, error_message: str):
-        """AI 글쓰기 오류 처리"""
-        try:
-            logger.error(f"❌ AI 글쓰기 오류: {error_message}")
-
-            self.reset_analysis_ui()
-
-            TableUIDialogHelper.show_error_dialog(
-                self, "AI 글쓰기 오류",
-                f"AI 글 생성 중 오류가 발생했습니다:\n{error_message}\n\nAPI 키 설정을 확인해주세요."
-            )
-
-        except Exception as e:
-            logger.error(f"AI 글쓰기 오류 처리 중 오류: {e}")
-
-
     def on_prev_step_clicked(self):
         """이전 단계로 돌아가기"""
         try:
@@ -1003,9 +902,11 @@ class BlogAutomationStep2UI(QWidget):
             ai_settings = self.step1_data.get('ai_settings', {})
             content_type = ai_settings.get('content_type', '정보/가이드형')
 
-            # 선택된 제목과 검색 키워드 가져오기
+            # 선택된 제목과 검색 키워드 가져오기 (실제 입력된 검색어 사용)
             selected_title = self.step1_data.get('selected_title', '')
-            search_keyword = self.step1_data.get('search_keyword', main_keyword)
+            search_keyword = self.search_query_input.text().strip()
+            if not search_keyword:
+                search_keyword = self.step1_data.get('search_query', main_keyword)
 
             # 상위 3개 블로그만 사용
             competitor_blogs = self.analyzed_blogs[:3]
@@ -1071,9 +972,14 @@ class BlogAutomationStep2UI(QWidget):
             review_detail = ai_settings.get('review_detail', '')
             blogger_identity = ai_settings.get('blogger_identity', '')
 
+            # 검색 키워드 가져오기 (동일한 로직)
+            search_keyword = self.search_query_input.text().strip()
+            if not search_keyword:
+                search_keyword = self.step1_data.get('search_query', main_keyword)
+
             ai_data = create_ai_request_data(
                 main_keyword, sub_keywords, self.analyzed_blogs,
-                content_type, tone, review_detail, blogger_identity, summary_result, selected_title
+                content_type, tone, review_detail, blogger_identity, summary_result, selected_title, search_keyword
             )
 
             if not ai_data:
