@@ -250,7 +250,7 @@ class BlogAutomationService:
             logger.error(f"브라우저 세션 강제 중단 실패: {e}")
     
 
-    def analyze_top_blogs_with_ai_selection(self, search_keyword: str, target_title: str, main_keyword: str, content_type: str = "정보/가이드형", max_results: int = 3) -> list:
+    def analyze_top_blogs_with_ai_selection(self, search_keyword: str, target_title: str, main_keyword: str, content_type: str = "정보/가이드형", max_results: int = 3, sub_keywords: str = "") -> list:
         """AI 제목 선별을 사용한 상위 블로그 분석"""
         try:
             logger.info(f"AI 제목 선별을 사용한 블로그 분석 시작: '{search_keyword}' -> 타겟: '{target_title}'")
@@ -283,7 +283,7 @@ class BlogAutomationService:
             # 2단계: AI로 관련도 높은 상위 10개 제목 선별
             logger.info("🤖 2단계: AI를 사용한 제목 선별 중...")
             selected_titles = self.select_blog_titles_with_ai(
-                target_title, search_keyword, main_keyword, content_type, titles_only
+                target_title, search_keyword, main_keyword, content_type, titles_only, sub_keywords
             )
 
             if not selected_titles:
@@ -526,7 +526,7 @@ class BlogAutomationService:
             logger.error(f"텍스트에서 제목 추출 실패: {e}")
             return []
 
-    def select_blog_titles_with_ai(self, target_title: str, search_keyword: str, main_keyword: str, content_type: str, blog_titles: List[str]) -> List[Dict]:
+    def select_blog_titles_with_ai(self, target_title: str, search_keyword: str, main_keyword: str, content_type: str, blog_titles: List[str], sub_keywords: str = "") -> List[Dict]:
         """AI를 사용하여 블로그 제목들 중 관련도 높은 상위 10개 선별"""
         try:
             logger.info(f"AI 블로그 제목 선별 시작 - 대상: {len(blog_titles)}개 제목")
@@ -534,7 +534,7 @@ class BlogAutomationService:
             # ai_prompts.py에서 제목 선별 프롬프트 생성
             from .ai_prompts import BlogPromptComponents
             selection_prompt = BlogPromptComponents.generate_blog_title_selection_prompt(
-                target_title, search_keyword, main_keyword, content_type, blog_titles
+                target_title, search_keyword, main_keyword, content_type, blog_titles, sub_keywords
             )
 
             # 정보요약 AI를 사용하여 제목 선별 (기존 API 재사용)

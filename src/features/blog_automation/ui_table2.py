@@ -940,17 +940,19 @@ class BlogAutomationStep2UI(QWidget):
 
             # AI 설정 정보 수집
             main_keyword = self.step1_data.get('main_keyword', selected_title)
+            sub_keywords = self.step1_data.get('sub_keywords', '')
             ai_settings = self.step1_data.get('ai_settings', {})
             content_type = ai_settings.get('content_type', '정보/가이드형')
 
-            logger.info(f"🤖 AI 워커 파라미터: search={search_keyword}, target={selected_title}, main={main_keyword}, type={content_type}")
+            logger.info(f"🤖 AI 워커 파라미터: search={search_keyword}, target={selected_title}, main={main_keyword}, sub={sub_keywords}, type={content_type}")
 
             self.analysis_worker = create_ai_blog_analysis_worker(
                 self.parent.service,
                 search_keyword,
                 selected_title,
                 main_keyword,
-                content_type
+                content_type,
+                sub_keywords
             )
             self.analysis_thread = WorkerThread(self.analysis_worker)
 
@@ -988,19 +990,21 @@ class BlogAutomationStep2UI(QWidget):
             # 정보요약 프롬프트 생성 및 탭 업데이트
             from .ai_prompts import BlogSummaryPrompts
 
-            # 분석된 블로그 내용을 결합 (순위 없이)
-            combined_content = ""
-            for i, blog in enumerate(self.analyzed_blogs[:3], 1):  # 3개만 사용
-                title = blog.get('title', '제목 없음')
-                content = blog.get('text_content', '내용 없음')
-                combined_content += f"=== 참고 블로그 {i}: {title} ===\n{content}\n\n"
-
+            # 새로운 JSON 입력 구조를 위한 데이터 준비
             main_keyword = self.step1_data.get('main_keyword', '')
+            sub_keywords = self.step1_data.get('sub_keywords', '')
             ai_settings = self.step1_data.get('ai_settings', {})
             content_type = ai_settings.get('content_type', '정보/가이드형')
 
+            # 선택된 제목과 검색 키워드 가져오기
+            selected_title = self.step1_data.get('selected_title', '')
+            search_keyword = self.step1_data.get('search_keyword', main_keyword)
+
+            # 상위 3개 블로그만 사용
+            competitor_blogs = self.analyzed_blogs[:3]
+
             summary_prompt = BlogSummaryPrompts.generate_content_summary_prompt(
-                combined_content, main_keyword, content_type
+                selected_title, search_keyword, main_keyword, content_type, competitor_blogs, sub_keywords
             )
 
             # 정보요약 프롬프트 탭 업데이트
@@ -1009,12 +1013,12 @@ class BlogAutomationStep2UI(QWidget):
             # 3단계: 정보요약 AI 호출
             logger.info("3단계: 정보요약 AI를 호출합니다...")
 
-            # 3단계: 실제 정보요약 AI 호출
+            # 3단계: 실제 정보요약 AI 호출 (새로운 JSON 구조 직접 사용)
             if hasattr(self.parent, 'service') and self.parent.service:
                 try:
-                    summary_result = self.parent.service.generate_content_summary(
-                        combined_content, main_keyword, content_type
-                    )
+                    # 새로운 JSON 구조로 직접 AI 호출
+                    messages = [{"role": "user", "content": summary_prompt}]
+                    summary_result = self.parent.service._call_summary_ai(messages, "JSON 구조 정보요약")
                     logger.info(f"✅ 정보요약 AI 완료: {len(summary_result)}자")
                     self.on_summary_ai_completed(summary_result)
                 except Exception as ai_error:

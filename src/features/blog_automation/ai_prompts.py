@@ -212,15 +212,23 @@ JSON 형태로 정확히 10개 제목과 각 제목에 맞는 블로그 검색�
         return prompt
 
     @classmethod
-    def generate_blog_title_selection_prompt(cls, target_title: str, search_keyword: str, main_keyword: str, content_type: str, blog_titles: List[str]) -> str:
+    def generate_blog_title_selection_prompt(cls, target_title: str, search_keyword: str, main_keyword: str, content_type: str, blog_titles: List[str], sub_keywords: str = "") -> str:
         """블로그 제목 선별 프롬프트 생성 - AI에게 30개 제목 중 관련도 높은 10개 선택 요청"""
 
         titles_text = "\n".join([f"{i+1}. {title}" for i, title in enumerate(blog_titles)])
+
+        # 보조키워드 텍스트 준비
+        sub_keywords_text = ""
+        sub_keywords_criteria = ""
+        if sub_keywords and sub_keywords.strip():
+            sub_keywords_text = f"**보조 키워드**: {sub_keywords.strip()}"
+            sub_keywords_criteria = f"6. 보조 키워드({sub_keywords.strip()})와 관련성이 있는 제목"
 
         prompt = f"""네이버 블로그에서 '{search_keyword}' 키워드로 검색한 블로그 제목들 중에서, 아래 조건에 가장 적합한 상위 10개를 선별해주세요.
 
 **타겟 제목**: {target_title}
 **메인 키워드**: {main_keyword}
+{sub_keywords_text}
 **검색 키워드**: {search_keyword}
 **콘텐츠 유형**: {content_type}
 
@@ -230,6 +238,7 @@ JSON 형태로 정확히 10개 제목과 각 제목에 맞는 블로그 검색�
 3. {content_type} 유형에 적합한 접근방식의 글
 4. 구체적이고 실용적인 정보를 담고 있을 것으로 예상되는 제목
 5. 광고성이나 홍보성보다는 정보성 콘텐츠로 보이는 제목
+{sub_keywords_criteria}
 
 **검색된 블로그 제목들**:
 {titles_text}
@@ -321,7 +330,6 @@ class BlogContentStructure:
     def extract_blog_structure(self, blog: Dict) -> Dict:
         """개별 블로그의 구조 추출"""
         return {
-            "rank": blog.get('rank', 0),
             "title": blog.get('title', ''),
             "url": blog.get('url', ''),
             "statistics": {
@@ -340,20 +348,47 @@ class BlogSummaryPrompts:
     """1차 가공: 정보요약 AI를 위한 프롬프트 템플릿"""
     
     @staticmethod
-    def generate_content_summary_prompt(combined_content: str, main_keyword: str, content_type: str = "정보/가이드형") -> str:
-        """정보요약 AI용 1차 가공 프롬프트 생성"""
-        
-        
-        # 1차 가공 프롬프트 (정보요약 AI용) - 간소화
-        summary_prompt = f"""'{main_keyword}' 키워드 상위 블로그 3개 분석해서 다음 형식으로 정확히 출력해주세요:
+    def generate_content_summary_prompt(selected_title: str, search_keyword: str, main_keyword: str, content_type: str, competitor_blogs: list, sub_keywords: str = "") -> str:
+        """정보요약 AI용 1차 가공 프롬프트 생성 - JSON 입력 구조화"""
+
+        import json
+
+        # JSON 입력 데이터 구조화
+        input_data = {
+            "target_info": {
+                "selected_title": selected_title,
+                "search_keyword": search_keyword,
+                "main_keyword": main_keyword,
+                "content_type": content_type
+            },
+            "competitor_blogs": []
+        }
+
+        # 보조키워드가 있으면 추가
+        if sub_keywords and sub_keywords.strip():
+            input_data["target_info"]["sub_keywords"] = sub_keywords.strip()
+
+        # 경쟁 블로그 데이터 추가
+        for i, blog in enumerate(competitor_blogs, 1):
+            input_data["competitor_blogs"].append({
+                "blog_number": i,
+                "title": blog.get('title', '제목 없음'),
+                "content": blog.get('text_content', '내용 없음')[:2000]  # 내용 길이 제한
+            })
+
+        # JSON 문자열로 변환
+        json_input = json.dumps(input_data, ensure_ascii=False, indent=2)
+
+        # 1차 가공 프롬프트 (정보요약 AI용) - JSON 입력 구조
+        summary_prompt = f"""아래 JSON 데이터를 분석해서 다음 형식으로 정확히 출력해주세요:
 
 ## 1. 경쟁 블로그 제목들
-- (상위 노출된 블로그들의 제목을 나열)
+- (분석한 3개 블로그들의 제목을 나열)
 
 ## 2. 핵심 키워드
 - (자주 나오는 관련 키워드들을 나열)
 
-## 3. 필수 내용  
+## 3. 필수 내용
 - (모든 글이 다루는 공통 주제들을 정리)
 
 ## 4. 주요 포인트
@@ -362,10 +397,22 @@ class BlogSummaryPrompts:
 ## 5. 부족한 점
 - (기존 글들이 놓친 부분이나 개선 가능한 점들을 정리)
 
-**분석 대상**:
-{combined_content}
+**JSON 데이터 설명**:
+- target_info: 내가 작성할 블로그의 정보
+  - selected_title: 내가 선택한 블로그 제목 (실제 작성할 제목)
+  - search_keyword: 관련 블로그를 찾기 위해 사용한 검색 키워드
+  - main_keyword: 내 글의 핵심 타겟 키워드 (SEO 목표)
+  - content_type: 내 글의 유형 (정보/가이드형, 후기/리뷰형 등)
+  - sub_keywords: 보조 키워드들 (있는 경우에만 포함)
+- competitor_blogs: search_keyword로 검색해서 찾은 경쟁사 분석용 참고 블로그 3개 (제목과 본문 내용)
 
-위 형식을 정확히 지켜서 작성해주세요. 각 항목마다 구체적이고 실용적인 내용을 포함해주세요."""
+**분석 데이터**:
+```json
+{json_input}
+```
+
+위 JSON 데이터를 기반으로 '{main_keyword}' 키워드와 '{content_type}' 컨텐츠 유형에 맞춰 분석해주세요.
+각 항목마다 구체적이고 실용적인 내용을 포함해주세요."""
 
         return summary_prompt
 

@@ -310,13 +310,14 @@ class AIBlogAnalysisWorker(QObject):
     error_occurred = Signal(str)  # 오류 발생
     blog_found = Signal(int)  # 블로그 발견 (개수)
 
-    def __init__(self, service: BlogAutomationService, search_keyword: str, target_title: str, main_keyword: str, content_type: str = "정보/가이드형"):
+    def __init__(self, service: BlogAutomationService, search_keyword: str, target_title: str, main_keyword: str, content_type: str = "정보/가이드형", sub_keywords: str = ""):
         super().__init__()
         self.service = service
         self.search_keyword = search_keyword
         self.target_title = target_title
         self.main_keyword = main_keyword
         self.content_type = content_type
+        self.sub_keywords = sub_keywords
         self.is_cancelled = False
 
     def run(self):
@@ -350,7 +351,9 @@ class AIBlogAnalysisWorker(QObject):
                 self.search_keyword,
                 self.target_title,
                 self.main_keyword,
-                self.content_type
+                self.content_type,
+                3,  # max_results
+                self.sub_keywords
             )
 
             if not self.is_cancelled:
@@ -575,9 +578,9 @@ def create_blog_login_worker(service: BlogAutomationService, credentials: BlogCr
 
 
 
-def create_ai_blog_analysis_worker(service: BlogAutomationService, search_keyword: str, target_title: str, main_keyword: str, content_type: str = "정보/가이드형") -> AIBlogAnalysisWorker:
+def create_ai_blog_analysis_worker(service: BlogAutomationService, search_keyword: str, target_title: str, main_keyword: str, content_type: str = "정보/가이드형", sub_keywords: str = "") -> AIBlogAnalysisWorker:
     """AI 기반 블로그 분석 워커 생성"""
-    return AIBlogAnalysisWorker(service, search_keyword, target_title, main_keyword, content_type)
+    return AIBlogAnalysisWorker(service, search_keyword, target_title, main_keyword, content_type, sub_keywords)
 
 
 def create_ai_writing_worker(service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, analyzed_blogs: list = None, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "") -> AIWritingWorker:
