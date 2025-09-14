@@ -7,6 +7,265 @@ from src.foundation.logging import get_logger
 logger = get_logger("blog_automation.ai_prompts")
 
 
+class BlogPromptComponents:
+    """블로그 프롬프트 공용 컴포넌트 모음"""
+
+    # 컨텐츠 유형별 지침 (공용)
+    CONTENT_GUIDELINES = {
+        "후기/리뷰형": {
+            "approach": "개인 경험과 솔직한 후기를 중심으로 '유일무이한 콘텐츠' 작성",
+            "structure": "사용 전 고민 → 직접 사용 경험 → 장단점 솔직 후기 → 최종 평가 및 추천",
+            "keywords": ["직접 써봤어요", "솔직 후기", "개인적으로", "실제로 사용해보니", "추천하는 이유"],
+            "focus_areas": ["개인 경험과 솔직한 후기", "장단점 균형 제시", "구체적 사용 데이터"]
+        },
+        "정보/가이드형": {
+            "approach": "정확하고 풍부한 정보를 체계적으로 제공하여 검색자의 궁금증 완전 해결",
+            "structure": "문제 정의 → 해결책 제시 → 단계별 가이드 → 주의사항 → 마무리",
+            "keywords": ["완벽 정리", "총정리", "핵심 포인트", "단계별 가이드", "정확한 정보"],
+            "focus_areas": ["체계적 구조와 소제목", "실용적 가이드 제공", "구체적 실행 방법"]
+        },
+        "비교/추천형": {
+            "approach": "체계적 비교분석으로 독자의 선택 고민을 완전히 해결",
+            "structure": "비교 기준 제시 → 각 옵션 분석 → 장단점 비교 → 상황별 추천 → 최종 결론",
+            "keywords": ["VS 비교", "Best 5", "장단점", "상황별 추천", "가성비"],
+            "focus_areas": ["객관적 비교 기준", "상황별 맞춤 추천", "명확한 선택 가이드"]
+        }
+    }
+
+    # 후기 세부 유형별 지침 (공용)
+    REVIEW_DETAIL_GUIDELINES = {
+        "내돈내산 후기": {
+            "description": "직접 구매해서 써본 솔직한 개인 후기",
+            "key_points": [
+                "본문 제일 첫번째에 '직접 구매해서 사용해본 후기입니다' 또는 '내돈내산 후기입니다' 자연스럽게 명시",
+                "구매하게 된 이유와 고민 표현",
+                "장단점을 균형있게 서술"
+            ],
+            "transparency": "개인 구매로 편견 없는 솔직한 후기임을 강조"
+        },
+        "협찬 후기": {
+            "description": "브랜드에서 제공받은 제품의 정직한 리뷰",
+            "key_points": [
+                "본문 제일 첫번째에 '브랜드로부터 제품을 제공받아 작성한 후기입니다' 명시",
+                "협찬이지만 솔직한 평가를 하겠다고 표현",
+                "장단점을 균형있게 서술"
+            ],
+            "transparency": "절대 '구매했다', '샀다' 등의 표현 사용 금지"
+        },
+        "체험단 후기": {
+            "description": "체험단 참여를 통한 제품 사용 후기",
+            "key_points": [
+                "본문 제일 첫번째에 '체험단에 참여하여 작성한 후기입니다' 명시",
+                "체험 기회에 대한 감사 표현",
+                "객관적이고 공정한 평가 의지 표현"
+            ],
+            "transparency": "절대 '구매했다', '샀다' 등의 표현 사용 금지"
+        },
+        "대여/렌탈 후기": {
+            "description": "렌탈 서비스를 이용한 제품 사용 후기",
+            "key_points": [
+                "본문 제일 첫번째에 '렌탈 서비스로 이용해본 후기입니다' 명시",
+                "렌탈을 선택한 이유 표현",
+                "렌탈 서비스의 장단점 균형있게 서술"
+            ],
+            "transparency": "렌탈 서비스 특성상 제한적 사용 후기임을 안내"
+        }
+    }
+
+    # 말투별 지침 (공용)
+    TONE_GUIDELINES = {
+        "친근한 반말체": {
+            "style": "친구와 대화하듯 편안하고 친근한 말투",
+            "examples": ["써봤는데 진짜 좋더라~", "완전 강추!", "솔직히 말하면", "이거 진짜 대박이야"],
+            "ending": "댓글로 궁금한 거 물어봐!",
+            "sentence_style": "짧고 리드미컬한 문장",
+            "key_features": ["감탄사와 줄임말 활용", "개인적 경험 많이 포함", "유머와 재미 요소"]
+        },
+        "정중한 존댓말체": {
+            "style": "정중하고 예의 바른 존댓말로 신뢰감 조성",
+            "examples": ["사용해보았습니다", "추천드립니다", "도움이 되시길 바랍니다", "참고하시기 바랍니다"],
+            "ending": "도움이 되었으면 좋겠습니다. 궁금한 점은 댓글로 문의해 주세요.",
+            "sentence_style": "완성도 높은 정중한 문장",
+            "key_features": ["전문성과 신뢰감", "체계적 정보 전달", "예의 바른 표현"]
+        }
+    }
+
+    # SEO 최적화 규칙 (공용)
+    SEO_GUIDELINES = {
+        "title_rules": {
+            "keyword_placement": "메인키워드 자연스럽게 포함",
+            "length": "30-60자 권장",
+            "appeal": "궁금증 유발, 클릭 유도"
+        },
+        "content_rules": {
+            "min_length": "1500자 이상",
+            "keyword_density": "메인키워드 5-6회, 보조키워드 3-4회",
+            "structure": "소제목 활용, 이미지 배치"
+        },
+        "engagement_rules": {
+            "intro": "3초의 법칙 - 핵심 정보 먼저",
+            "conclusion": "요약 및 행동 유도"
+        }
+    }
+
+    @classmethod
+    def get_content_guideline(cls, content_type: str) -> Dict:
+        """컨텐츠 유형별 지침 반환"""
+        return cls.CONTENT_GUIDELINES.get(content_type, {})
+
+    @classmethod
+    def get_tone_guideline(cls, tone: str) -> Dict:
+        """말투별 지침 반환"""
+        return cls.TONE_GUIDELINES.get(tone, {})
+
+    @classmethod
+    def get_review_detail_guideline(cls, review_detail: str) -> Dict:
+        """후기 세부 유형별 지침 반환"""
+        return cls.REVIEW_DETAIL_GUIDELINES.get(review_detail, {})
+
+    @classmethod
+    def get_available_content_types(cls) -> List[str]:
+        """사용 가능한 컨텐츠 유형 목록 반환"""
+        return list(cls.CONTENT_GUIDELINES.keys())
+
+    @classmethod
+    def get_available_tones(cls) -> List[str]:
+        """사용 가능한 말투 목록 반환"""
+        return list(cls.TONE_GUIDELINES.keys())
+
+    @classmethod
+    def generate_title_suggestion_prompt(cls, main_keyword: str, content_type: str, sub_keywords: str = "", review_detail: str = "") -> str:
+        """1단계: 제목 추천 프롬프트 생성 (공용 컴포넌트 활용)"""
+
+        # 해당 유형의 지침 가져오기
+        content_guideline = cls.get_content_guideline(content_type)
+
+        if not content_guideline:
+            content_type = "정보/가이드형"  # 기본값
+            content_guideline = cls.get_content_guideline(content_type)
+
+        approach = content_guideline.get("approach", "")
+        keywords = content_guideline.get("keywords", [])
+        focus_areas = content_guideline.get("focus_areas", [])
+
+        # 후기 세부 유형 지침 가져오기 (후기/리뷰형일 때만)
+        review_guideline = cls.get_review_detail_guideline(review_detail) if review_detail and content_type == "후기/리뷰형" else {}
+
+        # 보조키워드 처리
+        sub_keyword_text = ""
+        sub_keyword_instruction = ""
+        if sub_keywords.strip():
+            sub_keyword_text = f"**보조키워드**: {sub_keywords}"
+            sub_keyword_instruction = "- 보조키워드는 필수는 아니지만, 적절히 활용하면 더 구체적인 제목 생성 가능"
+
+        prompt = f"""네이버 블로그 상위 노출에 유리한 '{content_type}' 스타일의 제목 10개를 추천해주세요.
+
+**메인키워드**: {main_keyword}
+{sub_keyword_text}
+
+**{content_type} 특징**:
+- 접근법: {approach}
+- 핵심 키워드: {', '.join(keywords)}
+- 중점 영역: {', '.join(focus_areas)}
+{f'''
+**후기 세부 유형**: {review_detail}
+- 설명: {review_guideline.get("description", "")}
+- 적절한 톤: {review_guideline.get("transparency", "")}''' if review_guideline else ''}
+
+**제목 생성 규칙**:
+1. 메인키워드를 자연스럽게 포함
+2. 클릭 유도와 궁금증 자극
+3. 30-60자 내외 권장
+4. {content_type}의 특성 반영
+5. 네이버 블로그 SEO 최적화
+6. 이모티콘 사용 금지 (텍스트만 사용)
+7. 구체적 년도 표기 금지 (2024, 2025 등 특정 년도 사용 금지. "최신", "현재" 등으로 대체)
+{sub_keyword_instruction}
+
+**출력 형식**:
+JSON 형태로 정확히 10개 제목과 각 제목에 맞는 블로그 검색어를 함께 반환해주세요.
+
+각 제목마다 "해당 제목과 유사한 내용의 블로그를 찾기 위한 네이버 블로그 검색어"를 함께 생성해주세요.
+이 검색어는 다른 블로그를 검색해서 분석하여 참고용 자료로 활용됩니다.
+검색어는 2-4개 단어 조합으로 구체적이고 관련성 높게 만들어주세요.
+
+{{
+  "titles_with_search": [
+    {{
+      "title": "제목1",
+      "search_query": "관련 블로그 검색어1"
+    }},
+    {{
+      "title": "제목2",
+      "search_query": "관련 블로그 검색어2"
+    }},
+    ...
+    {{
+      "title": "제목10",
+      "search_query": "관련 블로그 검색어10"
+    }}
+  ]
+}}
+
+각 제목은 {content_type}의 특성을 살리되, 서로 다른 접근 방식으로 다양하게 생성해주세요."""
+
+        return prompt
+
+    @classmethod
+    def generate_blog_title_selection_prompt(cls, target_title: str, search_keyword: str, main_keyword: str, content_type: str, blog_titles: List[str]) -> str:
+        """블로그 제목 선별 프롬프트 생성 - AI에게 30개 제목 중 관련도 높은 10개 선택 요청"""
+
+        titles_text = "\n".join([f"{i+1}. {title}" for i, title in enumerate(blog_titles)])
+
+        prompt = f"""네이버 블로그에서 '{search_keyword}' 키워드로 검색한 블로그 제목들 중에서, 아래 조건에 가장 적합한 상위 10개를 선별해주세요.
+
+**타겟 제목**: {target_title}
+**메인 키워드**: {main_keyword}
+**검색 키워드**: {search_keyword}
+**콘텐츠 유형**: {content_type}
+
+**선별 기준**:
+1. 타겟 제목과 주제적 관련성이 높은 글
+2. 메인 키워드와 직접적으로 연관된 내용
+3. {content_type} 유형에 적합한 접근방식의 글
+4. 구체적이고 실용적인 정보를 담고 있을 것으로 예상되는 제목
+5. 광고성이나 홍보성보다는 정보성 콘텐츠로 보이는 제목
+
+**검색된 블로그 제목들**:
+{titles_text}
+
+**출력 형식**:
+위 제목들 중에서 관련도와 유용성이 높은 순서대로 상위 10개를 JSON 형태로 선별해주세요.
+
+{{
+  "selected_titles": [
+    {{
+      "rank": 1,
+      "original_index": 3,
+      "title": "선별된 제목 1",
+      "relevance_reason": "선별 이유 (한 줄로 간단히)"
+    }},
+    {{
+      "rank": 2,
+      "original_index": 7,
+      "title": "선별된 제목 2",
+      "relevance_reason": "선별 이유 (한 줄로 간단히)"
+    }},
+    ...
+    {{
+      "rank": 10,
+      "original_index": 25,
+      "title": "선별된 제목 10",
+      "relevance_reason": "선별 이유 (한 줄로 간단히)"
+    }}
+  ]
+}}
+
+각 제목이 왜 선택되었는지 간단한 이유와 함께 우선순위 순서대로 정확히 10개만 선별해주세요."""
+
+        return prompt
+
+
 class BlogContentStructure:
     """블로그 콘텐츠 구조 분석 및 AI용 데이터 생성"""
     
@@ -122,100 +381,14 @@ class BlogAIPrompts:
         top_blogs = competitor_info.get("top_blogs", [])
         summary = competitor_info.get("summary", {})
         
-        # 컨텐츠 유형별 지침 (네이버 SEO 최적화)
-        content_guidelines = {
-            "후기/리뷰형": {
-                "approach": "개인 경험과 솔직한 후기를 중심으로 '유일무이한 콘텐츠' 작성",
-                "structure": "사용 전 고민 → 직접 사용 경험 → 장단점 솔직 후기 → 최종 평가 및 추천",
-                "keywords": ["직접 써봤어요", "솔직 후기", "개인적으로", "실제로 사용해보니", "추천하는 이유"],
-                "focus_areas": ["개인 경험과 솔직한 후기", "장단점 균형 제시", "구체적 사용 데이터"]
-            },
-            "정보/가이드형": {
-                "approach": "정확하고 풍부한 정보를 체계적으로 제공하여 검색자의 궁금증 완전 해결",
-                "structure": "문제 정의 → 해결책 제시 → 단계별 가이드 → 주의사항 → 마무리",
-                "keywords": ["완벽 정리", "총정리", "핵심 포인트", "단계별 가이드", "정확한 정보"],
-                "focus_areas": ["체계적 구조와 소제목", "실용적 가이드 제공", "구체적 실행 방법"]
-            },
-            "비교/추천형": {
-                "approach": "체계적 비교분석으로 독자의 선택 고민을 완전히 해결",
-                "structure": "비교 기준 제시 → 각 옵션 분석 → 장단점 비교 → 상황별 추천 → 최종 결론",
-                "keywords": ["VS 비교", "Best 5", "장단점", "상황별 추천", "가성비"],
-                "focus_areas": ["객관적 비교 기준", "상황별 맞춤 추천", "명확한 선택 가이드"]
-            }
-        }
+        # 공용 컴포넌트에서 컨텐츠 지침 가져오기
+        current_content = BlogPromptComponents.get_content_guideline(content_type)
         
-        # 후기 세부 유형별 지침 (후기/리뷰형일 때 적용)
-        review_detail_guidelines = {
-            "내돈내산 후기": {
-                "description": "직접 구매해서 써본 솔직한 개인 후기",
-                "key_points": [
-                    "본문 제일 첫번째에 '직접 구매해서 사용해본 후기입니다' 또는 '내돈내산 후기입니다' 자연스럽게 명시",
-                    "구매하게 된 이유와 고민 표현",
-                    "장단점을 균형있게 서술"
-                ],
-                "transparency": "개인 구매로 편견 없는 솔직한 후기임을 강조"
-            },
-            "협찬 후기": {
-                "description": "브랜드에서 제공받은 제품의 정직한 리뷰",
-                "key_points": [
-                    "본문 제일 첫번째에 '브랜드로부터 제품을 제공받아 작성한 후기입니다' 명시",
-                    "협찬이지만 솔직한 평가를 하겠다고 표현",
-                    "장단점을 균형있게 서술"
-                ],
-                "transparency": "절대 '구매했다', '샀다' 등의 표현 사용 금지"
-            },
-            "체험단 후기": {
-                "description": "체험단 참여를 통한 제품 사용 후기",
-                "key_points": [
-                    "본문 제일 첫번째에 '체험단에 참여하여 작성한 후기입니다' 명시",
-                    "체험 기회에 대한 감사 표현",
-                    "객관적이고 공정한 평가 의지 표현"
-                ],
-                "transparency": "절대 '구매했다', '샀다' 등의 표현 사용 금지"
-            },
-            "대여/렌탈 후기": {
-                "description": "렌탈 서비스를 이용한 제품 사용 후기",
-                "key_points": [
-                    "본문 제일 첫번째에 '렌탈 서비스로 이용해본 후기입니다' 명시",
-                    "렌탈을 선택한 이유 표현",
-                    "렌탈 서비스의 장단점 균형있게 서술"
-                ],
-                "transparency": "렌탈 서비스 특성상 제한적 사용 후기임을 안내"
-            }
-        }
+        # 공용 컴포넌트에서 후기 세부 지침 가져오기
+        current_review_detail = BlogPromptComponents.get_review_detail_guideline(review_detail) if review_detail else {}
         
-        # 말투별 지침
-        tone_guidelines = {
-            "친근한 반말체": {
-                "style": "친구와 대화하듯 편안하고 친근한 말투",
-                "examples": ["써봤는데 진짜 좋더라~", "완전 강추!", "솔직히 말하면", "이거 진짜 대박이야"],
-                "ending": "댓글로 궁금한 거 물어봐!",
-                "sentence_style": "짧고 리드미컬한 문장",
-                "key_features": ["감탄사와 줄임말 활용", "개인적 경험 많이 포함", "유머와 재미 요소"]
-            },
-            "정중한 존댓말체": {
-                "style": "정중하고 예의 바른 존댓말로 신뢰감 조성",
-                "examples": ["사용해보았습니다", "추천드립니다", "도움이 되시길 바랍니다", "참고하시기 바랍니다"],
-                "ending": "도움이 되었으면 좋겠습니다. 궁금한 점은 댓글로 문의해 주세요.",
-                "sentence_style": "정중하고 완전한 문장",
-                "key_features": ["일관된 존댓말", "겸손하고 정중한 표현", "신뢰감 있는 어조"]
-            },
-            "친근한 존댓말체": {
-                "style": "친근하고 부드러운 존댓말로 따뜻한 느낌",
-                "examples": ["궁금해서 찾아봤어요", "써봤는데 좋더라구요", "이런 게 있더라구요", "도움이 될 것 같아요"],
-                "ending": "도움이 되셨으면 좋겠어요~ 궁금한 게 있으시면 댓글 남겨주세요!",
-                "sentence_style": "부드럽고 따뜻한 존댓말 문장",
-                "key_features": ["부드러운 존댓말", "따뜻하고 친근한 어조", "자연스러운 개인 경험"]
-            }
-        }
-        
-        current_content = content_guidelines.get(content_type, content_guidelines["정보/가이드형"])
-        current_tone = tone_guidelines.get(tone, tone_guidelines["정중한 존댓말체"])
-        
-        # 후기 세부 유형 정보 (후기/리뷰형일 때만 적용)
-        current_review_detail = None
-        if content_type == "후기/리뷰형" and review_detail:
-            current_review_detail = review_detail_guidelines.get(review_detail)
+        # 공용 컴포넌트에서 말투 지침 가져오기
+        current_tone = BlogPromptComponents.get_tone_guideline(tone)
         
         # 평균 태그 개수 계산
         avg_tag_count = sum(len(blog.get("tags", [])) for blog in top_blogs) // max(1, len(top_blogs)) if top_blogs else 5

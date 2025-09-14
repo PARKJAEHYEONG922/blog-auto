@@ -121,8 +121,8 @@ class BlogWriteTableUI(QWidget):
         # AI 글쓰기 설정 카드 (맨 위)
         ai_settings_card = self.create_ai_settings_card()
         main_layout.addWidget(ai_settings_card)
-        
-        # 키워드 입력 카드
+
+        # 키워드 입력 카드 (제목 추천 기능 포함)
         keyword_card = self.create_keyword_input_card()
         main_layout.addWidget(keyword_card)
         
@@ -138,13 +138,13 @@ class BlogWriteTableUI(QWidget):
         self.setLayout(main_layout)
     
     def create_keyword_input_card(self) -> ModernCard:
-        """키워드 입력 카드 생성"""
-        card = ModernCard("🔍 블로그 키워드 설정")
+        """키워드 입력 카드 생성 (제목 추천 기능 포함)"""
+        card = ModernCard("🔍 블로그 키워드 설정 & 제목 추천")
         layout = QVBoxLayout()
         layout.setSpacing(tokens.GAP_8)  # 요소 간 간격 조정
-        
+
         # 간단한 설명
-        simple_desc = QLabel("메인키워드 입력 후 자동생성 버튼을 클릭해주세요\n   • 보조키워드는 생략 가능하며, 여러 개 입력할 수 있습니다")
+        simple_desc = QLabel("1단계: 메인키워드 입력 → 제목 추천받기 → 2단계: 블로그 분석 진행\n   • 보조키워드는 선택사항이며, 여러 개 입력 가능합니다")
         simple_desc.setStyleSheet(f"""
             QLabel {{
                 color: {ModernStyle.COLORS['primary']};
@@ -184,54 +184,124 @@ class BlogWriteTableUI(QWidget):
         sub_keyword_layout.addWidget(self.sub_keyword_input, 1)  # 확장 가능
         
         layout.addLayout(sub_keyword_layout)
-        
-        # AI 자동 생성 버튼과 결과 보기 버튼
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(tokens.GAP_8)  # 버튼 간 간격
-        button_layout.addStretch()
-        
-        # 자동 생성 버튼
-        self.auto_generate_button = ModernPrimaryButton("🚀 AI 블로그 글 자동 생성")
-        self.auto_generate_button.clicked.connect(self.on_auto_generate_clicked)
-        button_layout.addWidget(self.auto_generate_button)
-        
-        # 결과 보기 버튼 (처음엔 비활성화)
-        self.show_results_button = ModernSuccessButton("📋 결과 보기")
-        self.show_results_button.clicked.connect(self.on_show_results_clicked)
-        self.show_results_button.setEnabled(False)  # 처음엔 비활성화
-        button_layout.addWidget(self.show_results_button)
-        
-        layout.addLayout(button_layout)
+
+        # 제목 추천 버튼
+        title_button_layout = QHBoxLayout()
+        title_button_layout.setSpacing(tokens.GAP_8)
+        title_button_layout.addStretch()
+
+        self.suggest_title_btn = ModernPrimaryButton("🎯 제목 추천받기")
+        self.suggest_title_btn.clicked.connect(self.on_suggest_titles_clicked)
+        title_button_layout.addWidget(self.suggest_title_btn)
+
+        self.refresh_title_btn = ModernButton("🔄 새로고침")
+        self.refresh_title_btn.clicked.connect(self.on_refresh_titles_clicked)
+        self.refresh_title_btn.setEnabled(False)  # 처음에는 비활성화
+        title_button_layout.addWidget(self.refresh_title_btn)
+
+        layout.addLayout(title_button_layout)
+
+        # 추천 제목 드롭박스
+        title_select_layout = QHBoxLayout()
+        title_select_label = QLabel("추천 제목:")
+        title_select_label.setMinimumWidth(80)
+        title_select_label.setStyleSheet(f"font-size: {tokens.get_font_size('normal')}px;")
+        title_select_layout.addWidget(title_select_label)
+
+        self.title_suggestion_combo = QComboBox()
+        self.title_suggestion_combo.addItem("먼저 제목 추천을 받아보세요")
+        self.title_suggestion_combo.setEnabled(False)
+
+        # 콤보박스 스타일 설정 (AI 설정 카드와 동일)
+        combo_style = f"""
+            QComboBox {{
+                padding: {tokens.GAP_8}px {tokens.GAP_12}px;
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
+                border-radius: {tokens.RADIUS_SM}px;
+                background-color: {ModernStyle.COLORS['bg_card']};
+                color: {ModernStyle.COLORS['text_primary']};
+                font-size: {tokens.get_font_size('normal')}px;
+                min-height: {tokens.spx(20)}px;
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                width: {tokens.spx(20)}px;
+            }}
+            QComboBox::down-arrow {{
+                image: none;
+                border-left: {tokens.spx(5)}px solid transparent;
+                border-right: {tokens.spx(5)}px solid transparent;
+                border-top: {tokens.spx(5)}px solid {ModernStyle.COLORS['text_secondary']};
+                margin-right: {tokens.spx(5)}px;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {ModernStyle.COLORS['bg_card']};
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
+                selection-background-color: {ModernStyle.COLORS['primary']};
+                selection-color: white;
+                font-size: {tokens.get_font_size('normal')}px;
+            }}
+        """
+        self.title_suggestion_combo.setStyleSheet(combo_style)
+        title_select_layout.addWidget(self.title_suggestion_combo, 1)
+        layout.addLayout(title_select_layout)
+
+        # 다음 단계 버튼
+        self.proceed_to_analysis_btn = ModernSuccessButton("➡️ 2단계: 블로그 분석으로 진행")
+        self.proceed_to_analysis_btn.clicked.connect(self.on_proceed_to_analysis_clicked)
+        self.proceed_to_analysis_btn.setEnabled(False)  # 제목 선택 후 활성화
+        layout.addWidget(self.proceed_to_analysis_btn)
         
         card.setLayout(layout)
-        
-        # 카드 사이즈 최적화 - 2줄 설명 텍스트로 높이 증가
-        card.setMaximumHeight(tokens.spx(250))
+
+        # 카드 사이즈 최적화 - 제목 추천 기능 추가로 높이 증가
+        card.setMaximumHeight(tokens.spx(350))
         
         return card
     
     def create_publish_card(self) -> ModernCard:
-        """발행 카드 생성"""
-        card = ModernCard("📤 블로그 발행")
+        """발행 카드 생성 (3단계: AI 글 생성 & 발행)"""
+        card = ModernCard("📤 3단계: AI 글 생성 & 블로그 발행")
         layout = QVBoxLayout()
-        
-        # 발행 버튼만 중앙에 배치
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-        
+
+        # 설명
+        desc_label = QLabel("선택된 제목과 분석 결과를 바탕으로 AI가 최종 블로그 글을 생성합니다")
+        desc_label.setStyleSheet(f"color: {ModernStyle.COLORS['text_secondary']}; font-size: {tokens.get_font_size('small')}px;")
+        layout.addWidget(desc_label)
+
+        # AI 자동 생성 버튼과 결과 보기 버튼
+        auto_button_layout = QHBoxLayout()
+        auto_button_layout.setSpacing(tokens.GAP_8)
+        auto_button_layout.addStretch()
+
+        # 자동 생성 버튼
+        self.auto_generate_button = ModernPrimaryButton("🚀 AI 블로그 글 자동 생성")
+        self.auto_generate_button.clicked.connect(self.on_auto_generate_clicked)
+        auto_button_layout.addWidget(self.auto_generate_button)
+
+        # 결과 보기 버튼 (처음엔 비활성화)
+        self.show_results_button = ModernSuccessButton("📋 결과 보기")
+        self.show_results_button.clicked.connect(self.on_show_results_clicked)
+        self.show_results_button.setEnabled(False)  # 처음엔 비활성화
+        auto_button_layout.addWidget(self.show_results_button)
+
+        auto_button_layout.addStretch()
+        layout.addLayout(auto_button_layout)
+
+        # 발행 버튼
+        publish_button_layout = QHBoxLayout()
+        publish_button_layout.addStretch()
+
         self.publish_button = ModernDangerButton("🚀 네이버 블로그에 발행하기")
         self.publish_button.clicked.connect(self.on_publish_clicked)
         self.publish_button.setEnabled(False)  # 글 작성 완료 후 활성화
-        button_layout.addWidget(self.publish_button)
-        
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
-        
+        publish_button_layout.addWidget(self.publish_button)
+
+        publish_button_layout.addStretch()
+        layout.addLayout(publish_button_layout)
+
         card.setLayout(layout)
-        
-        # 카드 사이즈 최적화 - 기존 카드들과 통일
-        # card.setMaximumHeight() 제거 - 자동 사이즈 조정
-        
+
         return card
     
     def create_ai_settings_card(self) -> ModernCard:
@@ -846,3 +916,232 @@ class BlogWriteTableUI(QWidget):
             
         except Exception as e:
             logger.error(f"블로그 발행 오류: {e}")
+
+    def on_suggest_titles_clicked(self):
+        """제목 추천 버튼 클릭 - AI 설정 카드의 콘텐츠 유형 사용"""
+        try:
+            main_keyword = self.main_keyword_input.text().strip()
+            if not main_keyword:
+                TableUIDialogHelper.show_error_dialog(
+                    self, "입력 오류", "메인키워드를 입력해주세요."
+                )
+                return
+
+            sub_keywords = self.sub_keyword_input.text().strip()
+
+            # AI 설정 카드에서 콘텐츠 유형 가져오기
+            ai_settings = self.get_ai_writing_settings()
+            content_type = ai_settings.get('content_type', '정보/가이드형')
+
+            logger.info(f"제목 추천 요청: {main_keyword}, AI 설정 유형: {content_type}")
+
+            # 공용 컴포넌트를 사용하여 제목 추천 프롬프트 생성
+            from .ai_prompts import BlogPromptComponents
+
+            prompt = BlogPromptComponents.generate_title_suggestion_prompt(
+                main_keyword=main_keyword,
+                content_type=content_type,
+                sub_keywords=sub_keywords
+            )
+
+            logger.info("제목 추천 AI 프롬프트 생성 완료")
+
+            # TODO: 실제 AI API 호출하여 제목 추천 받기
+            # 현재는 임시로 샘플 제목 표시
+            sample_titles = self.generate_sample_titles(main_keyword, content_type)
+            self.update_title_suggestions(sample_titles)
+
+        except Exception as e:
+            logger.error(f"제목 추천 오류: {e}")
+            TableUIDialogHelper.show_error_dialog(
+                self, "오류", f"제목 추천 중 오류가 발생했습니다:\n{e}"
+            )
+
+    def on_refresh_titles_clicked(self):
+        """새로고침 버튼 클릭"""
+        self.on_suggest_titles_clicked()  # 제목 추천 다시 실행
+
+    def on_proceed_to_analysis_clicked(self):
+        """2단계 진행 버튼 클릭 - 선택된 제목으로 블로그 분석 시작"""
+        try:
+            selected_title = self.title_suggestion_combo.currentText()
+            if selected_title == "먼저 제목 추천을 받아보세요":
+                TableUIDialogHelper.show_error_dialog(
+                    self, "선택 오류", "추천받은 제목 중 하나를 선택해주세요."
+                )
+                return
+
+            main_keyword = self.main_keyword_input.text().strip()
+            sub_keywords = self.sub_keyword_input.text().strip()
+
+            logger.info(f"2단계 블로그 분석 시작: {selected_title}")
+
+            # 선택된 제목을 키워드로 사용하여 블로그 분석 시작
+            search_keyword = selected_title
+
+            # 버튼 상태 변경
+            self.proceed_to_analysis_btn.setText("🔄 분석 중...")
+            self.proceed_to_analysis_btn.setEnabled(False)
+            self.show_results_button.setEnabled(True)
+
+            # 블로그 분석 시작 (선택된 제목을 검색 키워드로 사용)
+            self.start_title_based_analysis(search_keyword, main_keyword, sub_keywords, selected_title)
+
+        except Exception as e:
+            logger.error(f"2단계 진행 오류: {e}")
+            self.reset_analysis_ui()
+            TableUIDialogHelper.show_error_dialog(
+                self, "오류", f"블로그 분석 시작 중 오류가 발생했습니다:\n{e}"
+            )
+
+    def generate_sample_titles(self, keyword: str, content_type: str) -> list:
+        """샘플 제목 생성 (임시)"""
+        titles = []
+
+        if content_type == "정보/가이드형":
+            titles = [
+                f"{keyword} 완벽 가이드 2024년 최신판",
+                f"{keyword} 초보자를 위한 단계별 설명",
+                f"{keyword} 알아두면 유용한 팁 모음집",
+                f"{keyword} 전문가가 알려주는 핵심 포인트",
+                f"{keyword} 기초부터 심화까지 총정리"
+            ]
+        elif content_type == "후기/리뷰형":
+            titles = [
+                f"{keyword} 직접 써본 솔직 후기",
+                f"{keyword} 3개월 사용 체험기",
+                f"{keyword} 장단점 완전 분석",
+                f"{keyword} 실제 사용자 리뷰 모음",
+                f"{keyword} 써보고 느낀 점 총정리"
+            ]
+        elif content_type == "비교/분석형":
+            titles = [
+                f"{keyword} 브랜드별 비교 분석",
+                f"{keyword} 가격대별 성능 비교",
+                f"{keyword} 종류별 특징 정리",
+                f"{keyword} 어떤 것을 선택해야 할까?",
+                f"{keyword} 상황별 추천 가이드"
+            ]
+        elif content_type == "순위/추천형":
+            titles = [
+                f"{keyword} 추천 순위 BEST 10",
+                f"{keyword} 인기 제품 TOP 7",
+                f"{keyword} 가성비 순위 정리",
+                f"{keyword} 전문가 추천 제품들",
+                f"{keyword} 2024년 최고의 선택"
+            ]
+        else:  # 문제해결형
+            titles = [
+                f"{keyword} 문제 해결 방법",
+                f"{keyword} 고민 해결사",
+                f"{keyword} 트러블 슈팅 가이드",
+                f"{keyword} 자주 묻는 질문 답변",
+                f"{keyword} 이렇게 하면 해결됩니다"
+            ]
+
+        return titles[:10]  # 최대 10개 반환
+
+    def update_title_suggestions(self, titles: list):
+        """제목 추천 드롭박스 업데이트"""
+        self.title_suggestion_combo.clear()
+        self.title_suggestion_combo.addItems(titles)
+        self.title_suggestion_combo.setEnabled(True)
+        self.refresh_title_btn.setEnabled(True)
+        self.proceed_to_analysis_btn.setEnabled(True)
+
+    def start_title_based_analysis(self, search_keyword: str, original_main_keyword: str, original_sub_keywords: str, selected_title: str):
+        """선택된 제목을 기반으로 블로그 분석 시작"""
+        try:
+            logger.info(f"🔍 제목 기반 블로그 분석 시작: {search_keyword}")
+
+            # 분석 준비 - UI 상태 업데이트
+            if hasattr(self, 'parent') and hasattr(self.parent, 'status_label'):
+                self.parent.status_label.setText(f"📊 '{selected_title}' 관련 블로그 분석 중...")
+
+            # 워커 생성 (기존 분석 워커 재사용)
+            from .worker import create_blog_analysis_worker, WorkerThread
+
+            self.title_analysis_worker = create_blog_analysis_worker(self.parent.service, search_keyword)
+            self.title_analysis_thread = WorkerThread(self.title_analysis_worker)
+
+            # 시그널 연결
+            self.title_analysis_worker.analysis_started.connect(self.on_title_analysis_started)
+            self.title_analysis_worker.analysis_progress.connect(self.on_title_analysis_progress)
+            self.title_analysis_worker.analysis_completed.connect(
+                lambda blogs: self.on_title_analysis_completed(blogs, original_main_keyword, original_sub_keywords, selected_title)
+            )
+            self.title_analysis_worker.error_occurred.connect(self.on_title_analysis_error)
+
+            # 워커 시작
+            self.title_analysis_thread.start()
+            logger.info("✅ 제목 기반 분석 워커 시작됨")
+
+        except Exception as e:
+            logger.error(f"❌ 제목 기반 분석 시작 실패: {e}")
+            self.reset_analysis_ui()
+
+    def on_title_analysis_started(self):
+        """제목 기반 분석 시작 시그널 처리"""
+        logger.info("📊 제목 기반 분석 시작됨")
+
+    def on_title_analysis_progress(self, message: str, progress: int):
+        """제목 기반 분석 진행 상황 업데이트"""
+        logger.info(f"📝 제목 기반 분석 진행: {message} ({progress}%)")
+        if hasattr(self, 'parent') and hasattr(self.parent, 'status_label'):
+            self.parent.status_label.setText(f"📊 {message} ({progress}%)")
+
+    def on_title_analysis_completed(self, analyzed_blogs: list, original_main_keyword: str, original_sub_keywords: str, selected_title: str):
+        """제목 기반 분석 완료 후 3단계 진행"""
+        try:
+            logger.info(f"✅ 제목 기반 분석 성공! 분석된 블로그: {len(analyzed_blogs)}개")
+
+            # 분석 결과를 테이블에 표시
+            analysis_tab = self.result_tabs.analysis_tab
+            analysis_tab.populate_blog_table(analyzed_blogs)
+
+            # 메인 UI 상태창에 분석 완료 표시
+            if hasattr(self, 'parent') and hasattr(self.parent, 'status_label'):
+                self.parent.status_label.setText(f"📊 '{selected_title}' 분석 완료, 3단계 준비 중...")
+
+            # TODO: 3단계 - AI 컨텐츠 생성을 위한 프롬프트 준비
+            logger.info("🤖 3단계: AI 컨텐츠 생성 준비")
+
+            # 분석 UI 상태 복원
+            self.reset_analysis_ui()
+
+            # 성공 다이얼로그
+            TableUIDialogHelper.show_success_dialog(
+                self, "2단계 완료",
+                f"'{selected_title}' 관련 블로그 분석이 완료되었습니다!\n\n분석된 블로그: {len(analyzed_blogs)}개\n\n결과 보기 버튼을 클릭하여 분석 결과를 확인하세요.",
+                "🎉"
+            )
+
+        except Exception as e:
+            logger.error(f"제목 기반 분석 완료 처리 중 오류: {e}")
+            self.reset_analysis_ui()
+
+    def on_title_analysis_error(self, error_message: str):
+        """제목 기반 분석 오류 처리"""
+        try:
+            logger.error(f"❌ 제목 기반 분석 오류: {error_message}")
+
+            if hasattr(self, 'parent') and hasattr(self.parent, 'status_label'):
+                self.parent.status_label.setText("❌ 블로그 분석 오류")
+
+            self.reset_analysis_ui()
+
+            TableUIDialogHelper.show_error_dialog(
+                self, "분석 오류", f"블로그 분석 중 오류가 발생했습니다:\n{error_message}"
+            )
+
+        except Exception as e:
+            logger.error(f"제목 기반 분석 오류 처리 중 오류: {e}")
+
+    def reset_analysis_ui(self):
+        """분석 UI 상태 초기화"""
+        self.proceed_to_analysis_btn.setText("➡️ 2단계: 블로그 분석으로 진행")
+        self.proceed_to_analysis_btn.setEnabled(True)
+
+        # 메인 UI 상태 초기화
+        if hasattr(self, 'parent') and hasattr(self.parent, 'status_label'):
+            self.parent.status_label.setText("대기 중...")

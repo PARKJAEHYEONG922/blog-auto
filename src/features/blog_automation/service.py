@@ -4,7 +4,7 @@
 import time
 import base64
 import hashlib
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from src.foundation.logging import get_logger
@@ -276,6 +276,132 @@ class BlogAutomationService:
             logger.error(f"상위 블로그 분석 오류: {e}")
             raise BusinessError(f"블로그 분석 실패: {str(e)}")
 
+    def analyze_top_blogs_with_ai_selection(self, search_keyword: str, target_title: str, main_keyword: str, content_type: str = "정보/가이드형", max_results: int = 3) -> list:
+        """AI 제목 선별을 사용한 상위 블로그 분석"""
+        try:
+            logger.info(f"AI 제목 선별을 사용한 블로그 분석 시작: '{search_keyword}' -> 타겟: '{target_title}'")
+
+            # 키워드 정리
+            cleaned_keyword = clean_keyword(search_keyword)
+            if not cleaned_keyword:
+                raise ValidationError("유효한 키워드를 입력해주세요")
+
+            # 어댑터 생성 (분석 전용)
+            if not self.adapter:
+                self.adapter = create_blog_adapter(BlogPlatform.NAVER)
+
+            # 분석 전용 브라우저 시작
+            self.adapter.start_browser_for_analysis()
+
+            # 1단계: 블로그 제목 30개 수집
+            logger.info("🔍 1단계: 블로그 제목 30개 수집 중...")
+            blog_titles_data = self.adapter.get_blog_titles_for_ai_selection(cleaned_keyword, 30)
+
+            if not blog_titles_data:
+                logger.warning("수집된 블로그 제목이 없습니다")
+                return []
+
+            logger.info(f"✅ {len(blog_titles_data)}개 블로그 제목 수집 완료")
+
+            # 제목만 추출 (AI 분석용)
+            titles_only = [blog['title'] for blog in blog_titles_data]
+
+            # 2단계: AI로 관련도 높은 상위 10개 제목 선별
+            logger.info("🤖 2단계: AI를 사용한 제목 선별 중...")
+            selected_titles = self.select_blog_titles_with_ai(
+                target_title, search_keyword, main_keyword, content_type, titles_only
+            )
+
+            if not selected_titles:
+                logger.warning("AI가 선별한 제목이 없습니다. 원본 순서대로 진행합니다")
+                selected_indices = list(range(min(10, len(blog_titles_data))))
+                selected_urls = [blog_titles_data[i]['url'] for i in selected_indices]
+            else:
+                logger.info(f"✅ AI가 {len(selected_titles)}개 제목을 선별했습니다")
+                # 선별된 제목의 URL 매핑
+                selected_urls = []
+                for selected in selected_titles:
+                    original_index = selected['original_index']
+                    if 0 <= original_index < len(blog_titles_data):
+                        selected_urls.append(blog_titles_data[original_index]['url'])
+
+            if not selected_urls:
+                logger.warning("분석할 URL이 없습니다")
+                return []
+
+            # 3단계: 선별된 URL들을 순차적으로 크롤링 (광고 필터링하면서 3개까지)
+            logger.info(f"📝 3단계: 선별된 {len(selected_urls)}개 URL 순차 분석 중...")
+            analyzed_blogs = []
+
+            for i, url in enumerate(selected_urls):
+                if len(analyzed_blogs) >= max_results:
+                    logger.info(f"🎯 목표 개수 {max_results}개 달성, 분석 중단")
+                    break
+
+                try:
+                    logger.info(f"📝 {i+1}/{len(selected_urls)} - URL 분석 중: {url}")
+
+                    # HTTP 방식으로 먼저 시도
+                    analysis_result = None
+                    try:
+                        analysis_result = self.adapter.analyze_blog_content_http(url)
+                        if analysis_result and analysis_result.get('title') != '분석 실패' and analysis_result.get('content_length', 0) > 0:
+                            logger.info(f"✅ HTTP 방식 분석 성공")
+                        else:
+                            analysis_result = None
+                    except Exception:
+                        analysis_result = None
+
+                    # HTTP 실패 시 Selenium으로 백업
+                    if not analysis_result:
+                        try:
+                            analysis_result = self.adapter.analyze_blog_content(url)
+                            logger.info(f"✅ Selenium 방식 분석 성공")
+                        except Exception as selenium_error:
+                            logger.error(f"❌ 분석 실패: {selenium_error}")
+                            continue
+
+                    if not analysis_result:
+                        continue
+
+                    # 결과 정리
+                    integrated_result = {
+                        'rank': len(analyzed_blogs) + 1,
+                        'title': analysis_result.get('title', '제목 없음'),
+                        'url': url,
+                        'content_length': analysis_result.get('content_length', 0),
+                        'image_count': analysis_result.get('image_count', 0),
+                        'gif_count': analysis_result.get('gif_count', 0),
+                        'video_count': analysis_result.get('video_count', 0),
+                        'tags': analysis_result.get('tags', []),
+                        'text_content': analysis_result.get('text_content', ''),
+                        'content_structure': analysis_result.get('content_structure', [])
+                    }
+
+                    # 광고/협찬 글 필터링 체크
+                    text_content = integrated_result.get('text_content', '')
+                    title = integrated_result.get('title', '')
+
+                    from .adapters import is_advertisement_content
+                    if is_advertisement_content(text_content, title):
+                        logger.warning(f"🚫 {i+1}번째 URL 제외: 광고/협찬/체험단 글로 판단됨")
+                        continue
+
+                    # 정상적인 정보성 글만 추가
+                    analyzed_blogs.append(integrated_result)
+                    logger.info(f"✅ {i+1}번째 URL 분석 완료 (정보성 글)")
+
+                except Exception as e:
+                    logger.error(f"❌ {i+1}번째 URL 분석 실패: {e}")
+                    continue
+
+            logger.info(f"🎯 AI 선별 기반 블로그 분석 완료: {len(analyzed_blogs)}개")
+            return analyzed_blogs
+
+        except Exception as e:
+            logger.error(f"AI 선별 기반 블로그 분석 오류: {e}")
+            raise BusinessError(f"AI 선별 블로그 분석 실패: {str(e)}")
+
     def get_platform_display_name(self, platform: BlogPlatform) -> str:
         """플랫폼 표시명 반환"""
         display_names = {
@@ -311,61 +437,68 @@ class BlogAutomationService:
             logger.info(f"모델 매핑: '{ui_model_name}' -> '{mapped_model}'")
         return mapped_model
     
+    def _call_summary_ai(self, messages: list, context: str = "") -> str:
+        """정보요약 AI 공용 호출 함수"""
+        try:
+            # API 설정 로드
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+
+            # 정보요약 AI 설정 확인
+            summary_provider = api_config.current_summary_ai_provider or "openai"
+            summary_ui_model = api_config.current_summary_ai_model or "GPT-4o Mini (유료, 저렴)"
+
+            logger.info(f"정보요약 AI 호출 ({context}) - Provider: {summary_provider}, Model: {summary_ui_model}")
+
+            # UI 모델명을 기술적 모델명으로 변환
+            technical_model = self._map_ui_model_to_technical_name(summary_ui_model)
+
+            if summary_provider == "openai" and api_config.openai_api_key and api_config.openai_api_key.strip():
+                logger.info(f"OpenAI API 사용 ({context}): {summary_ui_model} -> {technical_model}")
+                from src.vendors.openai.text_client import openai_text_client
+                response = openai_text_client.generate_text(messages, model=technical_model)
+
+            elif summary_provider == "google" and api_config.gemini_api_key and api_config.gemini_api_key.strip():
+                logger.info(f"Google Gemini API 사용 ({context}): {summary_ui_model} -> {technical_model}")
+                from src.vendors.google.text_client import gemini_text_client
+                response = gemini_text_client.generate_text(messages, model=technical_model)
+
+            elif summary_provider == "anthropic" and api_config.claude_api_key and api_config.claude_api_key.strip():
+                logger.info(f"Anthropic Claude API 사용 ({context}): {summary_ui_model} -> {technical_model}")
+                from src.vendors.anthropic.text_client import claude_text_client
+                response = claude_text_client.generate_text(messages, model=technical_model)
+
+            else:
+                logger.error("정보요약 AI가 설정되지 않음. API 설정에서 정보요약 AI를 설정해주세요.")
+                raise BusinessError("정보요약 AI가 설정되지 않았습니다. API 설정에서 정보요약 AI를 먼저 설정해주세요.")
+
+            if not response or not response.strip():
+                raise BusinessError("AI 응답이 비어있습니다")
+
+            return response.strip()
+
+        except BusinessError:
+            raise
+        except Exception as e:
+            logger.error(f"정보요약 AI 호출 실패 ({context}): {e}")
+            raise BusinessError(f"정보요약 AI 처리 중 오류가 발생했습니다: {str(e)}")
+
     def generate_content_summary(self, content: str, main_keyword: str = "", content_type: str = "정보/가이드형") -> str:
         """정보요약 AI를 사용하여 블로그 콘텐츠 요약"""
         try:
             logger.info(f"정보요약 AI를 사용한 콘텐츠 요약 시작 - 키워드: {main_keyword}")
-            
-            # API 설정 로드
-            from src.foundation.config import config_manager
-            api_config = config_manager.load_api_config()
-            
+
             # ai_prompts.py에서 1차 가공 프롬프트 생성
             from .ai_prompts import BlogSummaryPrompts
             summary_prompt = BlogSummaryPrompts.generate_content_summary_prompt(content, main_keyword, content_type)
 
-            messages = [
-                {
-                    "role": "user", 
-                    "content": summary_prompt
-                }
-            ]
-            
-            # 정보요약 AI 설정 확인
-            summary_provider = api_config.current_summary_ai_provider or "openai"
-            summary_ui_model = api_config.current_summary_ai_model or "GPT-4o Mini (유료, 저렴)"
-            
-            # 디버그: 현재 요약 AI 설정 상태 로깅
-            logger.info(f"정보요약 AI 설정 - Provider: {summary_provider}, Model: {summary_ui_model}")
-            
-            # UI 모델명을 기술적 모델명으로 변환
-            technical_model = self._map_ui_model_to_technical_name(summary_ui_model)
-            
-            if summary_provider == "openai" and api_config.openai_api_key and api_config.openai_api_key.strip():
-                logger.info(f"OpenAI API 사용 (요약): {summary_ui_model} -> {technical_model}")
-                from src.vendors.openai.text_client import openai_text_client
-                response = openai_text_client.generate_text(messages, model=technical_model)
-                
-            elif summary_provider == "google" and api_config.gemini_api_key and api_config.gemini_api_key.strip():
-                logger.info(f"Google Gemini API 사용 (요약): {summary_ui_model} -> {technical_model}")
-                from src.vendors.google.text_client import gemini_text_client
-                response = gemini_text_client.generate_text(messages, model=technical_model)
-                
-            elif summary_provider == "anthropic" and api_config.claude_api_key and api_config.claude_api_key.strip():
-                logger.info(f"Anthropic Claude API 사용 (요약): {summary_ui_model} -> {technical_model}")
-                from src.vendors.anthropic.text_client import claude_text_client
-                response = claude_text_client.generate_text(messages, model=technical_model)
-                
-            else:
-                logger.error("정보요약 AI가 설정되지 않음. API 설정에서 정보요약 AI를 설정해주세요.")
-                raise BusinessError("정보요약 AI가 설정되지 않았습니다. API 설정에서 정보요약 AI를 먼저 설정해주세요.")
-            
-            if response:
-                logger.info(f"콘텐츠 요약 완료: {len(response)}자")
-                return response
-            else:
-                logger.warning("요약 AI 응답 실패. 원본 콘텐츠를 그대로 사용합니다.")
-                return content[:2000] + "..." if len(content) > 2000 else content
+            messages = [{"role": "user", "content": summary_prompt}]
+
+            # 공용 정보요약 AI 호출
+            response = self._call_summary_ai(messages, "콘텐츠 요약")
+
+            logger.info(f"콘텐츠 요약 완료: {len(response)}자")
+            return response
                 
         except BusinessError:
             # BusinessError는 그대로 재발생
@@ -373,7 +506,182 @@ class BlogAutomationService:
         except Exception as e:
             logger.error(f"콘텐츠 요약 실패: {e}")
             raise BusinessError(f"정보요약 AI 처리 중 오류가 발생했습니다: {str(e)}")
-    
+
+    def generate_titles_with_summary_ai(self, prompt: str, main_keyword: str, content_type: str) -> list:
+        """정보요약 AI를 사용하여 제목 추천 (사용자 설정 AI 사용)"""
+        try:
+            logger.info(f"정보요약 AI를 사용한 제목 추천 시작 - 키워드: {main_keyword}")
+
+            # 공용 정보요약 AI 호출
+            messages = [{"role": "user", "content": prompt}]
+            response = self._call_summary_ai(messages, "제목 추천")
+
+            # JSON 응답 파싱하여 제목 리스트 추출
+            import json
+
+            # 마크다운 코드 블록 제거 (```json...``` 또는 ```...```)
+            cleaned_response = response.strip()
+            if cleaned_response.startswith('```'):
+                # 첫번째 ```와 마지막 ``` 제거
+                lines = cleaned_response.split('\n')
+                if len(lines) > 2 and lines[0].startswith('```') and lines[-1].strip() == '```':
+                    cleaned_response = '\n'.join(lines[1:-1])
+                elif len(lines) > 1 and lines[0].startswith('```'):
+                    # 마지막 ```가 별도 라인에 없는 경우
+                    cleaned_response = '\n'.join(lines[1:])
+                    if cleaned_response.endswith('```'):
+                        cleaned_response = cleaned_response[:-3]
+
+            try:
+                result = json.loads(cleaned_response.strip())
+
+                # 새로운 JSON 구조 처리 (제목 + 검색어)
+                if isinstance(result, dict) and "titles_with_search" in result:
+                    titles_data = result["titles_with_search"]
+                    if isinstance(titles_data, list) and len(titles_data) > 0:
+                        # 제목과 검색어가 함께 있는 구조
+                        clean_data = []
+                        for item in titles_data[:10]:  # 최대 10개
+                            if isinstance(item, dict) and "title" in item and "search_query" in item:
+                                title = str(item["title"]).strip()
+                                search_query = str(item["search_query"]).strip()
+                                if title and search_query:
+                                    clean_data.append({
+                                        "title": title,
+                                        "search_query": search_query
+                                    })
+
+                        if clean_data:
+                            logger.info(f"제목 추천 완료: {len(clean_data)}개 (제목+검색어)")
+                            return clean_data
+
+                # 기존 JSON 구조 처리 (제목만)
+                elif isinstance(result, dict) and "titles" in result:
+                    titles = result["titles"]
+                elif isinstance(result, list):
+                    titles = result
+                else:
+                    # JSON이 아닌 경우 문자열에서 제목 추출 시도
+                    titles = self._extract_titles_from_text(response)
+
+                # 기존 제목 리스트 검증 및 정리 (하위 호환성)
+                if isinstance(titles, list) and len(titles) > 0:
+                    # 문자열만 추출하고 빈 값 제거
+                    clean_titles = [str(title).strip() for title in titles if str(title).strip()]
+                    logger.info(f"제목 추천 완료: {len(clean_titles)}개 (제목만)")
+                    return clean_titles[:10]  # 최대 10개
+                else:
+                    logger.warning("유효한 제목이 추출되지 않음")
+                    return []
+
+            except json.JSONDecodeError:
+                logger.warning("JSON 파싱 실패, 텍스트에서 제목 추출 시도")
+                titles = self._extract_titles_from_text(response)
+                return titles[:10] if titles else []
+
+        except Exception as e:
+            logger.error(f"제목 추천 AI 처리 실패: {e}")
+            raise BusinessError(f"제목 추천 생성 실패: {e}")
+
+    def _extract_titles_from_text(self, text: str) -> list:
+        """텍스트에서 제목 리스트 추출 (JSON 파싱 실패시 폴백)"""
+        try:
+            titles = []
+            lines = text.strip().split('\n')
+
+            for line in lines:
+                line = line.strip()
+                # 번호나 기호로 시작하는 라인에서 제목 추출
+                if line and (
+                    line[0].isdigit() or
+                    line.startswith('-') or
+                    line.startswith('•') or
+                    line.startswith('*')
+                ):
+                    # 번호나 기호 제거
+                    clean_title = line
+                    for prefix in ['1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.', '10.', '-', '•', '*']:
+                        if clean_title.startswith(prefix):
+                            clean_title = clean_title[len(prefix):].strip()
+                            break
+
+                    if clean_title:
+                        titles.append(clean_title)
+
+            return titles[:10]  # 최대 10개
+
+        except Exception as e:
+            logger.error(f"텍스트에서 제목 추출 실패: {e}")
+            return []
+
+    def select_blog_titles_with_ai(self, target_title: str, search_keyword: str, main_keyword: str, content_type: str, blog_titles: List[str]) -> List[Dict]:
+        """AI를 사용하여 블로그 제목들 중 관련도 높은 상위 10개 선별"""
+        try:
+            logger.info(f"AI 블로그 제목 선별 시작 - 대상: {len(blog_titles)}개 제목")
+
+            # ai_prompts.py에서 제목 선별 프롬프트 생성
+            from .ai_prompts import BlogPromptComponents
+            selection_prompt = BlogPromptComponents.generate_blog_title_selection_prompt(
+                target_title, search_keyword, main_keyword, content_type, blog_titles
+            )
+
+            # 정보요약 AI를 사용하여 제목 선별 (기존 API 재사용)
+            messages = [{"role": "user", "content": selection_prompt}]
+            response = self._call_summary_ai(messages, "블로그 제목 선별")
+
+            # JSON 응답 파싱
+            import json
+
+            # 마크다운 코드 블록 제거
+            cleaned_response = response.strip()
+            if cleaned_response.startswith('```'):
+                lines = cleaned_response.split('\n')
+                if len(lines) > 2 and lines[0].startswith('```') and lines[-1].strip() == '```':
+                    cleaned_response = '\n'.join(lines[1:-1])
+                elif len(lines) > 1 and lines[0].startswith('```'):
+                    cleaned_response = '\n'.join(lines[1:])
+                    if cleaned_response.endswith('```'):
+                        cleaned_response = cleaned_response[:-3]
+
+            try:
+                result = json.loads(cleaned_response.strip())
+
+                if isinstance(result, dict) and "selected_titles" in result:
+                    selected_data = result["selected_titles"]
+                    if isinstance(selected_data, list) and len(selected_data) > 0:
+                        # 선별된 제목 데이터 검증 및 정리
+                        clean_selections = []
+                        for item in selected_data[:10]:  # 최대 10개
+                            if isinstance(item, dict) and all(key in item for key in ["rank", "original_index", "title"]):
+                                rank = item.get("rank", 0)
+                                original_index = item.get("original_index", 0)
+                                title = str(item.get("title", "")).strip()
+                                reason = str(item.get("relevance_reason", "")).strip()
+
+                                # 인덱스 유효성 검사 (1-based에서 0-based로 변환)
+                                if 1 <= original_index <= len(blog_titles) and title:
+                                    clean_selections.append({
+                                        "rank": rank,
+                                        "original_index": original_index - 1,  # 0-based로 변환
+                                        "title": title,
+                                        "relevance_reason": reason
+                                    })
+
+                        if clean_selections:
+                            logger.info(f"AI 제목 선별 완료: {len(clean_selections)}개 선별됨")
+                            return clean_selections
+
+                logger.warning("AI 응답에서 유효한 제목 선별 결과를 찾을 수 없음")
+                return []
+
+            except json.JSONDecodeError as e:
+                logger.warning(f"JSON 파싱 실패: {e}")
+                return []
+
+        except Exception as e:
+            logger.error(f"AI 제목 선별 실패: {e}")
+            raise BusinessError(f"AI 제목 선별 처리 실패: {str(e)}")
+
     def generate_blog_content(self, prompt: str) -> str:
         """API 설정에서 선택된 AI를 사용하여 블로그 콘텐츠 생성"""
         try:

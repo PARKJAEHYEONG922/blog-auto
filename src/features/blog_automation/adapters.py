@@ -4,7 +4,7 @@
 import time
 import random
 import re
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from functools import wraps
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -2456,8 +2456,8 @@ class NaverBlogAdapter:
         try:
             logger.info(f"📊 상위 블로그 통합 분석 시작: '{keyword}' (광고 제외 상위 {max_results}개)")
             
-            # 1단계: 블로그 검색 (광고 글 필터링을 위해 더 많이 검색)
-            search_count = max_results * 2  # 광고 글이 있을 수 있으니 2배 많이 검색
+            # 1단계: 블로그 검색 (광고 글 필터링을 위해 충분히 많이 검색)
+            search_count = max(15, max_results * 5)  # 최소 15개, 또는 5배 많이 검색 (광고 필터링 여유분)
             logger.info(f"🔍 1단계: 블로그 검색 중... (광고 필터링을 위해 {search_count}개 검색)")
             blog_list = self.search_top_blogs(keyword, search_count)
             
@@ -2951,6 +2951,124 @@ class NaverBlogAdapter:
                 self.helper.driver.switch_to.default_content()
             except:
                 pass
+
+    def get_blog_titles_for_ai_selection(self, keyword: str, max_results: int = 30) -> List[Dict]:
+        """AI 선별을 위한 블로그 제목 30개 수집 (제목과 URL만)"""
+        try:
+            logger.info(f"🔍 AI 선별용 블로그 제목 수집 시작: '{keyword}' (최대 {max_results}개)")
+
+            # 분석 전용 브라우저 시작 (초기화되지 않은 경우)
+            if not hasattr(self.helper, 'driver') or not self.helper.driver:
+                logger.info("🔧 분석 전용 브라우저 시작")
+                self.start_browser_for_analysis()
+
+            # Selenium으로 블로그 검색 (제목과 URL만 수집)
+            blog_titles = self._search_blogs_for_titles_only(keyword, max_results)
+
+            if not blog_titles:
+                logger.warning("❌ 블로그 제목 검색 결과 없음")
+                return []
+
+            logger.info(f"✅ 블로그 제목 수집 완료: {len(blog_titles)}개")
+            return blog_titles
+
+        except Exception as e:
+            logger.error(f"AI 선별용 블로그 제목 수집 실패: {e}")
+            return []
+
+    def _search_blogs_for_titles_only(self, keyword: str, max_results: int = 30) -> List[Dict]:
+        """제목과 URL만 빠르게 수집하는 경량화된 블로그 검색"""
+        try:
+            # URL 인코딩 (기존 검색과 동일)
+            import urllib.parse
+            encoded_keyword = urllib.parse.quote(keyword)
+            search_url = f"https://search.naver.com/search.naver?ssc=tab.blog.all&sm=tab_jum&query={encoded_keyword}"
+            logger.info(f"블로그 검색 페이지로 이동: {search_url}")
+            self.helper.driver.get(search_url)
+
+            time.sleep(2)  # 페이지 로딩 대기
+
+            blogs = []
+            collected_urls = set()  # 중복 URL 방지
+
+            # 여러 페이지에서 제목 수집 (최대 3페이지)
+            for page in range(1, 4):  # 1, 2, 3 페이지
+                try:
+                    if page > 1:
+                        # 다음 페이지로 이동 (네이버 검색은 start 파라미터 사용)
+                        start_num = (page - 1) * 10 + 1
+                        next_page_url = f"https://search.naver.com/search.naver?ssc=tab.blog.all&sm=tab_jum&query={encoded_keyword}&start={start_num}"
+                        logger.info(f"📄 {page}페이지로 이동")
+                        self.helper.driver.get(next_page_url)
+                        time.sleep(2)
+
+                    # 블로그 포스트 요소들 찾기 (기존 검색과 동일한 셀렉터 사용)
+                    post_elements = self.helper.driver.find_elements(By.CSS_SELECTOR, "div.title_area")
+
+                    if not post_elements:
+                        logger.warning(f"📄 {page}페이지에서 블로그 요소를 찾을 수 없음")
+                        break
+
+                    page_blogs = 0
+                    for element in post_elements:
+                        try:
+                            if len(blogs) >= max_results:
+                                break
+
+                            # 제목과 링크 추출 (기존 검색과 동일한 방식)
+                            try:
+                                title_link = element.find_element(By.CSS_SELECTOR, 'a.title_link')
+                            except:
+                                continue
+
+                            if not title_link:
+                                continue
+
+                            # 제목과 URL 추출
+                            title = title_link.text.strip()
+                            url = title_link.get_attribute("href")
+
+                            # 유효성 검사
+                            if not title or not url or url in collected_urls:
+                                continue
+
+                            # 광고 링크 제외 (기존 검색과 동일)
+                            if 'ader.naver.com' in url:
+                                logger.debug(f"광고 링크 스킵: {url[:50]}...")
+                                continue
+
+                            # 네이버 블로그 URL인지 확인
+                            if "blog.naver.com" not in url:
+                                continue
+
+                            collected_urls.add(url)
+                            blogs.append({
+                                'rank': len(blogs) + 1,
+                                'title': title,
+                                'url': url
+                            })
+
+                            page_blogs += 1
+
+                        except Exception as e:
+                            logger.debug(f"개별 블로그 요소 처리 실패: {e}")
+                            continue
+
+                    logger.info(f"📄 {page}페이지에서 {page_blogs}개 제목 수집 (총 {len(blogs)}개)")
+
+                    if len(blogs) >= max_results:
+                        break
+
+                except Exception as e:
+                    logger.warning(f"📄 {page}페이지 처리 실패: {e}")
+                    break
+
+            logger.info(f"🎯 최종 블로그 제목 수집 완료: {len(blogs)}개")
+            return blogs
+
+        except Exception as e:
+            logger.error(f"블로그 제목 검색 실패: {e}")
+            return []
 
 
 class TistoryAdapter:

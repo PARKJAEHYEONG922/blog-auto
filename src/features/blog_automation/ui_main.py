@@ -2,8 +2,8 @@
 블로그 자동화 모듈의 메인 UI
 """
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QComboBox, QLineEdit, QCheckBox, QFrame
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QComboBox, QLineEdit, QCheckBox, QFrame, QStackedWidget, QTabWidget
 )
 from PySide6.QtCore import Qt
 import traceback
@@ -21,7 +21,10 @@ from src.foundation.exceptions import BusinessError, ValidationError
 from .service import BlogAutomationService
 from .models import BlogPlatform, LoginStatus
 from .worker import create_blog_login_worker, WorkerThread
-from .ui_table import BlogWriteTableUI
+# from .ui_table import BlogWriteTableUI  # 기존 단일 파일 (새로운 step 시스템으로 교체)
+from .ui_table1 import BlogAutomationStep1UI
+from .ui_table2 import BlogAutomationStep2UI
+from .ui_table3 import BlogAutomationStep3UI
 
 
 class UIDialogHelper:
@@ -191,17 +194,160 @@ class BlogAutomationMainUI(QWidget):
         return panel
     
     def create_right_panel(self):
-        """오른쪽 패널 생성 (블로그 분석 및 작성)"""
+        """오른쪽 패널 생성 (Step 기반 블로그 자동화)"""
         panel = QWidget()
         layout = QVBoxLayout()
         layout.setSpacing(tokens.spx(tokens.GAP_16))
 
-        # 블로그 글쓰기 테이블 UI 추가
-        self.blog_table_ui = BlogWriteTableUI(parent=self)
-        layout.addWidget(self.blog_table_ui)
+        # Step 워크플로우만 표시 (탭 없이)
+        self.step_widget = self.create_step_workflow()
+        layout.addWidget(self.step_widget)
 
         panel.setLayout(layout)
         return panel
+
+    def create_step_workflow(self):
+        """Step 기반 워크플로우 생성"""
+        workflow_widget = QWidget()
+        layout = QVBoxLayout()
+
+        # Step 관리를 위한 QStackedWidget
+        self.step_stack = QStackedWidget()
+
+        # 현재 step과 데이터 관리
+        self.current_step = 1
+        self.step_data = {
+            'step1': {},
+            'step2': {},
+            'step3': {}
+        }
+
+        # Step 위젯들 생성 및 시그널 연결
+        self.setup_steps()
+
+        layout.addWidget(self.step_stack)
+        workflow_widget.setLayout(layout)
+        return workflow_widget
+
+    def setup_steps(self):
+        """모든 Step 위젯 설정 및 시그널 연결"""
+        # Step 1 생성
+        self.step1_widget = BlogAutomationStep1UI(parent=self)
+        self.step1_widget.step_completed.connect(self.on_step1_completed)
+        self.step_stack.addWidget(self.step1_widget)
+
+        # 초기에는 Step 1만 표시
+        self.step_stack.setCurrentWidget(self.step1_widget)
+
+    def on_step1_completed(self, step1_data: dict):
+        """Step 1 완료 -> Step 2로 이동"""
+        try:
+            logger.info("Step 1 완료, Step 2로 이동")
+
+            # Step 1 데이터 저장
+            self.step_data['step1'] = step1_data
+
+            # Step 2 위젯 생성 (Step 1 데이터 전달)
+            self.step2_widget = BlogAutomationStep2UI(step1_data, parent=self)
+            self.step2_widget.step_completed.connect(self.on_step2_completed)
+            self.step2_widget.content_generated.connect(self.on_content_generated)
+
+            # Step 2를 스택에 추가하고 표시
+            self.step_stack.addWidget(self.step2_widget)
+            self.step_stack.setCurrentWidget(self.step2_widget)
+            self.current_step = 2
+
+            logger.info("Step 2 활성화됨")
+
+        except Exception as e:
+            logger.error(f"Step 1->2 이동 오류: {e}")
+
+    def on_step2_completed(self, step2_data: dict):
+        """Step 2 완료 -> Step 3으로 이동"""
+        try:
+            logger.info("Step 2 완료, Step 3으로 이동")
+
+            # Step 2 데이터 저장
+            self.step_data['step2'] = step2_data
+
+            # Step 3 위젯 생성 (Step 1, 2 데이터 전달)
+            self.step3_widget = BlogAutomationStep3UI(
+                self.step_data['step1'],
+                self.step_data['step2'],
+                parent=self
+            )
+            self.step3_widget.publish_completed.connect(self.on_publish_completed)
+
+            # Step 3을 스택에 추가하고 표시
+            self.step_stack.addWidget(self.step3_widget)
+            self.step_stack.setCurrentWidget(self.step3_widget)
+            self.current_step = 3
+
+            logger.info("Step 3 활성화됨")
+
+        except Exception as e:
+            logger.error(f"Step 2->3 이동 오류: {e}")
+
+    def on_content_generated(self, generated_content: str):
+        """AI 글 생성 완료시 처리 (Step 2에서 자체적으로 처리)"""
+        try:
+            logger.info("AI 글 생성 완료")
+            # Step 2에서 자체적으로 결과를 표시하므로 여기서는 로깅만
+
+        except Exception as e:
+            logger.error(f"컨텐츠 생성 완료 처리 오류: {e}")
+
+    def on_publish_completed(self, success: bool, message: str):
+        """발행 완료 처리"""
+        try:
+            logger.info(f"발행 완료: {success}, 메시지: {message}")
+
+            if success:
+                UIDialogHelper.show_success_dialog(
+                    self, "발행 완료", f"블로그 발행이 완료되었습니다!\n{message}"
+                )
+            else:
+                UIDialogHelper.show_info_dialog(
+                    self, "발행 정보", message
+                )
+
+        except Exception as e:
+            logger.error(f"발행 완료 처리 오류: {e}")
+
+
+    def load_step(self, step_number: int):
+        """특정 step으로 이동 (이전/다음 버튼에서 호출)"""
+        try:
+            if step_number == 1:
+                if hasattr(self, 'step1_widget'):
+                    self.step_stack.setCurrentWidget(self.step1_widget)
+                    self.current_step = 1
+                    logger.info("Step 1으로 이동")
+                else:
+                    logger.warning("Step 1 위젯이 없습니다")
+
+            elif step_number == 2:
+                if hasattr(self, 'step2_widget'):
+                    self.step_stack.setCurrentWidget(self.step2_widget)
+                    self.current_step = 2
+                    logger.info("Step 2로 이동")
+                else:
+                    logger.warning("Step 2 위젯이 없습니다. Step 1을 먼저 완료하세요.")
+
+            elif step_number == 3:
+                if hasattr(self, 'step3_widget'):
+                    self.step_stack.setCurrentWidget(self.step3_widget)
+                    self.current_step = 3
+                    logger.info("Step 3으로 이동")
+                else:
+                    logger.warning("Step 3 위젯이 없습니다. Step 2를 먼저 완료하세요.")
+
+        except Exception as e:
+            logger.error(f"Step {step_number} 이동 오류: {e}")
+
+    def get_current_step_data(self) -> dict:
+        """현재까지의 모든 step 데이터 반환"""
+        return self.step_data.copy()
     
     def create_platform_login_card(self) -> ModernCard:
         """플랫폼 선택 + 로그인 통합 카드 생성"""
