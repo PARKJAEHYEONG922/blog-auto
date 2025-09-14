@@ -2989,8 +2989,8 @@ class NaverBlogAdapter:
             blogs = []
             collected_urls = set()  # 중복 URL 방지
 
-            # 여러 페이지에서 제목 수집 (최대 3페이지)
-            for page in range(1, 4):  # 1, 2, 3 페이지
+            # 1페이지에서만 제목 수집 (다음 페이지로 넘어가지 않음)
+            for page in range(1, 2):  # 1 페이지만
                 try:
                     if page > 1:
                         # 다음 페이지로 이동 (네이버 검색은 start 파라미터 사용)

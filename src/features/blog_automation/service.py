@@ -271,8 +271,11 @@ class BlogAutomationService:
             logger.info("🔍 1단계: 블로그 제목 30개 수집 중...")
             blog_titles_data = self.adapter.get_blog_titles_for_ai_selection(cleaned_keyword, 30)
 
-            if not blog_titles_data:
-                logger.warning(f"'{cleaned_keyword}' 검색 결과가 없습니다. 메인키워드로 재시도...")
+            if not blog_titles_data or len(blog_titles_data) < 30:
+                if blog_titles_data:
+                    logger.warning(f"'{cleaned_keyword}' 검색 결과 부족: {len(blog_titles_data)}개. 메인키워드로 재시도...")
+                else:
+                    logger.warning(f"'{cleaned_keyword}' 검색 결과가 없습니다. 메인키워드로 재시도...")
 
                 # 폴백 1: 메인키워드만으로 다시 검색
                 main_keyword_cleaned = clean_keyword(main_keyword)
