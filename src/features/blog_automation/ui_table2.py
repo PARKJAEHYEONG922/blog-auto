@@ -378,26 +378,25 @@ class BlogAutomationStep2UI(QWidget):
         tab = QWidget()
         layout = QVBoxLayout()
 
-        # 테이블 위젯 생성 (원본과 동일한 9컬럼 구조)
-        self.blog_table = QTableWidget(0, 9)  # 0행 9열 (원본과 동일)
+        # 테이블 위젯 생성 (8컬럼 구조, 순위 제거)
+        self.blog_table = QTableWidget(0, 8)  # 0행 8열 (순위 제거)
         logger.info(f"📊 블로그 테이블 위젯 생성됨: {id(self.blog_table)}")
         self.blog_table.setHorizontalHeaderLabels([
-            "순위", "제목", "내용", "글자수", "이미지수", "GIF수", "동영상수", "태그", "URL"
+            "제목", "내용", "글자수", "이미지수", "GIF수", "동영상수", "태그", "URL"
         ])
 
         # 테이블 설정 (원본과 동일)
         header = self.blog_table.horizontalHeader()
 
-        # 고정 너비 설정 (원본 ui_result.py와 동일)
-        self.blog_table.setColumnWidth(0, 50)   # 순위
-        self.blog_table.setColumnWidth(1, 250)  # 제목
-        self.blog_table.setColumnWidth(2, 350)  # 내용
-        self.blog_table.setColumnWidth(3, 80)   # 글자수
-        self.blog_table.setColumnWidth(4, 80)   # 이미지수
-        self.blog_table.setColumnWidth(5, 70)   # GIF수
-        self.blog_table.setColumnWidth(6, 80)   # 동영상수
-        self.blog_table.setColumnWidth(7, 350)  # 태그
-        self.blog_table.setColumnWidth(8, 200)  # URL
+        # 고정 너비 설정 (순위 제거로 인덱스 조정)
+        self.blog_table.setColumnWidth(0, 250)  # 제목
+        self.blog_table.setColumnWidth(1, 350)  # 내용
+        self.blog_table.setColumnWidth(2, 80)   # 글자수
+        self.blog_table.setColumnWidth(3, 80)   # 이미지수
+        self.blog_table.setColumnWidth(4, 70)   # GIF수
+        self.blog_table.setColumnWidth(5, 80)   # 동영상수
+        self.blog_table.setColumnWidth(6, 350)  # 태그
+        self.blog_table.setColumnWidth(7, 200)  # URL
 
         # 가로 스크롤 활성화 (원본과 동일)
         header.setSectionResizeMode(QHeaderView.Interactive)
@@ -454,14 +453,11 @@ class BlogAutomationStep2UI(QWidget):
             self.blog_table.setRowCount(len(analyzed_blogs))
 
             for row, blog in enumerate(analyzed_blogs):
-                # 순위 (원본과 동일)
-                self.blog_table.setItem(row, 0, QTableWidgetItem(str(blog['rank'])))
-
-                # 제목 (원본과 동일)
+                # 제목 (인덱스 0으로 이동)
                 title = blog['title'][:50] + '...' if len(blog['title']) > 50 else blog['title']
-                self.blog_table.setItem(row, 1, QTableWidgetItem(title))
+                self.blog_table.setItem(row, 0, QTableWidgetItem(title))
 
-                # 내용 (크롤링된 실제 콘텐츠 - 원본과 동일)
+                # 내용 (인덱스 1로 이동)
                 text_content = blog.get('text_content', '내용 없음')
                 if text_content and text_content != '분석 실패':
                     # 내용을 200자로 제한하여 표시
@@ -474,21 +470,21 @@ class BlogAutomationStep2UI(QWidget):
                 content_item = QTableWidgetItem(display_content)
                 content_item.setToolTip(text_content if text_content and text_content != '분석 실패' else '내용 분석 실패')
                 content_item.setTextAlignment(Qt.AlignTop | Qt.AlignLeft)
-                self.blog_table.setItem(row, 2, content_item)
+                self.blog_table.setItem(row, 1, content_item)
 
-                # 글자수 (원본과 동일)
-                self.blog_table.setItem(row, 3, QTableWidgetItem(str(blog['content_length'])))
+                # 글자수 (인덱스 2로 이동)
+                self.blog_table.setItem(row, 2, QTableWidgetItem(str(blog['content_length'])))
 
-                # 이미지 수 (원본과 동일)
-                self.blog_table.setItem(row, 4, QTableWidgetItem(str(blog['image_count'])))
+                # 이미지 수 (인덱스 3으로 이동)
+                self.blog_table.setItem(row, 3, QTableWidgetItem(str(blog['image_count'])))
 
-                # GIF 수 (원본과 동일)
-                self.blog_table.setItem(row, 5, QTableWidgetItem(str(blog['gif_count'])))
+                # GIF 수 (인덱스 4로 이동)
+                self.blog_table.setItem(row, 4, QTableWidgetItem(str(blog['gif_count'])))
 
-                # 동영상 수 (원본과 동일)
-                self.blog_table.setItem(row, 6, QTableWidgetItem(str(blog['video_count'])))
+                # 동영상 수 (인덱스 5로 이동)
+                self.blog_table.setItem(row, 5, QTableWidgetItem(str(blog['video_count'])))
 
-                # 태그 (두 줄로 표시 - 원본과 동일)
+                # 태그 (인덱스 6으로 이동)
                 tags = blog.get('tags', [])
                 if tags:
                     # 태그를 두 줄로 나누어 표시
@@ -504,11 +500,11 @@ class BlogAutomationStep2UI(QWidget):
                 tag_item = QTableWidgetItem(tags_text)
                 tag_item.setToolTip(', '.join(tags) if tags else '태그 없음')
                 tag_item.setTextAlignment(Qt.AlignTop | Qt.AlignLeft)
-                self.blog_table.setItem(row, 7, tag_item)
+                self.blog_table.setItem(row, 6, tag_item)
 
-                # URL (단축 - 원본과 동일)
+                # URL (인덱스 7로 이동)
                 url = blog['url'][:50] + '...' if len(blog['url']) > 50 else blog['url']
-                self.blog_table.setItem(row, 8, QTableWidgetItem(url))
+                self.blog_table.setItem(row, 7, QTableWidgetItem(url))
 
             logger.info(f"테이블에 {len(analyzed_blogs)}개 블로그 데이터 표시 완료")
 
@@ -992,12 +988,12 @@ class BlogAutomationStep2UI(QWidget):
             # 정보요약 프롬프트 생성 및 탭 업데이트
             from .ai_prompts import BlogSummaryPrompts
 
-            # 분석된 블로그 내용을 결합
+            # 분석된 블로그 내용을 결합 (순위 없이)
             combined_content = ""
-            for i, blog in enumerate(self.analyzed_blogs[:3], 1):  # 상위 3개만 사용
+            for i, blog in enumerate(self.analyzed_blogs[:3], 1):  # 3개만 사용
                 title = blog.get('title', '제목 없음')
                 content = blog.get('text_content', '내용 없음')
-                combined_content += f"=== 블로그 {i}: {title} ===\n{content}\n\n"
+                combined_content += f"=== 참고 블로그 {i}: {title} ===\n{content}\n\n"
 
             main_keyword = self.step1_data.get('main_keyword', '')
             ai_settings = self.step1_data.get('ai_settings', {})
@@ -1013,11 +1009,17 @@ class BlogAutomationStep2UI(QWidget):
             # 3단계: 정보요약 AI 호출
             logger.info("3단계: 정보요약 AI를 호출합니다...")
 
-            # 여기서 실제 정보요약 AI를 호출해야 함 (service 사용)
+            # 3단계: 실제 정보요약 AI 호출
             if hasattr(self.parent, 'service') and self.parent.service:
-                # TODO: 실제 정보요약 AI 호출 로직 구현
-                # 임시로 다음 단계로 진행
-                self.on_summary_ai_completed("임시 정보요약 결과")
+                try:
+                    summary_result = self.parent.service.generate_content_summary(
+                        combined_content, main_keyword, content_type
+                    )
+                    logger.info(f"✅ 정보요약 AI 완료: {len(summary_result)}자")
+                    self.on_summary_ai_completed(summary_result)
+                except Exception as ai_error:
+                    logger.error(f"❌ 정보요약 AI 호출 실패: {ai_error}")
+                    raise Exception(f"정보요약 AI 호출 실패: {str(ai_error)}")
             else:
                 raise Exception("AI 서비스가 설정되지 않았습니다.")
 
@@ -1064,11 +1066,15 @@ class BlogAutomationStep2UI(QWidget):
             # 5단계: 글쓰기 AI 호출
             logger.info("5단계: 글쓰기 AI가 블로그 글을 생성합니다...")
 
-            # 여기서 실제 글쓰기 AI를 호출해야 함
+            # 5단계: 실제 글쓰기 AI 호출
             if hasattr(self.parent, 'service') and self.parent.service:
-                # TODO: 실제 글쓰기 AI 호출 로직 구현
-                # 임시로 완료 처리
-                self.on_writing_ai_completed("임시 생성된 블로그 글 내용")
+                try:
+                    generated_content = self.parent.service.generate_blog_content(writing_prompt)
+                    logger.info(f"✅ 글쓰기 AI 완료: {len(generated_content)}자")
+                    self.on_writing_ai_completed(generated_content)
+                except Exception as ai_error:
+                    logger.error(f"❌ 글쓰기 AI 호출 실패: {ai_error}")
+                    raise Exception(f"글쓰기 AI 호출 실패: {str(ai_error)}")
             else:
                 raise Exception("AI 서비스가 설정되지 않았습니다.")
 
