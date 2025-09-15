@@ -297,6 +297,18 @@ class BlogAutomationMainUI(QWidget):
                 logger.info("제목이 동일하므로 기존 Step2 위젯 재사용")
                 # Step1 데이터만 업데이트 (검색어 수정 등을 반영하기 위해)
                 self.step2_widget.update_step1_data(step1_data)
+                
+                # 시그널 재연결 (기존 위젯 재사용 시 필요)
+                try:
+                    # 기존 연결 해제 후 재연결 (중복 방지)
+                    self.step2_widget.step_completed.disconnect()
+                    self.step2_widget.content_generated.disconnect()
+                except:
+                    pass  # 연결이 없었다면 무시
+                    
+                self.step2_widget.step_completed.connect(self.on_step2_completed)
+                self.step2_widget.content_generated.connect(self.on_content_generated)
+                logger.info("Step2 위젯 시그널 재연결 완료")
 
             # Step 2 표시
             self.step_stack.setCurrentWidget(self.step2_widget)
@@ -311,27 +323,36 @@ class BlogAutomationMainUI(QWidget):
         """Step 2 완료 -> Step 3으로 이동"""
         try:
             logger.info("Step 2 완료, Step 3으로 이동")
+            logger.info(f"Step2 데이터: {step2_data}")
 
             # Step 2 데이터 저장
             self.step_data['step2'] = step2_data
 
             # Step 3 위젯 생성 (Step 1, 2 데이터 전달)
+            logger.info("Step 3 위젯 생성 시작...")
             self.step3_widget = BlogAutomationStep3UI(
                 self.step_data['step1'],
                 self.step_data['step2'],
                 parent=self
             )
+            logger.info("Step 3 위젯 생성 완료")
+            
             self.step3_widget.publish_completed.connect(self.on_publish_completed)
+            logger.info("Step 3 시그널 연결 완료")
 
             # Step 3을 스택에 추가하고 표시
             self.step_stack.addWidget(self.step3_widget)
+            logger.info("Step 3 스택에 추가 완료")
+            
             self.step_stack.setCurrentWidget(self.step3_widget)
             self.current_step = 3
+            logger.info("Step 3 화면 전환 완료")
 
-            logger.info("Step 3 활성화됨")
+            logger.info("✅ Step 3 활성화됨")
 
         except Exception as e:
-            logger.error(f"Step 2->3 이동 오류: {e}")
+            logger.error(f"❌ Step 2->3 이동 오류: {e}")
+            logger.error(f"오류 상세: {traceback.format_exc()}")
 
     def on_content_generated(self, generated_content: str):
         """AI 글 생성 완료시 처리 (Step 2에서 자체적으로 처리)"""
