@@ -354,48 +354,137 @@ class BlogAutomationStep3UI(QWidget):
             return content  # 오류 시 원본 반환
 
     def apply_markdown_fonts(self, content: str) -> str:
-        """마크다운 기반 폰트 크기 적용 (HTML 변환)"""
+        """마크다운 기반 폰트 크기 적용 + 네이버 블로그 자동화 준비 (HTML 변환)"""
         try:
             import re
             
             html_lines = []
             lines = content.split('\n')
             
-            for line in lines:
+            # 표 처리를 위한 상태 변수
+            in_table = False
+            table_lines = []
+            
+            i = 0
+            while i < len(lines):
+                line = lines[i]
+                
                 if not line.strip():
+                    if in_table:
+                        # 표가 끝났으면 처리
+                        html_lines.append(self.convert_markdown_table_to_naver_format(table_lines))
+                        table_lines = []
+                        in_table = False
                     html_lines.append('<br>')
+                    i += 1
                     continue
                 
-                # ## 대제목 - mega 폰트 (18px) + ## 제거
+                # 마크다운 표 감지
+                if line.strip().startswith('|') and line.strip().endswith('|') and line.strip().count('|') >= 3:
+                    if not in_table:
+                        in_table = True
+                    table_lines.append(line)
+                    i += 1
+                    continue
+                
+                # 표가 진행 중이었는데 표가 아닌 라인을 만나면 표 처리
+                if in_table:
+                    html_lines.append(self.convert_markdown_table_to_naver_format(table_lines))
+                    table_lines = []
+                    in_table = False
+                
+                # ## 대제목 - mega 폰트 (18px → 네이버 24px) + ## 제거
                 if line.strip().startswith('## '):
                     title_text = line.strip()[3:].strip()  # ## 제거
-                    html_lines.append(f'<div style="font-size: {tokens.get_font_size("mega")}px; font-weight: 700; margin: 8px 0; color: {ModernStyle.COLORS["text_primary"]};">{title_text}</div>')
+                    html_lines.append(f'<div data-naver-font="24" style="font-size: {tokens.get_font_size("mega")}px; font-weight: 700; margin: 8px 0; color: {ModernStyle.COLORS["text_primary"]};">{title_text}</div>')
+                    i += 1
                     continue
                 
-                # ### 소제목 - large 폰트 (16px) + ### 제거
-                # ### **강조** 형태도 소제목 폰트로 처리
+                # ### 소제목 - large 폰트 (16px → 네이버 20px) + ### 제거
                 elif line.strip().startswith('### '):
                     subtitle_text = line.strip()[4:].strip()  # ### 제거
-                    html_lines.append(f'<div style="font-size: {tokens.get_font_size("large")}px; font-weight: 600; margin: 6px 0; color: {ModernStyle.COLORS["text_primary"]};">{subtitle_text}</div>')
+                    html_lines.append(f'<div data-naver-font="20" style="font-size: {tokens.get_font_size("large")}px; font-weight: 600; margin: 6px 0; color: {ModernStyle.COLORS["text_primary"]};">{subtitle_text}</div>')
+                    i += 1
                     continue
                 
-                # 일반 라인에서 **강조** 처리 - super_normal 폰트 (15px)
+                # 일반 라인에서 **강조** 처리 - super_normal 폰트 (15px → 네이버 18px)
                 else:
                     # **텍스트** 패턴 찾기
                     processed_line = re.sub(
                         r'\*\*(.*?)\*\*',
-                        lambda m: f'<span style="font-size: {tokens.get_font_size("super_normal")}px; font-weight: 600; color: {ModernStyle.COLORS["text_primary"]};">{m.group(1)}</span>',
+                        lambda m: f'<span data-naver-font="18" style="font-size: {tokens.get_font_size("super_normal")}px; font-weight: 600; color: {ModernStyle.COLORS["text_primary"]};">{m.group(1)}</span>',
                         line
                     )
                     
-                    # 일반 텍스트 - normal 폰트 (14px)
-                    html_lines.append(f'<div style="font-size: {tokens.get_font_size("normal")}px; line-height: 1.6; margin: 2px 0; color: {ModernStyle.COLORS["text_primary"]};">{processed_line}</div>')
+                    # 일반 텍스트 - normal 폰트 (14px → 네이버 16px)
+                    html_lines.append(f'<div data-naver-font="16" style="font-size: {tokens.get_font_size("normal")}px; line-height: 1.6; margin: 2px 0; color: {ModernStyle.COLORS["text_primary"]};">{processed_line}</div>')
+                
+                i += 1
+            
+            # 마지막에 표가 남아있다면 처리
+            if in_table and table_lines:
+                html_lines.append(self.convert_markdown_table_to_naver_format(table_lines))
             
             return '\n'.join(html_lines)
             
         except Exception as e:
             logger.error(f"마크다운 폰트 적용 오류: {e}")
             return content
+
+    def convert_markdown_table_to_naver_format(self, table_lines: list) -> str:
+        """마크다운 표를 네이버 블로그 자동화 형식으로 변환"""
+        try:
+            if not table_lines:
+                return ""
+            
+            # 표 데이터 파싱
+            table_data = []
+            for line in table_lines:
+                if '---' in line:  # 구분선 스킵
+                    continue
+                
+                # | 기호로 분리하고 양쪽 공백 제거
+                cells = [cell.strip() for cell in line.split('|')[1:-1]]  # 양쪽 빈 요소 제거
+                if cells:
+                    table_data.append(cells)
+            
+            if not table_data:
+                return ""
+            
+            rows = len(table_data)
+            cols = len(table_data[0]) if table_data else 0
+            
+            # 네이버 블로그 자동화를 위한 데이터 구조 생성
+            html_parts = []
+            html_parts.append(f'<div class="naver-auto-table" data-table-rows="{rows}" data-table-cols="{cols}">')
+            
+            # 시각적 표 표시 (Step 3 에디터용)
+            html_parts.append('<table style="border-collapse: collapse; width: 100%; margin: 10px 0; border: 1px solid #ddd;">')
+            
+            for row_idx, row_data in enumerate(table_data):
+                # 헤더 행 스타일
+                if row_idx == 0:
+                    html_parts.append('<tr style="background-color: #f8f9fa;">')
+                else:
+                    html_parts.append('<tr>')
+                
+                for col_idx, cell_data in enumerate(row_data):
+                    # 자동화 데이터 속성 추가
+                    cell_html = f'<td data-row="{row_idx}" data-col="{col_idx}" data-naver-font="16" style="border: 1px solid #ddd; padding: 12px; text-align: center;">{cell_data}</td>'
+                    html_parts.append(cell_html)
+                
+                html_parts.append('</tr>')
+            
+            html_parts.append('</table>')
+            html_parts.append('</div>')
+            
+            logger.info(f"표 변환 완료: {rows}행 × {cols}열")
+            return ''.join(html_parts)
+            
+        except Exception as e:
+            logger.error(f"표 변환 오류: {e}")
+            # 실패 시 원본 마크다운 표 반환
+            return '\n'.join(table_lines)
 
     def split_for_mobile_korean(self, line: str) -> list:
         """한국어 텍스트를 모바일 최적화 길이(25~28자)로 분리"""
@@ -454,6 +543,7 @@ class BlogAutomationStep3UI(QWidget):
             # 자연스러운 분리점 찾기 (우선순위 순)
             break_points = [
                 ', ',      # 쉼표
+                ' + ',     # 수식/비율 연결 (기존 사료 75% + 새 사료 25%)
                 '는 ',     # 조사
                 '을 ', '를 ',  # 목적격 조사  
                 '이 ', '가 ',  # 주격 조사
@@ -549,6 +639,13 @@ class BlogAutomationStep3UI(QWidget):
             if line_strip.count(':') >= 2:
                 return True
             
+            # 마크다운 표 형태 (| 기호로 구분)
+            if line_strip.startswith('|') and line_strip.endswith('|') and line_strip.count('|') >= 3:
+                return True
+            
+            # 표 구분선 (---|---|--- 형태)
+            if '---' in line_strip and '|' in line_strip:
+                return True
             
             return False
             
