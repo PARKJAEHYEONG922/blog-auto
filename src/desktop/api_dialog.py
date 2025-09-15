@@ -484,8 +484,8 @@ class APISettingsDialog(QDialog):
         self.image_ai_provider_combo = QComboBox()
         self.image_ai_provider_combo.addItems([
             "AI 제공자를 선택하세요",
-            "OpenAI (DALL-E)",
-            "Google (Imagen)"
+            "OpenAI (Image)",
+            "Google (Gemini Image)"
         ])
         self.image_ai_provider_combo.currentTextChanged.connect(self.on_image_ai_provider_changed)
         image_provider_layout.addWidget(self.image_ai_provider_combo, 1)
@@ -562,34 +562,30 @@ class APISettingsDialog(QDialog):
             
             self.text_ai_model_combo.clear()
             if provider_text == "OpenAI (GPT)":
-                self.text_ai_model_combo.addItems([
-                    "모델을 선택하세요",
-                    "GPT-4o Mini (유료, 저렴)",
-                    "GPT-4o (유료, 표준)",
-                    "GPT-4 Turbo (유료, 고단가)"
-                ])
+                # 중앙화된 AI 모델 시스템에서 OpenAI 텍스트 모델 목록 동적 로드
+                from src.foundation.ai_models import AIModelRegistry, AIProvider, AIModelType
+                openai_models = AIModelRegistry.get_display_names_by_provider_and_type(
+                    AIProvider.OPENAI, AIModelType.MULTIMODAL)
+                self.text_ai_model_combo.addItems(["모델을 선택하세요"] + openai_models)
                 self.current_text_ai_provider = "openai"
                 if hasattr(self, 'text_ai_api_key'):
                     self.text_ai_api_key.setPlaceholderText("sk-...")
                     
             elif provider_text == "Google (Gemini)":
-                self.text_ai_model_combo.addItems([
-                    "모델을 선택하세요",
-                    "Gemini 1.5 Flash (무료, 빠름)",
-                    "Gemini 1.5 Pro (유료, 고품질)",
-                    "Gemini 2.0 Flash (무료, 최신)"
-                ])
+                # 중앙화된 AI 모델 시스템에서 Google 텍스트 모델 목록 동적 로드
+                from src.foundation.ai_models import AIModelRegistry, AIProvider, AIModelType
+                gemini_models = AIModelRegistry.get_display_names_by_provider_and_type(
+                    AIProvider.GOOGLE, AIModelType.MULTIMODAL)
+                self.text_ai_model_combo.addItems(["모델을 선택하세요"] + gemini_models)
                 self.current_text_ai_provider = "gemini"
                 if hasattr(self, 'text_ai_api_key'):
                     self.text_ai_api_key.setPlaceholderText("Google AI API 키")
                     
             elif provider_text == "Anthropic (Claude)":
-                self.text_ai_model_combo.addItems([
-                    "모델을 선택하세요",
-                    "Claude Sonnet 4 (유료, 최신 고품질)",
-                    "Claude 3.5 Haiku (유료, 빠름)",
-                    "Claude Opus 4.1 (유료, 최고품질)"
-                ])
+                # 중앙화된 AI 모델 시스템에서 Claude 모델 목록 동적 로드
+                from src.foundation.ai_models import AIModelRegistry, AIProvider
+                claude_models = AIModelRegistry.get_display_names_by_provider(AIProvider.ANTHROPIC)
+                self.text_ai_model_combo.addItems(["모델을 선택하세요"] + claude_models)
                 self.current_text_ai_provider = "claude"
                 if hasattr(self, 'text_ai_api_key'):
                     self.text_ai_api_key.setPlaceholderText("Anthropic API 키")
@@ -611,34 +607,30 @@ class APISettingsDialog(QDialog):
             
             self.summary_ai_model_combo.clear()
             if provider_text == "OpenAI (GPT)":
-                self.summary_ai_model_combo.addItems([
-                    "모델을 선택하세요",
-                    "GPT-4o Mini (유료, 저렴)",
-                    "GPT-4o (유료, 표준)",
-                    "GPT-4 Turbo (유료, 고단가)"
-                ])
+                # 중앙화된 AI 모델 시스템에서 OpenAI 텍스트 모델 목록 동적 로드
+                from src.foundation.ai_models import AIModelRegistry, AIProvider, AIModelType
+                openai_models = AIModelRegistry.get_display_names_by_provider_and_type(
+                    AIProvider.OPENAI, AIModelType.MULTIMODAL)
+                self.summary_ai_model_combo.addItems(["모델을 선택하세요"] + openai_models)
                 self.current_summary_ai_provider = "openai"
                 if hasattr(self, 'summary_ai_api_key'):
                     self.summary_ai_api_key.setPlaceholderText("sk-...")
                     
             elif provider_text == "Google (Gemini)":
-                self.summary_ai_model_combo.addItems([
-                    "모델을 선택하세요",
-                    "Gemini 1.5 Flash (무료, 빠름)",
-                    "Gemini 1.5 Pro (유료, 고품질)",
-                    "Gemini 2.0 Flash (무료, 최신)"
-                ])
+                # 중앙화된 AI 모델 시스템에서 Google 텍스트 모델 목록 동적 로드
+                from src.foundation.ai_models import AIModelRegistry, AIProvider, AIModelType
+                gemini_models = AIModelRegistry.get_display_names_by_provider_and_type(
+                    AIProvider.GOOGLE, AIModelType.MULTIMODAL)
+                self.summary_ai_model_combo.addItems(["모델을 선택하세요"] + gemini_models)
                 self.current_summary_ai_provider = "gemini"
                 if hasattr(self, 'summary_ai_api_key'):
                     self.summary_ai_api_key.setPlaceholderText("Google AI API 키")
                     
             elif provider_text == "Anthropic (Claude)":
-                self.summary_ai_model_combo.addItems([
-                    "모델을 선택하세요",
-                    "Claude Sonnet 4 (유료, 최신 고품질)",
-                    "Claude 3.5 Haiku (유료, 빠름)",
-                    "Claude Opus 4.1 (유료, 최고품질)"
-                ])
+                # 중앙화된 AI 모델 시스템에서 Claude 모델 목록 동적 로드
+                from src.foundation.ai_models import AIModelRegistry, AIProvider
+                claude_models = AIModelRegistry.get_display_names_by_provider(AIProvider.ANTHROPIC)
+                self.summary_ai_model_combo.addItems(["모델을 선택하세요"] + claude_models)
                 self.current_summary_ai_provider = "claude"
                 if hasattr(self, 'summary_ai_api_key'):
                     self.summary_ai_api_key.setPlaceholderText("Anthropic API 키")
@@ -653,50 +645,6 @@ class APISettingsDialog(QDialog):
             self.summary_ai_config_group.setVisible(True)
             self.current_summary_ai_model = model_text
 
-    def apply_summary_ai_key(self):
-        """정보요약 AI API 테스트 후 적용"""
-        if not hasattr(self, 'current_summary_ai_provider') or not self.current_summary_ai_provider:
-            return
-
-        api_key = self.summary_ai_api_key.text().strip()
-        if not api_key:
-            self.summary_ai_status.setText("⚠️ API 키를 입력해주세요.")
-            self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['danger']};")
-            return
-
-        self.summary_ai_status.setText("테스트 및 적용 중...")
-        self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['primary']};")
-        self.summary_ai_apply_btn.setEnabled(False)
-
-        try:
-            if self.current_summary_ai_provider == "openai":
-                result = self.test_openai_api_internal(api_key)
-            elif self.current_summary_ai_provider == "gemini":
-                result = self.test_google_gemini_api_internal(api_key)
-            elif self.current_summary_ai_provider == "claude":
-                result = self.test_claude_api_internal(api_key)
-            else:
-                result = (False, "지원되지 않는 AI 제공자입니다.")
-
-            if result[0]:
-                selected_model = getattr(self, 'current_summary_ai_model', '')
-                if not selected_model:
-                    selected_model = self.summary_ai_model_combo.currentText()
-
-                # 정보요약 AI 설정 저장
-                self.save_summary_ai_config(self.current_summary_ai_provider, api_key, selected_model)
-                
-                self.summary_ai_status.setText(f"✅ {selected_model} API가 적용되었습니다.")
-                self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['success']};")
-            else:
-                self.summary_ai_status.setText(f"❌ 연결 실패: {result[1]}")
-                self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['danger']};")
-
-        except Exception as e:
-            self.summary_ai_status.setText(f"❌ 적용 오류: {str(e)}")
-            self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['danger']};")
-        finally:
-            self.summary_ai_apply_btn.setEnabled(True)
 
     def save_summary_ai_config(self, provider: str, api_key: str, selected_model: str):
         """정보요약 AI API 설정 저장"""
@@ -725,92 +673,7 @@ class APISettingsDialog(QDialog):
         except Exception as e:
             logger.error(f"정보요약 AI API 설정 저장 중 오류: {e}")
 
-    def delete_summary_ai_key(self):
-        """정보요약 AI API 삭제"""
-        if not hasattr(self, 'current_summary_ai_provider') or not self.current_summary_ai_provider:
-            return
 
-        reply = QMessageBox.question(
-            self, 
-            "확인", 
-            f"{self.summary_ai_provider_combo.currentText()} API 설정을 삭제하시겠습니까?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-
-        if reply == QMessageBox.Yes:
-            try:
-                from src.foundation.config import config_manager
-                api_config = config_manager.load_api_config()
-                
-                # API 키 삭제
-                if self.current_summary_ai_provider == "openai":
-                    api_config.openai_api_key = ""
-                elif self.current_summary_ai_provider == "gemini":
-                    api_config.gemini_api_key = ""
-                elif self.current_summary_ai_provider == "claude":
-                    api_config.claude_api_key = ""
-                
-                # 현재 설정 초기화
-                api_config.current_summary_ai_provider = ""
-                api_config.current_summary_ai_model = ""
-                
-                if config_manager.save_api_config(api_config):
-                    # UI 초기화
-                    self.summary_ai_api_key.clear()
-                    self.summary_ai_provider_combo.setCurrentText("AI 제공자를 선택하세요")
-                    self.summary_ai_model_combo.clear()
-                    
-                    self.summary_model_label.setVisible(False)
-                    self.summary_ai_model_combo.setVisible(False)
-                    self.summary_ai_config_group.setVisible(False)
-
-                    # 상태 초기화
-                    self.current_summary_ai_provider = None
-                    if hasattr(self, 'current_summary_ai_model'):
-                        self.current_summary_ai_model = None
-
-                    self.summary_ai_status.setText("🟡 API를 다시 설정해 주세요.")
-                    self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['warning']};")
-
-                    # 완료 메시지
-                    QMessageBox.information(self, "완료", "정보요약 AI API 설정이 삭제되었습니다.")
-
-            except Exception as e:
-                logger.error(f"정보요약 AI API 삭제 실패: {e}")
-
-    def load_summary_ai_provider_api_key(self):
-        """정보요약 AI 제공자의 API 키 로드"""
-        try:
-            from src.foundation.config import config_manager
-            api_config = config_manager.load_api_config()
-            
-            if hasattr(self, 'current_summary_ai_provider') and self.current_summary_ai_provider:
-                if self.current_summary_ai_provider == "openai" and hasattr(api_config, 'openai_api_key'):
-                    if api_config.openai_api_key:
-                        self.summary_ai_api_key.setText(api_config.openai_api_key)
-                    else:
-                        self.summary_ai_api_key.clear()
-                        
-                elif self.current_summary_ai_provider == "gemini" and hasattr(api_config, 'gemini_api_key'):
-                    if api_config.gemini_api_key:
-                        self.summary_ai_api_key.setText(api_config.gemini_api_key)
-                    else:
-                        self.summary_ai_api_key.clear()
-                        
-                elif self.current_summary_ai_provider == "claude" and hasattr(api_config, 'claude_api_key'):
-                    if api_config.claude_api_key:
-                        self.summary_ai_api_key.setText(api_config.claude_api_key)
-                    else:
-                        self.summary_ai_api_key.clear()
-                        
-                else:
-                    self.summary_ai_api_key.clear()
-            else:
-                self.summary_ai_api_key.clear()
-
-        except Exception as e:
-            logger.error(f"정보요약 AI API 키 로드 실패: {e}")
 
     def on_image_ai_provider_changed(self, provider_text):
         """이미지 생성 AI 제공자 변경시 호출"""
@@ -826,22 +689,22 @@ class APISettingsDialog(QDialog):
             self.image_ai_model_combo.setVisible(True)
             
             self.image_ai_model_combo.clear()
-            if provider_text == "OpenAI (DALL-E)":
-                self.image_ai_model_combo.addItems([
-                    "모델을 선택하세요",
-                    "DALL-E 3 (유료, 최고품질)",
-                    "DALL-E 2 (유료, 저렴)"
-                ])
+            if provider_text == "OpenAI (Image)":
+                # 중앙화된 AI 모델 시스템에서 OpenAI 이미지 모델 목록 동적 로드
+                from src.foundation.ai_models import AIModelRegistry, AIProvider, AIModelType
+                dalle_models = AIModelRegistry.get_display_names_by_provider_and_type(
+                    AIProvider.OPENAI, AIModelType.IMAGE)
+                self.image_ai_model_combo.addItems(["모델을 선택하세요"] + dalle_models)
                 self.current_image_ai_provider = "dalle"
                 if hasattr(self, 'image_ai_api_key'):
                     self.image_ai_api_key.setPlaceholderText("sk-...")
                     
-            elif provider_text == "Google (Imagen)":
-                self.image_ai_model_combo.addItems([
-                    "모델을 선택하세요",
-                    "Imagen 3 (유료, 최고품질)",
-                    "Imagen 2 (유료, 표준)"
-                ])
+            elif provider_text == "Google (Gemini Image)":
+                # 중앙화된 AI 모델 시스템에서 Google 이미지 모델 목록 동적 로드
+                from src.foundation.ai_models import AIModelRegistry, AIProvider, AIModelType
+                imagen_models = AIModelRegistry.get_display_names_by_provider_and_type(
+                    AIProvider.GOOGLE, AIModelType.IMAGE)
+                self.image_ai_model_combo.addItems(["모델을 선택하세요"] + imagen_models)
                 self.current_image_ai_provider = "imagen"
                 if hasattr(self, 'image_ai_api_key'):
                     self.image_ai_api_key.setPlaceholderText("Google Cloud API 키")
@@ -854,6 +717,18 @@ class APISettingsDialog(QDialog):
             return
             
         api_key = self.image_ai_api_key.text().strip()
+
+        # 마스킹된 키인 경우 실제 저장된 키를 사용
+        if api_key and api_key.startswith("*"):
+            # 저장된 실제 키를 로드
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+
+            if self.current_image_ai_provider == "dalle":
+                api_key = getattr(api_config, 'dalle_api_key', '')
+            elif self.current_image_ai_provider == "imagen":
+                api_key = getattr(api_config, 'imagen_api_key', '')
+
         if not api_key:
             self.image_ai_status.setText("⚠️ API 키를 입력해주세요.")
             self.image_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['danger']};")
@@ -864,11 +739,13 @@ class APISettingsDialog(QDialog):
         self.image_ai_apply_btn.setEnabled(False)
         
         try:
-            # 제공자별 테스트 실행
+            # 중앙화된 API 테스트 시스템 사용 (이미지 모델 타입 지정)
+            from src.foundation.ai_models import AIAPITester, AIProvider, AIModelType
+
             if self.current_image_ai_provider == "dalle":
-                result = self.test_dalle_api_internal(api_key)
+                result = AIAPITester.test_api(AIProvider.OPENAI, api_key, AIModelType.IMAGE)
             elif self.current_image_ai_provider == "imagen":
-                result = self.test_imagen_api_internal(api_key)
+                result = AIAPITester.test_api(AIProvider.GOOGLE, api_key, AIModelType.IMAGE)
             else:
                 result = (False, "지원되지 않는 이미지 AI 제공자입니다.")
             
@@ -894,182 +771,16 @@ class APISettingsDialog(QDialog):
             self.image_ai_apply_btn.setEnabled(True)
     
     def test_dalle_api_internal(self, api_key):
-        """DALL-E API 내부 테스트 (무료 검증 방식)"""
-        try:
-            import requests
-            
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-            
-            # 1차 시도: 모델 목록 조회 (무료)
-            try:
-                response = requests.get(
-                    "https://api.openai.com/v1/models",
-                    headers=headers,
-                    timeout=10
-                )
-                
-                if response.status_code == 200:
-                    models_data = response.json()
-                    # DALL-E 관련 모델이 있는지 확인
-                    model_ids = [model.get('id', '') for model in models_data.get('data', [])]
-                    dalle_models = [mid for mid in model_ids if 'dall-e' in mid.lower()]
-                    
-                    if dalle_models:
-                        return True, f"연결 성공 (사용 가능한 모델: {', '.join(dalle_models[:2])})"
-                    else:
-                        return True, "연결 성공 (DALL-E 모델 확인 필요)"
-                        
-                elif response.status_code == 401:
-                    return False, "API 키가 유효하지 않습니다."
-                elif response.status_code == 429:
-                    return False, "API 할당량을 초과했습니다."
-                else:
-                    # 모델 목록 조회 실패 시 2차 시도
-                    return self._test_openai_account_info(headers)
-                    
-            except requests.exceptions.RequestException:
-                # 1차 실패 시 2차 시도
-                return self._test_openai_account_info(headers)
-                
-        except requests.exceptions.Timeout:
-            return False, "연결 시간 초과"
-        except requests.exceptions.RequestException as e:
-            return False, f"네트워크 오류: {str(e)}"
-        except Exception as e:
-            return False, str(e)
-    
-    def _test_openai_account_info(self, headers):
-        """OpenAI 계정 정보 조회로 API 키 검증 (무료)"""
-        try:
-            import requests
-            
-            # 계정 정보나 사용량 조회 (무료)
-            response = requests.get(
-                "https://api.openai.com/v1/usage",
-                headers=headers,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                return True, "연결 성공 (계정 정보 확인됨)"
-            elif response.status_code == 401:
-                return False, "API 키가 유효하지 않습니다."
-            elif response.status_code == 429:
-                return False, "API 할당량을 초과했습니다."
-            elif response.status_code == 403:
-                return False, "API 키 권한이 부족합니다."
-            else:
-                # 최후의 수단: 매우 작은 completions 요청으로 검증
-                return self._test_openai_minimal_request(headers)
-                
-        except Exception:
-            return self._test_openai_minimal_request(headers)
-    
-    def _test_openai_minimal_request(self, headers):
-        """최소한의 OpenAI 요청으로 검증 (저비용)"""
-        try:
-            import requests
-            
-            # 매우 작은 토큰으로 텍스트 완성 요청 (약 $0.001 미만)
-            data = {
-                "model": "gpt-3.5-turbo",
-                "messages": [{"role": "user", "content": "hi"}],
-                "max_tokens": 1  # 최소 토큰
-            }
-            
-            response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers=headers,
-                json=data,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                return True, "연결 성공 (API 키 유효)"
-            elif response.status_code == 401:
-                return False, "API 키가 유효하지 않습니다."
-            elif response.status_code == 429:
-                return False, "API 할당량을 초과했습니다."
-            else:
-                return False, f"상태 코드: {response.status_code}"
-                
-        except Exception as e:
-            return False, f"검증 실패: {str(e)}"
+        """DEPRECATED: 이제 중앙화된 AIAPITester를 사용합니다"""
+        from src.foundation.ai_models import AIAPITester, AIProvider, AIModelType
+        return AIAPITester.test_api(AIProvider.OPENAI, api_key, AIModelType.IMAGE)
+
     
     def test_imagen_api_internal(self, api_key):
-        """Imagen API 내부 테스트 (무료 검증 방식)"""
-        try:
-            import requests
-            
-            # Google Cloud API 키 검증 방법들 시도
-            
-            # 1차 시도: Vertex AI API 엔드포인트 접근 테스트
-            try:
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                }
-                
-                # Google Cloud의 경우 프로젝트 ID가 필요하므로 일반적인 엔드포인트로 키 유효성 검증
-                response = requests.get(
-                    "https://cloudresourcemanager.googleapis.com/v1/projects",
-                    headers=headers,
-                    timeout=10
-                )
-                
-                if response.status_code == 200:
-                    return True, "연결 성공 (Google Cloud API 키 유효)"
-                elif response.status_code == 401:
-                    return False, "API 키가 유효하지 않습니다."
-                elif response.status_code == 403:
-                    return False, "API 키 권한이 부족하거나 프로젝트 설정이 필요합니다."
-                else:
-                    # 2차 시도: AI Platform API 확인
-                    return self._test_google_ai_platform(headers)
-                    
-            except requests.exceptions.RequestException:
-                return self._test_google_ai_platform(headers)
-                
-        except requests.exceptions.Timeout:
-            return False, "연결 시간 초과"
-        except requests.exceptions.RequestException as e:
-            return False, f"네트워크 오류: {str(e)}"
-        except Exception as e:
-            return False, str(e)
-    
-    def _test_google_ai_platform(self, headers):
-        """Google AI Platform 접근 테스트"""
-        try:
-            import requests
-            
-            # AI Platform API 엔드포인트로 테스트
-            response = requests.get(
-                "https://ml.googleapis.com/v1/projects",
-                headers=headers,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                return True, "연결 성공 (AI Platform API 접근 가능)"
-            elif response.status_code == 401:
-                return False, "API 키가 유효하지 않습니다."
-            elif response.status_code == 403:
-                return False, "API 키 권한이 부족합니다. Google Cloud 프로젝트 및 권한 설정을 확인하세요."
-            elif response.status_code == 404:
-                # API가 활성화되지 않은 경우도 키는 유효할 수 있음
-                return True, "연결 성공 (API 키 유효, 서비스 활성화 필요할 수 있음)"
-            else:
-                return False, f"Google Cloud API 오류 (상태 코드: {response.status_code})"
-                
-        except Exception as e:
-            # 최후의 수단: 단순히 키 형식 검증
-            if api_key and len(api_key) > 20:
-                return True, "API 키 형식 유효 (실제 연결 테스트는 Google Cloud 설정 필요)"
-            else:
-                return False, f"API 키 검증 실패: {str(e)}"
+        """DEPRECATED: 이제 중앙화된 AIAPITester를 사용합니다"""
+        from src.foundation.ai_models import AIAPITester, AIProvider, AIModelType
+        return AIAPITester.test_api(AIProvider.GOOGLE, api_key, AIModelType.IMAGE)
+
     
     def save_image_ai_config(self, provider: str, api_key: str, selected_model: str):
         """이미지 생성 AI API 설정 저장"""
@@ -1104,54 +815,11 @@ class APISettingsDialog(QDialog):
             logger.error(f"이미지 생성 AI API 설정 저장 중 오류: {e}")
     
     def delete_image_ai_api(self):
-        """이미지 생성 AI API 삭제"""
+        """이미지 생성 AI API 삭제 - 통합 함수 호출"""
         if not hasattr(self, 'current_image_ai_provider') or not self.current_image_ai_provider:
             return
-            
-        from PySide6.QtWidgets import QMessageBox
-        reply = QMessageBox.question(
-            self, "확인", 
-            f"{self.image_ai_provider_combo.currentText()} API 설정을 삭제하시겠습니까?",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        
-        if reply == QMessageBox.Yes:
-            try:
-                from src.foundation.config import config_manager
-                
-                api_config = config_manager.load_api_config()
-                
-                if self.current_image_ai_provider == "dalle":
-                    api_config.dalle_api_key = ""
-                elif self.current_image_ai_provider == "imagen":
-                    api_config.imagen_api_key = ""
-                
-                # 현재 설정된 모델 정보도 삭제
-                api_config.current_image_ai_model = ""
-                
-                config_manager.save_api_config(api_config)
-                
-                # UI 완전 초기화
-                self.image_ai_api_key.clear()
-                self.image_ai_provider_combo.setCurrentText("AI 제공자를 선택하세요")
-                self.image_ai_model_combo.clear()
-                self.image_model_label.setVisible(False)
-                self.image_ai_model_combo.setVisible(False)
-                self.image_ai_config_group.setVisible(False)
-                
-                # 현재 제공자 정보 초기화
-                self.current_image_ai_provider = None
-                if hasattr(self, 'current_image_ai_model'):
-                    self.current_image_ai_model = None
-                
-                self.image_ai_status.setText("🟡 API를 다시 설정해 주세요.")
-                self.image_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['warning']};")
-                
-                self.api_settings_changed.emit()
-                QMessageBox.information(self, "완료", "이미지 생성 AI API 설정이 삭제되었습니다.")
-                
-            except Exception as e:
-                QMessageBox.critical(self, "오류", f"API 설정 삭제 실패: {str(e)}")
+
+        self.delete_ai_provider_key(self.current_image_ai_provider, "image")
     
     def on_text_ai_model_changed(self, model_text):
         """글 작성 AI 모델 변경시 호출"""
@@ -1174,30 +842,42 @@ class APISettingsDialog(QDialog):
         try:
             from src.foundation.config import config_manager
             api_config = config_manager.load_api_config()
-            
+
             if hasattr(self, 'current_text_ai_provider') and self.current_text_ai_provider:
                 if self.current_text_ai_provider == "openai" and hasattr(api_config, 'openai_api_key'):
                     if api_config.openai_api_key:
-                        self.text_ai_api_key.setText(api_config.openai_api_key)
+                        # API 키가 있으면 실제 길이에 맞춰 마스킹해서 표시 (보안)
+                        masked_length = len(api_config.openai_api_key)
+                        self.text_ai_api_key.setText("*" * masked_length)
+                        self.text_ai_api_key.setPlaceholderText("OpenAI API 키가 설정되어 있습니다")
                     else:
                         self.text_ai_api_key.clear()
-                        
+                        self.text_ai_api_key.setPlaceholderText("OpenAI API 키를 입력하세요")
+
                 elif self.current_text_ai_provider == "gemini" and hasattr(api_config, 'gemini_api_key'):
                     if api_config.gemini_api_key:
-                        self.text_ai_api_key.setText(api_config.gemini_api_key)
+                        # API 키가 있으면 실제 길이에 맞춰 마스킹해서 표시 (보안)
+                        masked_length = len(api_config.gemini_api_key)
+                        self.text_ai_api_key.setText("*" * masked_length)
+                        self.text_ai_api_key.setPlaceholderText("Gemini API 키가 설정되어 있습니다")
                     else:
                         self.text_ai_api_key.clear()
-                        
+                        self.text_ai_api_key.setPlaceholderText("Gemini API 키를 입력하세요")
+
                 elif self.current_text_ai_provider == "claude" and hasattr(api_config, 'claude_api_key'):
                     if api_config.claude_api_key:
-                        self.text_ai_api_key.setText(api_config.claude_api_key)
+                        # API 키가 있으면 실제 길이에 맞춰 마스킹해서 표시 (보안)
+                        masked_length = len(api_config.claude_api_key)
+                        self.text_ai_api_key.setText("*" * masked_length)
+                        self.text_ai_api_key.setPlaceholderText("Claude API 키가 설정되어 있습니다")
                     else:
                         self.text_ai_api_key.clear()
+                        self.text_ai_api_key.setPlaceholderText("Claude API 키를 입력하세요")
                 else:
                     self.text_ai_api_key.clear()
             else:
                 self.text_ai_api_key.clear()
-                
+
         except Exception as e:
             logger.error(f"글 작성 AI API 키 로드 실패: {e}")
     
@@ -1210,15 +890,23 @@ class APISettingsDialog(QDialog):
             if hasattr(self, 'current_image_ai_provider') and self.current_image_ai_provider:
                 if self.current_image_ai_provider == "dalle" and hasattr(api_config, 'dalle_api_key'):
                     if api_config.dalle_api_key:
-                        self.image_ai_api_key.setText(api_config.dalle_api_key)
+                        # API 키가 있으면 실제 길이에 맞춰 마스킹해서 표시 (보안)
+                        masked_length = len(api_config.dalle_api_key)
+                        self.image_ai_api_key.setText("*" * masked_length)
+                        self.image_ai_api_key.setPlaceholderText("OpenAI Image API 키가 설정되어 있습니다")
                     else:
                         self.image_ai_api_key.clear()
-                        
+                        self.image_ai_api_key.setPlaceholderText("OpenAI Image API 키를 입력하세요")
+
                 elif self.current_image_ai_provider == "imagen" and hasattr(api_config, 'imagen_api_key'):
                     if api_config.imagen_api_key:
-                        self.image_ai_api_key.setText(api_config.imagen_api_key)
+                        # API 키가 있으면 실제 길이에 맞춰 마스킹해서 표시 (보안)
+                        masked_length = len(api_config.imagen_api_key)
+                        self.image_ai_api_key.setText("*" * masked_length)
+                        self.image_ai_api_key.setPlaceholderText("Imagen API 키가 설정되어 있습니다")
                     else:
                         self.image_ai_api_key.clear()
+                        self.image_ai_api_key.setPlaceholderText("Imagen API 키를 입력하세요")
                 else:
                     self.image_ai_api_key.clear()
             else:
@@ -1228,34 +916,46 @@ class APISettingsDialog(QDialog):
             logger.error(f"이미지 생성 AI API 키 로드 실패: {e}")
     
     def load_summary_ai_provider_api_key(self):
-        """정보요약 AI 제공자의 API 키 로드"""
+        """정보요약 AI 제공자의 API 키 로드 (마스킹 적용)"""
         try:
             from src.foundation.config import config_manager
             api_config = config_manager.load_api_config()
-            
+
             if hasattr(self, 'current_summary_ai_provider') and self.current_summary_ai_provider:
                 if self.current_summary_ai_provider == "openai" and hasattr(api_config, 'openai_api_key'):
                     if api_config.openai_api_key:
-                        self.summary_ai_api_key.setText(api_config.openai_api_key)
+                        # API 키가 있으면 실제 길이에 맞춰 마스킹해서 표시 (보안)
+                        masked_length = len(api_config.openai_api_key)
+                        self.summary_ai_api_key.setText("*" * masked_length)
+                        self.summary_ai_api_key.setPlaceholderText("OpenAI API 키가 설정되어 있습니다")
                     else:
                         self.summary_ai_api_key.clear()
-                        
+                        self.summary_ai_api_key.setPlaceholderText("OpenAI API 키를 입력하세요")
+
                 elif self.current_summary_ai_provider == "gemini" and hasattr(api_config, 'gemini_api_key'):
                     if api_config.gemini_api_key:
-                        self.summary_ai_api_key.setText(api_config.gemini_api_key)
+                        # API 키가 있으면 실제 길이에 맞춰 마스킹해서 표시 (보안)
+                        masked_length = len(api_config.gemini_api_key)
+                        self.summary_ai_api_key.setText("*" * masked_length)
+                        self.summary_ai_api_key.setPlaceholderText("Gemini API 키가 설정되어 있습니다")
                     else:
                         self.summary_ai_api_key.clear()
-                        
+                        self.summary_ai_api_key.setPlaceholderText("Gemini API 키를 입력하세요")
+
                 elif self.current_summary_ai_provider == "claude" and hasattr(api_config, 'claude_api_key'):
                     if api_config.claude_api_key:
-                        self.summary_ai_api_key.setText(api_config.claude_api_key)
+                        # API 키가 있으면 실제 길이에 맞춰 마스킹해서 표시 (보안)
+                        masked_length = len(api_config.claude_api_key)
+                        self.summary_ai_api_key.setText("*" * masked_length)
+                        self.summary_ai_api_key.setPlaceholderText("Claude API 키가 설정되어 있습니다")
                     else:
                         self.summary_ai_api_key.clear()
+                        self.summary_ai_api_key.setPlaceholderText("Claude API 키를 입력하세요")
                 else:
                     self.summary_ai_api_key.clear()
             else:
                 self.summary_ai_api_key.clear()
-                
+
         except Exception as e:
             logger.error(f"정보요약 AI API 키 로드 실패: {e}")
     
@@ -1265,6 +965,20 @@ class APISettingsDialog(QDialog):
             return
             
         api_key = self.text_ai_api_key.text().strip()
+
+        # 마스킹된 키인 경우 실제 저장된 키를 사용
+        if api_key and api_key.startswith("*"):
+            # 저장된 실제 키를 로드
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+
+            if self.current_text_ai_provider == "openai":
+                api_key = getattr(api_config, 'openai_api_key', '')
+            elif self.current_text_ai_provider == "gemini":
+                api_key = getattr(api_config, 'gemini_api_key', '')
+            elif self.current_text_ai_provider == "claude":
+                api_key = getattr(api_config, 'claude_api_key', '')
+
         if not api_key:
             self.text_ai_status.setText("⚠️ API 키를 입력해주세요.")
             self.text_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['danger']};")
@@ -1275,13 +989,15 @@ class APISettingsDialog(QDialog):
         self.text_ai_apply_btn.setEnabled(False)
         
         try:
-            # 제공자별 테스트 실행
+            # 중앙화된 API 테스트 시스템 사용
+            from src.foundation.ai_models import AIAPITester, AIProvider
+
             if self.current_text_ai_provider == "openai":
-                result = self.test_openai_api_internal(api_key)
+                result = AIAPITester.test_api(AIProvider.OPENAI, api_key)
             elif self.current_text_ai_provider == "gemini":
-                result = self.test_gemini_api_internal(api_key)
+                result = AIAPITester.test_api(AIProvider.GOOGLE, api_key)
             elif self.current_text_ai_provider == "claude":
-                result = self.test_claude_api_internal(api_key)
+                result = AIAPITester.test_api(AIProvider.ANTHROPIC, api_key)
             else:
                 result = (False, "지원되지 않는 AI 제공자입니다.")
             
@@ -1348,6 +1064,20 @@ class APISettingsDialog(QDialog):
             return
             
         api_key = self.summary_ai_api_key.text().strip()
+
+        # 마스킹된 키인 경우 실제 저장된 키를 사용
+        if api_key and api_key.startswith("*"):
+            # 저장된 실제 키를 로드
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+
+            if self.current_summary_ai_provider == "openai":
+                api_key = getattr(api_config, 'openai_api_key', '')
+            elif self.current_summary_ai_provider == "gemini":
+                api_key = getattr(api_config, 'gemini_api_key', '')
+            elif self.current_summary_ai_provider == "claude":
+                api_key = getattr(api_config, 'claude_api_key', '')
+
         if not api_key:
             self.summary_ai_status.setText("⚠️ API 키를 입력해주세요.")
             self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['danger']};")
@@ -1358,13 +1088,15 @@ class APISettingsDialog(QDialog):
         self.summary_ai_apply_btn.setEnabled(False)
         
         try:
-            # 제공자별 테스트 실행 (기존 text AI와 동일한 메서드 사용)
+            # 중앙화된 API 테스트 시스템 사용
+            from src.foundation.ai_models import AIAPITester, AIProvider
+
             if self.current_summary_ai_provider == "openai":
-                result = self.test_openai_api_internal(api_key)
+                result = AIAPITester.test_api(AIProvider.OPENAI, api_key)
             elif self.current_summary_ai_provider == "gemini":
-                result = self.test_gemini_api_internal(api_key)
+                result = AIAPITester.test_api(AIProvider.GOOGLE, api_key)
             elif self.current_summary_ai_provider == "claude":
-                result = self.test_claude_api_internal(api_key)
+                result = AIAPITester.test_api(AIProvider.ANTHROPIC, api_key)
             else:
                 result = (False, "지원되지 않는 AI 제공자입니다.")
             
@@ -1426,50 +1158,11 @@ class APISettingsDialog(QDialog):
             logger.error(f"정보요약 AI API 설정 저장 중 오류: {e}")
     
     def delete_summary_ai_key(self):
-        """정보요약 AI API 삭제"""
+        """정보요약 AI API 삭제 - 통합 함수 호출"""
         if not hasattr(self, 'current_summary_ai_provider') or not self.current_summary_ai_provider:
             return
-            
-        from PySide6.QtWidgets import QMessageBox
-        reply = QMessageBox.question(
-            self, "확인", 
-            f"{self.summary_ai_provider_combo.currentText()} API 설정을 삭제하시겠습니까?",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        
-        if reply == QMessageBox.Yes:
-            try:
-                from src.foundation.config import config_manager
-                
-                api_config = config_manager.load_api_config()
-                
-                # 현재 설정된 요약 모델 정보 삭제
-                api_config.current_summary_ai_model = ""
-                api_config.current_summary_ai_provider = ""
-                
-                config_manager.save_api_config(api_config)
-                
-                # UI 완전 초기화
-                self.summary_ai_api_key.clear()
-                self.summary_ai_provider_combo.setCurrentText("AI 제공자를 선택하세요")
-                self.summary_ai_model_combo.clear()
-                self.summary_model_label.setVisible(False)
-                self.summary_ai_model_combo.setVisible(False)
-                self.summary_ai_config_group.setVisible(False)
-                
-                # 현재 제공자 정보 초기화
-                self.current_summary_ai_provider = None
-                if hasattr(self, 'current_summary_ai_model'):
-                    self.current_summary_ai_model = None
-                
-                self.summary_ai_status.setText("🟡 API를 다시 설정해 주세요.")
-                self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['warning']};")
-                
-                self.api_settings_changed.emit()
-                QMessageBox.information(self, "완료", "정보요약 AI API 설정이 삭제되었습니다.")
-                
-            except Exception as e:
-                QMessageBox.critical(self, "오류", f"API 설정 삭제 실패: {str(e)}")
+
+        self.delete_ai_provider_key(self.current_summary_ai_provider, "summary")
     
     def save_summary_ai_config_only(self):
         """정보요약 AI 모델 선택만 저장 (API 키 테스트 없이)"""
@@ -1505,207 +1198,144 @@ class APISettingsDialog(QDialog):
         except Exception as e:
             logger.error(f"정보요약 AI 모델 선택 저장 오류: {e}")
     
-    def delete_text_ai_api(self):
-        """글 작성 AI API 삭제"""
-        if not hasattr(self, 'current_text_ai_provider') or not self.current_text_ai_provider:
-            return
-            
+    def delete_ai_provider_key(self, provider: str, source_section: str):
+        """통합 AI 제공업체 키 삭제 함수
+
+        Args:
+            provider: AI 제공업체 ('openai', 'claude', 'gemini')
+            source_section: 호출한 섹션 ('text', 'summary', 'image')
+        """
         from PySide6.QtWidgets import QMessageBox
+
+        # 제공업체별 표시 이름 매핑
+        provider_names = {
+            "openai": "OpenAI",
+            "claude": "Claude",
+            "gemini": "Gemini"
+        }
+
+        provider_display_name = provider_names.get(provider, provider)
+
         reply = QMessageBox.question(
-            self, "확인", 
-            f"{self.text_ai_provider_combo.currentText()} API 설정을 삭제하시겠습니까?",
+            self, "확인",
+            f"{provider_display_name} API 키를 삭제하시겠습니까?\n\n"
+            f"⚠️ 이 제공업체를 사용하는 모든 AI 설정이 초기화됩니다.\n"
+            f"(글 작성 AI, 정보요약 AI, 이미지 생성 AI)",
             QMessageBox.Yes | QMessageBox.No
         )
-        
+
         if reply == QMessageBox.Yes:
             try:
                 from src.foundation.config import config_manager
-                
+
                 api_config = config_manager.load_api_config()
-                
-                if self.current_text_ai_provider == "openai":
+
+                # 1. 실제 API 키 삭제
+                if provider == "openai":
                     api_config.openai_api_key = ""
-                elif self.current_text_ai_provider == "claude":
+                elif provider == "claude":
                     api_config.claude_api_key = ""
-                elif self.current_text_ai_provider == "gemini":
+                elif provider == "gemini":
                     api_config.gemini_api_key = ""
-                
-                # 현재 설정된 모델 정보도 삭제
-                api_config.current_text_ai_model = ""
-                
+                elif provider == "dalle":  # DALL-E는 OpenAI 키 사용
+                    api_config.dalle_api_key = ""
+                elif provider == "imagen":
+                    api_config.imagen_api_key = ""
+
+                # 2. 해당 제공업체를 사용하는 모든 설정 초기화
+                if api_config.current_text_ai_provider == provider:
+                    api_config.current_text_ai_provider = ""
+                    api_config.current_text_ai_model = ""
+
+                if api_config.current_summary_ai_provider == provider:
+                    api_config.current_summary_ai_provider = ""
+                    api_config.current_summary_ai_model = ""
+
+                if api_config.current_image_ai_provider == provider:
+                    api_config.current_image_ai_provider = ""
+                    api_config.current_image_ai_model = ""
+
+                # 3. 저장
                 config_manager.save_api_config(api_config)
-                
-                # UI 완전 초기화
-                self.text_ai_api_key.clear()
-                self.text_ai_provider_combo.setCurrentText("AI 제공자를 선택하세요")
-                self.text_ai_model_combo.clear()
-                self.text_model_label.setVisible(False)
-                self.text_ai_model_combo.setVisible(False)
-                self.text_ai_config_group.setVisible(False)
-                
-                # 현재 제공자 정보 초기화
-                self.current_text_ai_provider = None
-                if hasattr(self, 'current_text_ai_model'):
-                    self.current_text_ai_model = None
-                
-                self.text_ai_status.setText("🟡 API를 다시 설정해 주세요.")
-                self.text_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['warning']};")
-                
+
+                # 4. UI 전체 업데이트
+                self.update_all_ai_sections_after_deletion(provider)
+
                 self.api_settings_changed.emit()
-                QMessageBox.information(self, "완료", "글 작성 AI API 설정이 삭제되었습니다.")
-                
+                QMessageBox.information(self, "완료", f"{provider_display_name} API 설정이 모두 삭제되었습니다.")
+
             except Exception as e:
                 QMessageBox.critical(self, "오류", f"API 설정 삭제 실패: {str(e)}")
-    
-    
+
+    def update_all_ai_sections_after_deletion(self, deleted_provider: str):
+        """API 키 삭제 후 모든 섹션 UI 업데이트"""
+
+        # 글 작성 AI 섹션 업데이트
+        if hasattr(self, 'current_text_ai_provider') and self.current_text_ai_provider == deleted_provider:
+            self.text_ai_api_key.clear()
+            self.text_ai_provider_combo.setCurrentText("AI 제공자를 선택하세요")
+            self.text_ai_model_combo.clear()
+            self.text_model_label.setVisible(False)
+            self.text_ai_model_combo.setVisible(False)
+            self.text_ai_config_group.setVisible(False)
+            self.current_text_ai_provider = None
+            if hasattr(self, 'current_text_ai_model'):
+                self.current_text_ai_model = None
+            self.text_ai_status.setText("🟡 API를 다시 설정해 주세요.")
+            self.text_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['warning']};")
+
+        # 정보요약 AI 섹션 업데이트
+        if hasattr(self, 'current_summary_ai_provider') and self.current_summary_ai_provider == deleted_provider:
+            self.summary_ai_api_key.clear()
+            self.summary_ai_provider_combo.setCurrentText("AI 제공자를 선택하세요")
+            self.summary_ai_model_combo.clear()
+            self.summary_model_label.setVisible(False)
+            self.summary_ai_model_combo.setVisible(False)
+            self.summary_ai_config_group.setVisible(False)
+            self.current_summary_ai_provider = None
+            if hasattr(self, 'current_summary_ai_model'):
+                self.current_summary_ai_model = None
+            self.summary_ai_status.setText("🟡 API를 다시 설정해 주세요.")
+            self.summary_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['warning']};")
+
+        # 이미지 생성 AI 섹션 업데이트
+        if hasattr(self, 'current_image_ai_provider') and self.current_image_ai_provider == deleted_provider:
+            self.image_ai_api_key.clear()
+            self.image_ai_provider_combo.setCurrentText("AI 제공자를 선택하세요")
+            self.image_ai_model_combo.clear()
+            self.image_model_label.setVisible(False)
+            self.image_ai_model_combo.setVisible(False)
+            self.image_ai_config_group.setVisible(False)
+            self.current_image_ai_provider = None
+            if hasattr(self, 'current_image_ai_model'):
+                self.current_image_ai_model = None
+            self.image_ai_status.setText("🟡 API를 다시 설정해 주세요.")
+            self.image_ai_status.setStyleSheet(f"color: {ModernStyle.COLORS['warning']};")
+
+    def delete_text_ai_api(self):
+        """글 작성 AI API 삭제 - 통합 함수 호출"""
+        if not hasattr(self, 'current_text_ai_provider') or not self.current_text_ai_provider:
+            return
+
+        self.delete_ai_provider_key(self.current_text_ai_provider, "text")
+
+
     def test_openai_api_internal(self, api_key):
-        """OpenAI API 내부 테스트 (UI 업데이트 없이)"""
-        try:
-            import requests
-            
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-            
-            # 최소한의 토큰으로 테스트 (약 10-20 토큰 정도)
-            data = {
-                "model": "gpt-3.5-turbo",  # 가장 저렴한 모델로 테스트
-                "messages": [{"role": "user", "content": "Hi"}],
-                "max_tokens": 5  # 최소 토큰으로 제한
-            }
-            
-            response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers=headers,
-                json=data,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if 'choices' in result and len(result['choices']) > 0:
-                    return True, "연결 성공"
-                else:
-                    return False, "API 응답이 예상과 다릅니다."
-            elif response.status_code == 401:
-                return False, "API 키가 유효하지 않습니다."
-            elif response.status_code == 429:
-                return False, "API 할당량을 초과했습니다."
-            else:
-                return False, f"상태 코드: {response.status_code}"
-                
-        except requests.exceptions.Timeout:
-            return False, "연결 시간 초과"
-        except requests.exceptions.RequestException as e:
-            return False, f"네트워크 오류: {str(e)}"
-        except Exception as e:
-            return False, str(e)
+        """DEPRECATED: 이제 중앙화된 AIAPITester를 사용합니다"""
+        from src.foundation.ai_models import AIAPITester, AIProvider
+        return AIAPITester.test_api(AIProvider.OPENAI, api_key)
+
     
     def test_gemini_api_internal(self, api_key):
-        """Gemini API 내부 테스트 (UI 업데이트 없이)"""
-        try:
-            import requests
-            
-            # Gemini API 테스트 (최소 토큰으로)
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
-            
-            headers = {
-                "Content-Type": "application/json"
-            }
-            
-            data = {
-                "contents": [{
-                    "parts": [{
-                        "text": "Hi"  # 최소한의 텍스트로 테스트
-                    }]
-                }],
-                "generationConfig": {
-                    "maxOutputTokens": 5  # 최소 토큰으로 제한
-                }
-            }
-            
-            response = requests.post(
-                url,
-                headers=headers,
-                json=data,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if 'candidates' in result and len(result['candidates']) > 0:
-                    return True, "연결 성공"
-                else:
-                    return False, "API 응답이 예상과 다릅니다."
-            elif response.status_code == 400:
-                error_info = response.json()
-                if 'error' in error_info:
-                    return False, f"API 오류: {error_info['error'].get('message', '잘못된 요청')}"
-                return False, "API 키가 유효하지 않거나 잘못된 요청입니다."
-            elif response.status_code == 403:
-                return False, "API 키가 유효하지 않습니다."
-            elif response.status_code == 429:
-                return False, "API 할당량을 초과했습니다."
-            else:
-                return False, f"상태 코드: {response.status_code}"
-                
-        except requests.exceptions.Timeout:
-            return False, "연결 시간 초과"
-        except requests.exceptions.RequestException as e:
-            return False, f"네트워크 오류: {str(e)}"
-        except Exception as e:
-            return False, str(e)
-    
+        """DEPRECATED: 이제 중앙화된 AIAPITester를 사용합니다"""
+        from src.foundation.ai_models import AIAPITester, AIProvider
+        return AIAPITester.test_api(AIProvider.GOOGLE, api_key)
+
     def test_claude_api_internal(self, api_key):
-        """Claude API 내부 테스트 (UI 업데이트 없이)"""
-        try:
-            import requests
-            
-            headers = {
-                "x-api-key": api_key,
-                "Content-Type": "application/json",
-                "anthropic-version": "2023-06-01"
-            }
-            
-            # Claude API 테스트 (최소 토큰으로)
-            data = {
-                "model": "claude-3-5-haiku-20241022",  # 가장 저렴한 모델로 테스트
-                "max_tokens": 5,  # 최소 토큰으로 제한
-                "messages": [{"role": "user", "content": "Hi"}]
-            }
-            
-            response = requests.post(
-                "https://api.anthropic.com/v1/messages",
-                headers=headers,
-                json=data,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if 'content' in result and len(result['content']) > 0:
-                    return True, "연결 성공"
-                else:
-                    return False, "API 응답이 예상과 다릅니다."
-            elif response.status_code == 401:
-                return False, "API 키가 유효하지 않습니다."
-            elif response.status_code == 429:
-                return False, "API 할당량을 초과했습니다."
-            elif response.status_code == 400:
-                error_info = response.json()
-                if 'error' in error_info:
-                    return False, f"API 오류: {error_info['error'].get('message', '잘못된 요청')}"
-                return False, "잘못된 요청입니다."
-            else:
-                return False, f"상태 코드: {response.status_code}"
-                
-        except requests.exceptions.Timeout:
-            return False, "연결 시간 초과"
-        except requests.exceptions.RequestException as e:
-            return False, f"네트워크 오류: {str(e)}"
-        except Exception as e:
-            return False, str(e)
+        """Claude API 테스트 - 중앙화된 시스템 사용"""
+        from src.foundation.ai_models import AIAPITester, AIProvider
+        return AIAPITester.test_api(AIProvider.ANTHROPIC, api_key)
+
     
     def setup_buttons(self, layout):
         """버튼 영역 설정"""
@@ -1903,11 +1533,11 @@ class APISettingsDialog(QDialog):
             
             if current_model:
                 # 모델에서 제공자 추출
-                if 'DALL-E' in current_model:
-                    provider = "OpenAI (DALL-E)"
+                if 'DALL-E' in current_model or 'GPT Image' in current_model:
+                    provider = "OpenAI (Image)"
                     self.current_image_ai_provider = "dalle"
-                elif 'Imagen' in current_model:
-                    provider = "Google (Imagen)"
+                elif 'Imagen' in current_model or 'Gemini' in current_model:
+                    provider = "Google (Gemini Image)"
                     self.current_image_ai_provider = "imagen"
                 else:
                     return
@@ -2049,48 +1679,10 @@ class APISettingsDialog(QDialog):
             self.searchad_apply_btn.setEnabled(True)
     
     def test_searchad_api_internal(self, access_license, secret_key, customer_id):
-        """검색광고 API 내부 테스트 (UI 업데이트 없이)"""
-        import requests
-        import hashlib
-        import hmac
-        import base64
-        import time
-        
-        try:
-            uri = '/keywordstool'
-            timestamp = str(int(time.time() * 1000))
-            message = f"{timestamp}.GET.{uri}"
-            signature = hmac.new(secret_key.encode(), message.encode(), hashlib.sha256).digest()
-            signature = base64.b64encode(signature).decode()
-            
-            headers = {
-                'Content-Type': 'application/json; charset=UTF-8',
-                'X-Timestamp': timestamp,
-                'X-API-KEY': access_license,
-                'X-Customer': customer_id,
-                'X-Signature': signature
-            }
-            
-            params = {'hintKeywords': '테스트', 'showDetail': '1'}
-            
-            response = requests.get(
-                'https://api.searchad.naver.com' + uri,
-                params=params,
-                headers=headers,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                if 'keywordList' in data:
-                    return True, "연결 성공"
-                else:
-                    return False, "API 응답이 예상과 다릅니다."
-            else:
-                return False, f"상태 코드: {response.status_code}"
-                
-        except Exception as e:
-            return False, str(e)
+        """네이버 검색광고 API 테스트 - 중앙화된 시스템 사용"""
+        from src.foundation.ai_models import AIAPITester, AIProvider, AIModelType
+        api_key = f"{access_license}:{secret_key}:{customer_id}"
+        return AIAPITester.test_api(AIProvider.NAVER, api_key, AIModelType.SEARCH_AD)
     
     
     def apply_shopping_api(self):
@@ -2127,34 +1719,10 @@ class APISettingsDialog(QDialog):
             self.shopping_apply_btn.setEnabled(True)
     
     def test_shopping_api_internal(self, client_id, client_secret):
-        """쇼핑 API 내부 테스트 (UI 업데이트 없이)"""
-        import requests
-        
-        try:
-            headers = {
-                "X-Naver-Client-Id": client_id,
-                "X-Naver-Client-Secret": client_secret
-            }
-            params = {'query': '테스트', 'display': 1}
-            
-            response = requests.get(
-                "https://openapi.naver.com/v1/search/shop.json",
-                headers=headers,
-                params=params,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                if 'items' in data:
-                    return True, "연결 성공"
-                else:
-                    return False, "API 응답이 예상과 다릅니다."
-            else:
-                return False, f"상태 코드: {response.status_code}"
-                
-        except Exception as e:
-            return False, str(e)
+        """네이버 검색 API 테스트 - 중앙화된 시스템 사용"""
+        from src.foundation.ai_models import AIAPITester, AIProvider, AIModelType
+        api_key = f"{client_id}:{client_secret}"
+        return AIAPITester.test_api(AIProvider.NAVER, api_key, AIModelType.SEARCH)
     
     
     def save_searchad_config(self, access_license, secret_key, customer_id):
@@ -2447,7 +2015,7 @@ class APISettingsDialog(QDialog):
                     '키 이름 입력 후 생성',
                     '생성된 키를 복사하여 붙여넣기'
                 ],
-                'cost': '비용: GPT-4o Mini $0.15/1M토큰, GPT-4o $5/1M토큰',
+                'cost': '비용: GPT-5 Nano $0.05/$0.40/1M토큰 (입력/출력), GPT-5 Mini $0.25/$2/1M토큰 (입력/출력), GPT-5 $1.25/$10/1M토큰 (입력/출력)',
                 'note': '키는 한 번만 표시되므로 안전하게 보관하세요'
             },
             {
@@ -2458,8 +2026,8 @@ class APISettingsDialog(QDialog):
                     '"Create API key in new project" 선택',
                     '생성된 키를 복사하여 붙여넣기'
                 ],
-                'cost': '무료: Flash 모델 15회/분, Pro 모델 $7/1M토큰',
-                'note': '초기 크레딧 $300 제공'
+                'cost': '비용: Gemini 2.0 Flash $0.075/$0.30/1M토큰, Gemini 2.5 Flash $0.15/$0.60/1M토큰, Gemini 2.5 Pro $1.25/$10/1M토큰 (입력/출력)',
+                'note': '🆓 무료 할당량: 하루 25회 요청 (Google AI Studio) 또는 1,000회 (Gemini CLI) | 💰 새 계정 시 Google Cloud $300 크레딧 90일간 제공'
             },
             {
                 'title': '🌟 Anthropic (Claude) API',
@@ -2470,7 +2038,7 @@ class APISettingsDialog(QDialog):
                     '키 이름 입력 후 생성',
                     '생성된 키를 복사하여 붙여넣기'
                 ],
-                'cost': '비용: Haiku $0.25/1M토큰, Sonnet $3/1M토큰, Opus $15/1M토큰',
+                'cost': '비용: Claude 3.5 Haiku $0.25/$1.25/1M토큰 (입력/출력), Claude Sonnet 4 $3/$15/1M토큰 (입력/출력), Claude Opus 4.1 $15/$75/1M토큰 (입력/출력)',
                 'note': '초기 크레딧 $5 제공'
             }
         ]
@@ -2481,7 +2049,7 @@ class APISettingsDialog(QDialog):
         """이미지 생성 AI API 발급방법 도움말 표시"""
         cards_data = [
             {
-                'title': '🎨 OpenAI (DALL-E) API',
+                'title': '🎨 OpenAI Image API',
                 'steps': [
                     '<a href="https://platform.openai.com">https://platform.openai.com</a> 접속',
                     '우상단 "API" 메뉴 클릭',
@@ -2489,7 +2057,7 @@ class APISettingsDialog(QDialog):
                     '키 이름 입력 후 생성 (글 작성 AI와 동일한 키 사용 가능)',
                     '생성된 키를 복사하여 붙여넣기'
                 ],
-                'cost': '비용: DALL-E 3 $0.040/이미지, DALL-E 2 $0.016/이미지',
+                'cost': '비용: GPT Image 1 $0.040/이미지 (1024x1024 기준)',
                 'note': '고품질 1024x1024 이미지 생성 가능',
                 'warnings': [
                     '이미지 생성은 비용이 많이 드는 작업입니다',
@@ -2497,7 +2065,7 @@ class APISettingsDialog(QDialog):
                 ]
             },
             {
-                'title': '🖼️ Google (Imagen) API',
+                'title': '🖼️ Google (Gemini Image) API',
                 'steps': [
                     '<a href="https://cloud.google.com/console">Google Cloud Console</a> 접속',
                     '새 프로젝트 생성 또는 기존 프로젝트 선택',
@@ -2505,7 +2073,7 @@ class APISettingsDialog(QDialog):
                     '서비스 계정 생성 및 JSON 키 다운로드',
                     '환경 변수 또는 키 파일 경로 설정'
                 ],
-                'cost': '비용: Imagen 3 약 $0.020/이미지 (버텍스 AI 기준)',
+                'cost': '비용: Gemini 2.5 Flash Image $0.039/이미지 (1024x1024 기준)',
                 'note': '복잡한 설정 과정, Google Cloud 크레딧 필요',
                 'warnings': [
                     'API 사용량을 주기적으로 확인하세요',

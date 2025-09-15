@@ -336,24 +336,11 @@ class BlogAutomationService:
         return display_names.get(platform, platform.value)
     
     def _map_ui_model_to_technical_name(self, ui_model_name: str) -> str:
-        """UI 모델명을 기술적 모델명으로 매핑"""
-        model_mapping = {
-            # OpenAI 모델들
-            "GPT-4o Mini (유료, 저렴)": "gpt-4o-mini",
-            "GPT-4o (유료, 표준)": "gpt-4o", 
-            "GPT-4 Turbo (유료, 고단가)": "gpt-4-turbo",
-            
-            # Google Gemini 모델들
-            "Gemini 1.5 Flash (무료, 빠름)": "gemini-1.5-flash-latest",
-            "Gemini 1.5 Pro (유료, 고품질)": "gemini-1.5-pro-latest", 
-            "Gemini 2.0 Flash (무료, 최신)": "gemini-2.0-flash-exp",
-            
-            # Anthropic Claude 모델들
-            "Claude 3.5 Sonnet (유료, 고품질)": "claude-sonnet-4-20250514",
-            "Claude 3.5 Haiku (유료, 빠름)": "claude-3-5-haiku-20241022",
-            "Claude Opus 4.1 (유료, 최고품질)": "claude-opus-4-1-20250805"
-        }
-        
+        """UI 모델명을 기술적 모델명으로 매핑 - 중앙화된 AI 모델 시스템 사용"""
+        from src.foundation.ai_models import AIModelRegistry
+
+        model_mapping = AIModelRegistry.get_model_mapping_for_service()
+
         mapped_model = model_mapping.get(ui_model_name, ui_model_name)
         if mapped_model == ui_model_name and ui_model_name not in model_mapping:
             logger.warning(f"UI 모델명 '{ui_model_name}'에 대한 매핑을 찾을 수 없음. 원본 모델명 사용")
@@ -369,8 +356,14 @@ class BlogAutomationService:
             api_config = config_manager.load_api_config()
 
             # 정보요약 AI 설정 확인
-            summary_provider = api_config.current_summary_ai_provider or "openai"
-            summary_ui_model = api_config.current_summary_ai_model or "GPT-4o Mini (유료, 저렴)"
+            summary_provider = api_config.current_summary_ai_provider
+            summary_ui_model = api_config.current_summary_ai_model
+
+            if not summary_provider:
+                raise BusinessError("정보요약 AI 제공자가 설정되지 않았습니다. API 설정에서 정보요약 AI를 선택해주세요.")
+
+            if not summary_ui_model:
+                raise BusinessError("정보요약 AI 모델이 설정되지 않았습니다. API 설정에서 모델을 선택해주세요.")
 
             logger.info(f"통합 정보요약 AI 호출 ({context}) - Provider: {summary_provider}, Model: {summary_ui_model}")
 
@@ -478,13 +471,19 @@ class BlogAutomationService:
             ]
             
             # 설정된 AI 프로바이더와 모델에 따라 호출
-            provider = api_config.current_text_ai_provider or "openai"
-            ui_model = api_config.current_text_ai_model or "GPT-4o (유료, 표준)"
-            
+            provider = api_config.current_text_ai_provider
+            ui_model = api_config.current_text_ai_model
+
+            if not provider:
+                raise BusinessError("글쓰기 AI 제공자가 설정되지 않았습니다. API 설정에서 글쓰기 AI를 선택해주세요.")
+
+            if not ui_model:
+                raise BusinessError("글쓰기 AI 모델이 설정되지 않았습니다. API 설정에서 모델을 선택해주세요.")
+
             # 디버그: 현재 설정 상태 로깅
             logger.info(f"현재 AI 설정 - Provider: {provider}, Model: {ui_model}")
             logger.info(f"API 키 상태 - OpenAI: {bool(api_config.openai_api_key)}, Gemini: {bool(api_config.gemini_api_key)}, Claude: {bool(api_config.claude_api_key)}")
-            
+
             # UI 모델명을 기술적 모델명으로 변환
             technical_model = self._map_ui_model_to_technical_name(ui_model)
             
@@ -736,17 +735,9 @@ class BlogAutomationService:
             raise BusinessError(f"블로그 콘텐츠 생성 실패: {str(e)}")
     
     def _map_ui_image_model_to_technical_name(self, ui_model_name: str) -> str:
-        """UI 이미지 모델명을 기술적 모델명으로 매핑"""
-        image_model_mapping = {
-            # OpenAI DALL-E 모델들
-            "DALL-E 3 (고품질, 유료)": "dall-e-3",
-            "DALL-E 2 (표준, 유료)": "dall-e-2",
-            
-            # Google Imagen 모델들  
-            "Imagen 3 (고품질, 유료)": "imagen-3.0-generate-001",
-            "Imagen 2 (표준, 유료)": "imagen-2.0-generate-001"
-        }
-        
+        """UI 이미지 모델명을 기술적 모델명으로 매핑 - 중앙 관리 시스템 사용"""
+        from src.foundation.ai_models import AIModelRegistry
+        image_model_mapping = AIModelRegistry.get_image_model_mapping_for_service()
         return image_model_mapping.get(ui_model_name, ui_model_name)
 
     def select_blog_titles_with_ai(self, target_title: str, search_keyword: str, main_keyword: str, content_type: str, blog_titles: list, sub_keywords: str = "") -> list:
@@ -793,9 +784,15 @@ class BlogAutomationService:
             api_config = config_manager.load_api_config()
             
             # 설정된 AI 프로바이더와 모델에 따라 호출
-            provider = api_config.current_image_ai_provider or "openai"
-            ui_model = api_config.current_image_ai_model or "DALL-E 3 (고품질, 유료)"
-            
+            provider = api_config.current_image_ai_provider
+            ui_model = api_config.current_image_ai_model
+
+            if not provider:
+                raise BusinessError("이미지 생성 AI 제공자가 설정되지 않았습니다. API 설정에서 이미지 생성 AI를 선택해주세요.")
+
+            if not ui_model:
+                raise BusinessError("이미지 생성 AI 모델이 설정되지 않았습니다. API 설정에서 모델을 선택해주세요.")
+
             # UI 모델명을 기술적 모델명으로 변환
             technical_model = self._map_ui_image_model_to_technical_name(ui_model)
             

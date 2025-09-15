@@ -701,69 +701,100 @@ class BlogAutomationMainUI(QWidget):
         dialog.exec()
     
     def update_ai_info_display(self):
-        """AI 설정 정보 표시 업데이트 (한 줄로)"""
+        """AI 설정 정보 표시 업데이트 - 중앙화된 AI 모델 시스템 사용"""
         try:
             from src.foundation.config import config_manager
+            from src.foundation.ai_models import AIModelRegistry, AIProvider
+
             api_config = config_manager.load_api_config()
-            
+
             # 정보요약 AI 정보
             current_summary_model = getattr(api_config, 'current_summary_ai_model', '')
             if current_summary_model and current_summary_model != "모델을 선택하세요":
-                summary_ai_info = f"📄 {current_summary_model} (요약)"
+                # 중앙 시스템에서 모델 정보 검증
+                model_info = AIModelRegistry.get_model_by_display_name(current_summary_model)
+                if model_info:
+                    summary_ai_info = f"📄 {current_summary_model} (요약)"
+                else:
+                    summary_ai_info = f"📄 {current_summary_model[:20]}{'...' if len(current_summary_model) > 20 else ''} (요약)"
             else:
-                # API 키가 설정되어 있는지 확인
-                summary_ai_configured = any([
-                    getattr(api_config, 'openai_api_key', '').strip(),
-                    getattr(api_config, 'claude_api_key', '').strip(),
-                    getattr(api_config, 'gemini_api_key', '').strip()
-                ])
-                
+                # API 키 설정 여부 확인 (중앙 시스템 기반)
+                summary_ai_configured = self._check_ai_provider_configured(['anthropic', 'openai', 'google'], api_config)
+
                 if summary_ai_configured:
                     summary_ai_info = "📄 정보요약AI: 모델미선택"
                 else:
                     summary_ai_info = "📄 정보요약AI: 미설정"
-            
+
             # 글 작성 AI 정보
             current_text_model = getattr(api_config, 'current_text_ai_model', '')
             if current_text_model and current_text_model != "모델을 선택하세요":
-                text_ai_info = f"📝 {current_text_model}"
+                # 중앙 시스템에서 모델 정보 검증
+                model_info = AIModelRegistry.get_model_by_display_name(current_text_model)
+                if model_info:
+                    text_ai_info = f"📝 {current_text_model}"
+                else:
+                    text_ai_info = f"📝 {current_text_model[:20]}{'...' if len(current_text_model) > 20 else ''}"
             else:
-                # API 키가 설정되어 있는지 확인
-                text_ai_configured = any([
-                    getattr(api_config, 'openai_api_key', '').strip(),
-                    getattr(api_config, 'claude_api_key', '').strip(),
-                    getattr(api_config, 'gemini_api_key', '').strip()
-                ])
-                
+                # API 키 설정 여부 확인 (중앙 시스템 기반)
+                text_ai_configured = self._check_ai_provider_configured(['anthropic', 'openai', 'google'], api_config)
+
                 if text_ai_configured:
                     text_ai_info = "📝 글작성AI: 모델미선택"
                 else:
                     text_ai_info = "📝 글작성AI: 미설정"
-            
+
             # 이미지 생성 AI 정보
             current_image_model = getattr(api_config, 'current_image_ai_model', '')
             if current_image_model and current_image_model != "모델을 선택하세요":
-                image_ai_info = f"🎨 {current_image_model}"
+                # 중앙 시스템에서 이미지 모델 정보 검증
+                model_info = AIModelRegistry.get_model_by_display_name(current_image_model)
+                if model_info:
+                    image_ai_info = f"🎨 {current_image_model}"
+                else:
+                    image_ai_info = f"🎨 {current_image_model[:20]}{'...' if len(current_image_model) > 20 else ''}"
             else:
-                # API 키가 설정되어 있는지 확인
-                image_ai_configured = any([
-                    getattr(api_config, 'dalle_api_key', '').strip(),
-                    getattr(api_config, 'imagen_api_key', '').strip()
-                ])
-                
+                # 이미지 AI 키 설정 여부 확인
+                image_ai_configured = self._check_ai_provider_configured(['openai', 'google'], api_config, is_image=True)
+
                 if image_ai_configured:
                     image_ai_info = "🎨 이미지AI: 모델미선택"
                 else:
                     image_ai_info = "🎨 이미지AI: 미설정"
-            
-            # 한 줄로 표시 (구분자로 | 사용) - 정보요약 AI 추가
+
+            # 한 줄로 표시 (구분자로 | 사용)
             combined_info = f"{summary_ai_info} | {text_ai_info} | {image_ai_info}"
             self.ai_info_label.setText(combined_info)
             self.ai_info_label.setVisible(True)
-                    
+
         except Exception as e:
             logger.error(f"AI 정보 표시 업데이트 오류: {e}")
             self.ai_info_label.setText("📄 정보요약AI: 오류 | 📝 글작성AI: 오류 | 🎨 이미지AI: 오류")
+
+    def _check_ai_provider_configured(self, providers: list, api_config, is_image: bool = False) -> bool:
+        """AI 제공업체별 API 키 설정 여부 확인"""
+        try:
+            for provider in providers:
+                if provider == 'anthropic':
+                    if getattr(api_config, 'claude_api_key', '').strip():
+                        return True
+                elif provider == 'openai':
+                    if is_image:
+                        if getattr(api_config, 'dalle_api_key', '').strip():
+                            return True
+                    else:
+                        if getattr(api_config, 'openai_api_key', '').strip():
+                            return True
+                elif provider == 'google':
+                    if is_image:
+                        if getattr(api_config, 'imagen_api_key', '').strip():
+                            return True
+                    else:
+                        if getattr(api_config, 'gemini_api_key', '').strip():
+                            return True
+            return False
+        except:
+            return False
     
     def _on_api_settings_changed(self):
         """API 설정 변경 시 호출 (메인 앱에서 브로드캐스트)"""

@@ -12,33 +12,26 @@ from src.foundation.logging import get_logger
 
 logger = get_logger("vendors.google.text")
 
-# 지원하는 Gemini 모델들
-SUPPORTED_MODELS = {
-    "gemini-2.0-flash-exp": {
-        "name": "Gemini 2.0 Flash (Experimental)",
-        "description": "최신 Gemini 2.0 Flash 모델 (무료, 실험적)",
-        "max_tokens": 8192,
-        "context_window": 1000000
-    },
-    "gemini-1.5-pro-latest": {
-        "name": "Gemini 1.5 Pro",
-        "description": "최고 품질의 Gemini 모델 (긴 컨텍스트 지원)",
-        "max_tokens": 8192,
-        "context_window": 2000000
-    },
-    "gemini-1.5-flash-latest": {
-        "name": "Gemini 1.5 Flash", 
-        "description": "빠르고 효율적인 Gemini 모델",
-        "max_tokens": 8192,
-        "context_window": 1000000
-    },
-    "gemini-pro": {
-        "name": "Gemini Pro",
-        "description": "기본 Gemini Pro 모델",
-        "max_tokens": 8192,
-        "context_window": 32768
-    }
-}
+# 중앙화된 AI 모델 시스템에서 동적으로 로드
+def get_supported_models():
+    """중앙 관리되는 Google Gemini 모델 정보를 동적으로 가져오기"""
+    from src.foundation.ai_models import AIModelRegistry, AIProvider
+
+    supported_models = {}
+    gemini_models = AIModelRegistry.get_models_by_provider(AIProvider.GOOGLE)
+
+    for model in gemini_models:
+        supported_models[model.id] = {
+            "name": model.display_name,
+            "description": model.description,
+            "max_tokens": model.max_tokens,
+            "context_window": model.context_window
+        }
+
+    return supported_models
+
+# 동적으로 지원 모델 로드
+SUPPORTED_MODELS = get_supported_models()
 
 
 class GeminiTextClient:

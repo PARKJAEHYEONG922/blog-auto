@@ -207,7 +207,7 @@ class HTTPClient:
     """공통 HTTP 클라이언트"""
     
     def __init__(self, 
-                 timeout: float = 30.0,
+                 timeout: float = 60.0,
                  max_retries: int = 3,
                  backoff_factor: float = 1.0):
         """
@@ -279,7 +279,10 @@ class HTTPClient:
             response = self.session.request(method, url, **kwargs)
             
             # 상세한 상태 코드 확인
-            if response.status_code == 429:
+            if response.status_code == 400:
+                error_details = self.get_error_details(response)
+                raise APIResponseError(f"Bad Request (400): {error_details}")
+            elif response.status_code == 429:
                 error_details = self.get_error_details(response)
                 raise APIRateLimitError(f"Rate limit exceeded: {error_details}")
             elif response.status_code == 401:

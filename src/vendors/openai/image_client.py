@@ -12,23 +12,28 @@ from src.foundation.logging import get_logger
 
 logger = get_logger("vendors.openai.image")
 
-# 지원하는 DALL-E 모델들
-SUPPORTED_MODELS = {
-    "dall-e-3": {
-        "name": "DALL-E 3",
-        "description": "최신 이미지 생성 모델 (고품질)",
-        "max_images": 1,  # DALL-E 3는 한 번에 1개만
-        "sizes": ["1024x1024", "1792x1024", "1024x1792"],
-        "quality": ["standard", "hd"]
-    },
-    "dall-e-2": {
-        "name": "DALL-E 2",
-        "description": "이전 버전 이미지 생성 모델 (경제적)",
-        "max_images": 10,
-        "sizes": ["256x256", "512x512", "1024x1024"],
-        "quality": ["standard"]
-    }
-}
+# 중앙화된 AI 모델 시스템에서 동적으로 로드
+def get_supported_models():
+    """중앙 관리되는 OpenAI 이미지 모델 정보를 동적으로 가져오기"""
+    from src.foundation.ai_models import AIModelRegistry, AIProvider, AIModelType
+
+    supported_models = {}
+    openai_image_models = AIModelRegistry.get_models_by_provider_and_type(AIProvider.OPENAI, AIModelType.IMAGE)
+
+    for model in openai_image_models:
+        model_info = {
+            "name": model.display_name,
+            "description": model.description,
+            "max_images": 10 if "2" in model.id else 1,  # DALL-E 2는 최대 10개, DALL-E 3는 1개
+            "sizes": ["1024x1024", "1792x1024", "1024x1792"] if "3" in model.id else ["256x256", "512x512", "1024x1024"],
+            "quality": ["standard", "hd"] if "3" in model.id else ["standard"]
+        }
+        supported_models[model.id] = model_info
+
+    return supported_models
+
+# 동적으로 지원 모델 로드
+SUPPORTED_MODELS = get_supported_models()
 
 
 class OpenAIImageClient:
@@ -62,7 +67,7 @@ class OpenAIImageClient:
     @handle_api_exception
     def generate_images(self,
                        prompt: str,
-                       model: str = "dall-e-3",
+                       model: str = None,
                        n: int = 1,
                        size: str = "1024x1024",
                        quality: str = "standard") -> List[str]:
@@ -81,7 +86,13 @@ class OpenAIImageClient:
         """
         if not self._check_config():
             raise OpenAIError("OpenAI API 키 또는 DALL-E API 키가 설정되지 않았습니다")
-        
+
+        # 기본 모델 설정 (중앙에서 가져오기)
+        if model is None:
+            from src.foundation.ai_models import AIModelRegistry, AIProvider, AIModelType
+            default_model = AIModelRegistry.get_default_model_by_type(AIProvider.OPENAI, AIModelType.IMAGE)
+            model = default_model.id if default_model else "dall-e-3"
+
         # 모델 지원 여부 확인
         if model not in SUPPORTED_MODELS:
             raise OpenAIError(f"지원하지 않는 모델입니다: {model}")

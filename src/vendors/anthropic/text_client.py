@@ -12,39 +12,26 @@ from src.foundation.logging import get_logger
 
 logger = get_logger("vendors.anthropic.text")
 
-# 지원하는 Claude 모델들
-SUPPORTED_MODELS = {
-    "claude-sonnet-4-20250514": {
-        "name": "Claude Sonnet 4",
-        "description": "최신 Claude Sonnet 4 모델 (최고 성능)",
-        "max_tokens": 8192,
-        "context_window": 200000
-    },
-    "claude-3-5-haiku-20241022": {
-        "name": "Claude 3.5 Haiku",
-        "description": "빠르고 경제적인 Claude 3.5 Haiku",
-        "max_tokens": 8192,
-        "context_window": 200000
-    },
-    "claude-opus-4-1-20250805": {
-        "name": "Claude Opus 4.1",
-        "description": "가장 강력한 Claude 4.1 모델 (최고 성능)",
-        "max_tokens": 8192,
-        "context_window": 200000
-    },
-    "claude-3-sonnet-20240229": {
-        "name": "Claude 3 Sonnet",
-        "description": "균형잡힌 Claude 3 모델",
-        "max_tokens": 4096,
-        "context_window": 200000
-    },
-    "claude-3-haiku-20240307": {
-        "name": "Claude 3 Haiku",
-        "description": "빠르고 경제적인 Claude 3 모델",
-        "max_tokens": 4096,
-        "context_window": 200000
-    }
-}
+# 중앙화된 AI 모델 시스템에서 동적으로 로드
+def get_supported_models():
+    """중앙 관리되는 Claude 모델 정보를 동적으로 가져오기"""
+    from src.foundation.ai_models import AIModelRegistry, AIProvider
+
+    supported_models = {}
+    claude_models = AIModelRegistry.get_models_by_provider(AIProvider.ANTHROPIC)
+
+    for model in claude_models:
+        supported_models[model.id] = {
+            "name": model.display_name,
+            "description": model.description,
+            "max_tokens": model.max_tokens,
+            "context_window": model.context_window
+        }
+
+    return supported_models
+
+# 동적으로 지원 모델 로드
+SUPPORTED_MODELS = get_supported_models()
 
 
 class ClaudeTextClient:
@@ -79,7 +66,7 @@ class ClaudeTextClient:
     @handle_api_exception
     def generate_text(self,
                      messages: List[Dict[str, str]],
-                     model: str = "claude-sonnet-4-20250514",
+                     model: str = None,
                      temperature: float = 0.7,
                      max_tokens: Optional[int] = None) -> str:
         """
@@ -96,7 +83,13 @@ class ClaudeTextClient:
         """
         if not self._check_config():
             raise ClaudeAPIError("Claude API 키가 설정되지 않았습니다")
-        
+
+        # 기본 모델 설정 (중앙에서 가져오기)
+        if model is None:
+            from src.foundation.ai_models import AIModelRegistry, AIProvider
+            default_model = AIModelRegistry.get_default_model(AIProvider.ANTHROPIC)
+            model = default_model.id if default_model else list(SUPPORTED_MODELS.keys())[0]
+
         # 모델 지원 여부 확인
         if model not in SUPPORTED_MODELS:
             raise ClaudeAPIError(f"지원하지 않는 모델입니다: {model}")
@@ -104,12 +97,8 @@ class ClaudeTextClient:
         # 모델별 기본 max_tokens 설정 (출력용)
         if max_tokens is None:
             model_info = SUPPORTED_MODELS.get(model, {})
-            if model in ["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022"]:
-                # Claude 3.5는 충분히 긴 블로그 글 생성을 위해 더 큰 토큰 수 사용
-                max_tokens = 6000  # 약 4,500-6,000자 블로그 글 생성 가능
-            else:
-                # Claude 3 모델들
-                max_tokens = 4000
+            # 모든 Claude 모델에서 충분히 긴 블로그 글 생성을 위해 더 큰 토큰 수 사용
+            max_tokens = 6000  # 약 4,500-6,000자 블로그 글 생성 가능
         
         # 속도 제한 적용
         self.rate_limiter.wait()

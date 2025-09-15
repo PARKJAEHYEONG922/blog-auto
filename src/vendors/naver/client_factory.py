@@ -13,12 +13,15 @@ from .developer import (
     NaverCafeClient, NaverCafeAPIClient
 )
 
-# 네이버 검색광고 API  
+# 네이버 검색광고 API
 from .searchad import (
     SearchAdAPIType, get_searchad_api_info,
     NaverSearchAdBaseClient,
     NaverSearchAdClient
 )
+
+# 중앙화된 AI 모델 시스템
+from src.foundation.ai_models import AIModelRegistry, AIProvider, AIModelType
 
 from src.foundation.logging import get_logger
 
@@ -154,12 +157,39 @@ class NaverClientFactory:
     
     @classmethod
     def get_available_clients(cls) -> Dict[str, str]:
-        """사용 가능한 클라이언트 목록 반환"""
+        """사용 가능한 클라이언트 목록 반환 - 중앙화된 시스템 사용"""
         available = {}
-        for search_type in cls._search_client_classes.keys():
-            api_info = get_api_info(search_type)
-            available[search_type.value] = api_info.description if api_info else "설명 없음"
+
+        # 검색 API 정보
+        search_apis = AIModelRegistry.get_naver_search_apis()
+        for model in search_apis:
+            available[model.id] = model.description
+
+        # 검색광고 API 정보
+        searchad_apis = AIModelRegistry.get_naver_searchad_apis()
+        for model in searchad_apis:
+            available[model.id] = model.description
+
         return available
+
+    @classmethod
+    def get_centralized_api_info(cls, api_type: str) -> Dict[str, Any]:
+        """중앙화된 시스템에서 API 정보 조회"""
+        model = AIModelRegistry.get_naver_api_info(api_type)
+        if not model:
+            return {}
+
+        return {
+            "id": model.id,
+            "display_name": model.display_name,
+            "description": model.description,
+            "provider": model.provider.value,
+            "model_type": model.model_type.value,
+            "max_display": model.max_tokens,  # 네이버 API에서는 max_tokens가 max_display 역할
+            "max_start": model.context_window,  # context_window가 max_start 역할
+            "tier": model.tier,
+            "is_free": model.tier == "free"
+        }
     
     @classmethod
     def search_all(cls, 
@@ -215,6 +245,18 @@ class NaverClientFactory:
         cls._search_instances.clear()
         cls._searchad_instances.clear()
         logger.debug("네이버 클라이언트 캐시 클리어됨")
+
+    @classmethod
+    def test_naver_search_api(cls, api_key: str) -> tuple[bool, str]:
+        """네이버 검색 API 테스트 - 중앙화된 시스템 사용"""
+        from src.foundation.ai_models import AIAPITester, AIProvider, AIModelType
+        return AIAPITester.test_api(AIProvider.NAVER, api_key, AIModelType.SEARCH)
+
+    @classmethod
+    def test_naver_searchad_api(cls, api_key: str) -> tuple[bool, str]:
+        """네이버 검색광고 API 테스트 - 중앙화된 시스템 사용"""
+        from src.foundation.ai_models import AIAPITester, AIProvider, AIModelType
+        return AIAPITester.test_api(AIProvider.NAVER, api_key, AIModelType.SEARCH_AD)
 
 
 # 편의 함수들
