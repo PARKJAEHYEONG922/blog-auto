@@ -17,118 +17,11 @@ from src.vendors.web_automation.selenium_helper import SeleniumHelper, get_defau
 from src.foundation.logging import get_logger
 from src.foundation.http_client import default_http_client
 from src.foundation.exceptions import BusinessError, APIResponseError, APITimeoutError
+from src.toolbox.text_utils import is_advertisement_content, is_low_quality_content
+from src.toolbox.web_automation_utils import handle_web_automation_errors
 from .models import BlogCredentials, BlogPlatform, LoginStatus
 
 logger = get_logger("blog_automation.adapters")
-
-
-def is_advertisement_content(text_content: str, title: str = "") -> bool:
-    """광고/협찬/체험단 글인지 판단"""
-    if not text_content:
-        return False
-    
-    # 전체 텍스트를 소문자로 변환하여 검사
-    full_text = (text_content + " " + title).lower()
-    
-    # 광고/협찬 관련 키워드들
-    ad_keywords = [
-        # 광고 관련
-        "광고포스트", "광고 포스트", "광고글", "광고 글", "광고입니다", "광고 입니다",
-        "유료광고", "유료 광고", "파트너스", "쿠팡파트너스", "파트너 활동", "추천링크",
-        
-        # 협찬 관련  
-        "협찬", "협찬받", "협찬글", "협찬 글", "협찬으로", "협찬을", "제공받", "무료로 제공",
-        "브랜드로부터", "업체로부터", "해당업체", "해당 업체", "제품을 제공", "서비스를 제공", 
-        "제공받아", "제공받은", "지원을 받아", "지원받아", "업체에서 제공", "업체로부터 제품",
-        
-        # 체험단 관련
-        "체험단", "체험 단", "리뷰어", "체험후기", "체험 후기", "체험해보", "체험을",
-        "무료체험", "무료 체험", "서포터즈", "앰배서더", "인플루언서",
-        
-        # 기타 상업적 키워드
-        "원고료", "대가", "소정의", "혜택을", "증정", "무료로 받", "공짜로", 
-        "할인코드", "쿠폰", "프로모션", "이벤트 참여"
-    ]
-    
-    # 키워드 매칭 검사
-    for keyword in ad_keywords:
-        if keyword in full_text:
-            logger.info(f"광고/협찬 글 감지: '{keyword}' 키워드 발견")
-            return True
-    
-    # 패턴 매칭 (정규식)
-    ad_patterns = [
-        r".*제공받.*작성.*",  # "제공받아 작성한", "제공받고 작성한" 등
-        r".*협찬.*받.*글.*",  # "협찬받은 글", "협찬을 받아서" 등  
-        r".*무료.*받.*후기.*", # "무료로 받아서 후기", "무료로 받은 후기" 등
-        r".*체험.*참여.*",     # "체험에 참여해", "체험단 참여" 등
-        r".*광고.*포함.*",     # "광고가 포함", "광고를 포함한" 등
-        r".*업체.*지원.*받.*", # "해당 업체에 지원을 받아", "업체로부터 지원받아" 등
-        r".*업체.*제품.*제공.*", # "업체로부터 제품을 제공받아" 등
-    ]
-    
-    for pattern in ad_patterns:
-        if re.search(pattern, full_text):
-            logger.info(f"광고/협찬 글 감지: 패턴 '{pattern}' 매칭")
-            return True
-    
-    return False
-
-
-def handle_web_automation_errors(operation_name: str):
-    """웹 자동화 오류 처리 데코레이터 (중복 코드 제거용)"""
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except TimeoutException as e:
-                logger.error(f"{operation_name} 타임아웃: {e}")
-                raise BusinessError(f"{operation_name} 실패 (타임아웃): 요소를 찾을 수 없습니다")
-            except NoSuchElementException as e:
-                logger.error(f"{operation_name} 요소 없음: {e}")
-                raise BusinessError(f"{operation_name} 실패: 필요한 요소를 찾을 수 없습니다")
-            except Exception as e:
-                logger.error(f"{operation_name} 실패: {e}")
-                raise BusinessError(f"{operation_name} 실패: {str(e)}")
-        return wrapper
-    return decorator
-
-
-def is_low_quality_content(text_content: str) -> bool:
-    """콘텐츠 품질이 낮은 글인지 판단 (숫자만 나열, 특수문자 과다)"""
-    if not text_content:
-        return False
-
-    import re
-
-    # 텍스트 전처리 (공백 제거)
-    cleaned_text = text_content.strip()
-    if len(cleaned_text) < 100:  # 너무 짧은 글은 별도 체크
-        return False
-
-    # 1. 숫자만 나열된 글 체크 (전화번호, 가격표, 주소 등)
-    # 숫자, 공백, 하이픈, 콤마, 괄호, 원화표시 외에는 거의 없는 경우
-    numbers_and_symbols = re.sub(r'[0-9\s\-,()원₩\.\+#]', '', cleaned_text)
-    if len(numbers_and_symbols) / len(cleaned_text) < 0.3:  # 의미있는 문자가 30% 미만
-        logger.info(f"품질 낮은 글 감지: 숫자/기호만 나열됨 (의미있는 문자 비율: {len(numbers_and_symbols) / len(cleaned_text) * 100:.1f}%)")
-        return True
-
-    # 2. 특수문자 비율이 너무 높은 글 체크
-    # 한글, 영문, 숫자, 공백을 제외한 특수문자 비율
-    special_chars = re.sub(r'[가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9\s]', '', cleaned_text)
-    special_char_ratio = len(special_chars) / len(cleaned_text)
-    if special_char_ratio > 0.15:  # 특수문자가 15% 초과
-        logger.info(f"품질 낮은 글 감지: 특수문자 과다 (비율: {special_char_ratio * 100:.1f}%)")
-        return True
-
-    # 3. 반복 패턴 체크 (같은 문자나 기호의 반복)
-    # 같은 문자 5개 이상 연속 반복 체크
-    if re.search(r'(.)\1{4,}', cleaned_text):  # 같은 문자 5개 이상 반복
-        logger.info("품질 낮은 글 감지: 같은 문자 반복 패턴")
-        return True
-
-    return False
 
 
 class NaverBlogAdapter:
@@ -3103,56 +2996,270 @@ def create_blog_adapter(platform: BlogPlatform):
         raise BusinessError(f"지원하지 않는 플랫폼: {platform}")
 
 
-class BlogAIPromptAdapter:
-    """블로그 AI 프롬프트 생성 어댑터 - CLAUDE.md 구조 준수"""
+class BlogAIAdapter:
+    """블로그 AI 호출 어댑터 - vendors 호출 전용"""
     
     def __init__(self):
         self.logger = get_logger("blog_automation.ai_adapter")
     
-    def generate_unified_prompt(self, main_keyword: str, sub_keywords: str, analyzed_blogs: list, 
-                               content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", 
-                               review_detail: str = "", selected_title: str = "", 
-                               search_keyword: str = "", blogger_identity: str = "",
-                               summary_result: str = "") -> Dict[str, Any]:
-        """
-        통합 AI 프롬프트 생성 - UI 표시용과 실제 호출용 동일한 프롬프트 보장
-        
-        Returns:
-            Dict: {
-                'ai_prompt': str,      # 실제 AI 호출용 프롬프트
-                'summary_prompt': str, # 정보요약 프롬프트 (필요시)
-                'summary_result': str, # 요약 결과 (필요시)
-            }
-        """
+    def _map_ui_model_to_technical_name(self, ui_model_name: str) -> str:
+        """UI 모델명을 기술적 모델명으로 매핑"""
+        from src.foundation.ai_models import map_ui_model_to_technical_name
+        return map_ui_model_to_technical_name(ui_model_name)
+    
+    def call_summary_ai(self, prompt: str, response_format: str = "text", context: str = "정보요약") -> Any:
+        """통합 정보요약 AI 호출 - vendors 호출"""
         try:
-            self.logger.info("통합 AI 프롬프트 생성 시작")
-            
-            # ai_prompts 모듈에서 통합 데이터 생성
-            from .ai_prompts import create_ai_request_data
-            
-            ai_data = create_ai_request_data(
-                main_keyword=main_keyword,
-                sub_keywords=sub_keywords, 
-                analyzed_blogs=analyzed_blogs,
-                content_type=content_type,
-                tone=tone,
-                review_detail=review_detail,
-                blogger_identity=blogger_identity,
-                summary_result=summary_result,
-                selected_title=selected_title,
-                search_keyword=search_keyword
-            )
-            
-            if not ai_data:
-                raise BusinessError("AI 프롬프트 생성 실패")
-                
-            self.logger.info("통합 AI 프롬프트 생성 완료")
-            return ai_data
-            
+            # API 설정 로드
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+
+            # 정보요약 AI 설정 확인
+            summary_provider = api_config.current_summary_ai_provider
+            summary_ui_model = api_config.current_summary_ai_model
+
+            if not summary_provider:
+                raise BusinessError("정보요약 AI 제공자가 설정되지 않았습니다. API 설정에서 정보요약 AI를 선택해주세요.")
+
+            if not summary_ui_model:
+                raise BusinessError("정보요약 AI 모델이 설정되지 않았습니다. API 설정에서 모델을 선택해주세요.")
+
+            self.logger.info(f"통합 정보요약 AI 호출 ({context}) - Provider: {summary_provider}, Model: {summary_ui_model}")
+
+            # UI 모델명을 기술적 모델명으로 변환
+            technical_model = self._map_ui_model_to_technical_name(summary_ui_model)
+
+            # 메시지 구성
+            messages = [{"role": "user", "content": prompt}]
+
+            # AI 호출
+            if summary_provider == "openai" and api_config.openai_api_key and api_config.openai_api_key.strip():
+                self.logger.info(f"OpenAI API 사용 ({context}): {summary_ui_model} -> {technical_model}")
+                from src.vendors.openai.text_client import openai_text_client
+                response = openai_text_client.generate_text(messages, model=technical_model)
+
+            elif summary_provider == "google" and api_config.gemini_api_key and api_config.gemini_api_key.strip():
+                self.logger.info(f"Google Gemini API 사용 ({context}): {summary_ui_model} -> {technical_model}")
+                from src.vendors.google.text_client import gemini_text_client
+                response = gemini_text_client.generate_text(messages, model=technical_model)
+
+            elif summary_provider == "anthropic" and api_config.claude_api_key and api_config.claude_api_key.strip():
+                self.logger.info(f"Anthropic Claude API 사용 ({context}): {summary_ui_model} -> {technical_model}")
+                from src.vendors.anthropic.text_client import claude_text_client
+                response = claude_text_client.generate_text(messages, model=technical_model)
+
+            else:
+                self.logger.error("정보요약 AI가 설정되지 않음. API 설정에서 정보요약 AI를 설정해주세요.")
+                raise BusinessError("정보요약 AI가 설정되지 않았습니다. API 설정에서 정보요약 AI를 먼저 설정해주세요.")
+
+            if not response or not response.strip():
+                raise BusinessError("AI 응답이 비어있습니다")
+
+            response = response.strip()
+
+            # 응답 형식에 따른 처리
+            if response_format == "json":
+                from src.toolbox.text_utils import parse_json_response
+                return parse_json_response(response)
+            else:
+                return response
+
+        except BusinessError:
+            raise
+        except ValueError as e:
+            # JSON 파싱 오류를 BusinessError로 변환
+            self.logger.error(f"AI 응답 JSON 파싱 실패 ({context}): {e}")
+            raise BusinessError(f"AI 응답을 JSON으로 파싱할 수 없습니다: {str(e)}")
         except Exception as e:
-            self.logger.error(f"통합 AI 프롬프트 생성 실패: {e}")
-            raise BusinessError(f"AI 프롬프트 생성 실패: {str(e)}")
+            self.logger.error(f"통합 정보요약 AI 호출 실패 ({context}): {e}")
+            raise BusinessError(f"정보요약 AI 처리 중 오류가 발생했습니다: {str(e)}")
+    
+    def generate_blog_content(self, prompt: str) -> str:
+        """블로그 콘텐츠 생성 AI 호출 - vendors 호출"""
+        try:
+            self.logger.info("AI 블로그 콘텐츠 생성 시작")
+            
+            # API 설정 로드
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+            
+            # AI 프롬프트를 그대로 AI에게 전달
+            messages = [
+                {
+                    "role": "user", 
+                    "content": prompt
+                }
+            ]
+            
+            # 설정된 AI 프로바이더와 모델에 따라 호출
+            provider = api_config.current_text_ai_provider
+            ui_model = api_config.current_text_ai_model
+
+            if not provider:
+                raise BusinessError("글쓰기 AI 제공자가 설정되지 않았습니다. API 설정에서 글쓰기 AI를 선택해주세요.")
+
+            if not ui_model:
+                raise BusinessError("글쓰기 AI 모델이 설정되지 않았습니다. API 설정에서 모델을 선택해주세요.")
+
+            # 디버그: 현재 설정 상태 로깅
+            self.logger.info(f"현재 AI 설정 - Provider: {provider}, Model: {ui_model}")
+            self.logger.info(f"API 키 상태 - OpenAI: {bool(api_config.openai_api_key)}, Gemini: {bool(api_config.gemini_api_key)}, Claude: {bool(api_config.claude_api_key)}")
+
+            # UI 모델명을 기술적 모델명으로 변환
+            technical_model = self._map_ui_model_to_technical_name(ui_model)
+            
+            if provider == "openai" and api_config.openai_api_key and api_config.openai_api_key.strip():
+                self.logger.info(f"OpenAI API 사용: {ui_model} -> {technical_model}")
+                from src.vendors.openai.text_client import openai_text_client
+                response = openai_text_client.generate_text(messages, model=technical_model)
+                
+            elif provider == "google" and api_config.gemini_api_key and api_config.gemini_api_key.strip():
+                self.logger.info(f"Google Gemini API 사용: {ui_model} -> {technical_model}")
+                from src.vendors.google.text_client import gemini_text_client
+                response = gemini_text_client.generate_text(messages, model=technical_model)
+                
+            elif provider == "anthropic" and api_config.claude_api_key and api_config.claude_api_key.strip():
+                self.logger.info(f"Anthropic Claude API 사용: {ui_model} -> {technical_model}")
+                from src.vendors.anthropic.text_client import claude_text_client
+                response = claude_text_client.generate_text(messages, model=technical_model)
+                
+            else:
+                # 디버그 정보 추가
+                debug_info = f"provider={provider}, "
+                if provider == "openai":
+                    debug_info += f"openai_key_exists={bool(api_config.openai_api_key)}, openai_key_length={len(api_config.openai_api_key) if api_config.openai_api_key else 0}"
+                elif provider == "google":
+                    debug_info += f"gemini_key_exists={bool(api_config.gemini_api_key)}, gemini_key_length={len(api_config.gemini_api_key) if api_config.gemini_api_key else 0}"
+                elif provider == "anthropic":
+                    debug_info += f"claude_key_exists={bool(api_config.claude_api_key)}, claude_key_length={len(api_config.claude_api_key) if api_config.claude_api_key else 0}"
+                
+                self.logger.error(f"API 키 확인 실패: {debug_info}")
+                raise BusinessError(f"선택된 AI API({provider})의 키가 설정되지 않았습니다. API 설정에서 확인해주세요.")
+            
+            if response:
+                self.logger.info(f"AI 콘텐츠 생성 완료: {len(response)}자")
+                return response
+            else:
+                raise BusinessError("AI API 응답을 처리할 수 없습니다")
+                
+        except Exception as e:
+            self.logger.error(f"AI 콘텐츠 생성 실패: {e}")
+            raise BusinessError(f"AI 콘텐츠 생성 실패: {str(e)}")
+    
+    def _map_ui_image_model_to_technical_name(self, ui_model_name: str) -> str:
+        """UI 이미지 모델명을 기술적 모델명으로 매핑"""
+        from src.foundation.ai_models import map_ui_image_model_to_technical_name
+        return map_ui_image_model_to_technical_name(ui_model_name)
+    
+    def generate_blog_images(self, prompt: str, image_count: int = 1) -> list:
+        """API 설정에서 선택된 이미지 생성 AI를 사용하여 블로그 이미지 생성"""
+        try:
+            self.logger.info("AI 블로그 이미지 생성 시작")
+            
+            # API 설정 로드
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+            
+            # 설정된 AI 프로바이더와 모델에 따라 호출
+            provider = api_config.current_image_ai_provider
+            ui_model = api_config.current_image_ai_model
+
+            if not provider:
+                raise BusinessError("이미지 생성 AI 제공자가 설정되지 않았습니다. API 설정에서 이미지 생성 AI를 선택해주세요.")
+
+            if not ui_model:
+                raise BusinessError("이미지 생성 AI 모델이 설정되지 않았습니다. API 설정에서 모델을 선택해주세요.")
+
+            # UI 모델명을 기술적 모델명으로 변환
+            technical_model = self._map_ui_image_model_to_technical_name(ui_model)
+            
+            if provider == "openai" and (api_config.dalle_api_key or api_config.openai_api_key):
+                self.logger.info(f"OpenAI DALL-E API 사용: {ui_model} -> {technical_model}")
+                from src.vendors.openai.image_client import openai_image_client
+                images = openai_image_client.generate_images(prompt, model=technical_model, n=image_count)
+                
+            elif provider == "google" and api_config.imagen_api_key:
+                self.logger.info(f"Google Imagen API 사용: {ui_model} -> {technical_model}")
+                from src.vendors.google.image_client import imagen_client
+                images = imagen_client.generate_images(prompt, model=technical_model, n=image_count)
+                
+            else:
+                raise BusinessError(f"선택된 이미지 AI API({provider})의 키가 설정되지 않았습니다. API 설정에서 확인해주세요.")
+            
+            if images:
+                self.logger.info(f"AI 이미지 생성 완료: {len(images)}개")
+                return images
+            else:
+                raise BusinessError("AI API 응답을 처리할 수 없습니다")
+                
+        except Exception as e:
+            self.logger.error(f"AI 이미지 생성 실패: {e}")
+            raise BusinessError(f"AI 이미지 생성 실패: {str(e)}")
 
 
 # 전역 AI 어댑터 인스턴스
-blog_ai_adapter = BlogAIPromptAdapter()
+blog_ai_adapter = BlogAIAdapter()
+
+
+def generate_content_summary(combined_content: str, main_keyword: str, content_type: str, search_keyword: str = "") -> str:
+    """콘텐츠 요약 생성 - BlogSummaryPrompts 사용하여 AI 어댑터 호출"""
+    try:
+        # 임시 블로그 데이터 구성 (combined_content 기반)
+        temp_blogs = [{
+            'title': f"{main_keyword} 관련 콘텐츠",
+            'text_content': combined_content
+        }] if combined_content.strip() else []
+
+        # 정식 프롬프트 사용
+        from .ai_prompts import BlogSummaryPrompts
+        summary_prompt = BlogSummaryPrompts.generate_content_summary_prompt(
+            selected_title=f"{main_keyword} 관련 정보",
+            search_keyword=search_keyword or main_keyword,
+            main_keyword=main_keyword,
+            content_type=content_type,
+            competitor_blogs=temp_blogs,
+            sub_keywords=""
+        )
+
+        # AI 어댑터 호출
+        return blog_ai_adapter.call_summary_ai(summary_prompt, "text", "콘텐츠요약")
+    except Exception as e:
+        logger.error(f"콘텐츠 요약 실패: {e}")
+        return f"{main_keyword}에 대한 요약 정보"
+
+
+def select_blog_titles_with_ai(target_title: str, search_keyword: str, main_keyword: str, content_type: str, blog_titles: list, sub_keywords: str = "") -> list:
+    """AI를 사용하여 30개 블로그 제목 중 관련도 높은 10개 선별"""
+    try:
+        logger.info("🤖 AI 블로그 제목 선별 시작")
+
+        # 프롬프트 가져오기
+        from .ai_prompts import BlogPromptComponents
+        prompt = BlogPromptComponents.generate_blog_title_selection_prompt(
+            target_title, search_keyword, main_keyword, content_type, blog_titles, sub_keywords
+        )
+
+        logger.info(f"제목 선별 프롬프트 생성 완료: {len(blog_titles)}개 제목 중 10개 선별 요청")
+
+        # AI 호출 (JSON 응답 받기)
+        result = blog_ai_adapter.call_summary_ai(prompt, "json", "제목선별")
+
+        # JSON에서 선별된 제목들 추출
+        selected_titles = []
+        if result and isinstance(result, dict) and 'selected_titles' in result:
+            for item in result['selected_titles']:
+                if isinstance(item, dict) and 'title' in item and 'original_index' in item:
+                    selected_titles.append({
+                        'title': item['title'],
+                        'original_index': item['original_index'],
+                        'relevance_reason': item.get('relevance_reason', '')
+                    })
+
+        logger.info(f"✅ AI 제목 선별 완료: {len(selected_titles)}개")
+        return selected_titles
+
+    except Exception as e:
+        logger.error(f"AI 제목 선별 실패: {e}")
+        return []
+
+

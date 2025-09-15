@@ -13,6 +13,93 @@ from src.foundation.logging import get_logger
 logger = get_logger("toolbox.text_utils")
 
 
+def is_advertisement_content(text_content: str, title: str = "") -> bool:
+    """광고/협찬/체험단 글인지 판단"""
+    if not text_content:
+        return False
+    
+    # 전체 텍스트를 소문자로 변환하여 검사
+    full_text = (text_content + " " + title).lower()
+    
+    # 광고/협찬 관련 키워드들
+    ad_keywords = [
+        # 광고 관련
+        "광고포스트", "광고 포스트", "광고글", "광고 글", "광고입니다", "광고 입니다",
+        "유료광고", "유료 광고", "파트너스", "쿠팡파트너스", "파트너 활동", "추천링크",
+        
+        # 협찬 관련  
+        "협찬", "협찬받", "협찬글", "협찬 글", "협찬으로", "협찬을", "제공받", "무료로 제공",
+        "브랜드로부터", "업체로부터", "해당업체", "해당 업체", "제품을 제공", "서비스를 제공", 
+        "제공받아", "제공받은", "지원을 받아", "지원받아", "업체에서 제공", "업체로부터 제품",
+        
+        # 체험단 관련
+        "체험단", "체험 단", "리뷰어", "체험후기", "체험 후기", "체험해보", "체험을",
+        "무료체험", "무료 체험", "서포터즈", "앰배서더", "인플루언서",
+        
+        # 기타 상업적 키워드
+        "원고료", "대가", "소정의", "혜택을", "증정", "무료로 받", "공짜로", 
+        "할인코드", "쿠폰", "프로모션", "이벤트 참여"
+    ]
+    
+    # 키워드 매칭 검사
+    for keyword in ad_keywords:
+        if keyword in full_text:
+            logger.info(f"광고/협찬 글 감지: '{keyword}' 키워드 발견")
+            return True
+    
+    # 패턴 매칭 (정규식)
+    ad_patterns = [
+        r".*제공받.*작성.*",  # "제공받아 작성한", "제공받고 작성한" 등
+        r".*협찬.*받.*글.*",  # "협찬받은 글", "협찬을 받아서" 등  
+        r".*무료.*받.*후기.*", # "무료로 받아서 후기", "무료로 받은 후기" 등
+        r".*체험.*참여.*",     # "체험에 참여해", "체험단 참여" 등
+        r".*광고.*포함.*",     # "광고가 포함", "광고를 포함한" 등
+        r".*업체.*지원.*받.*", # "해당 업체에 지원을 받아", "업체로부터 지원받아" 등
+        r".*업체.*제품.*제공.*", # "업체로부터 제품을 제공받아" 등
+    ]
+    
+    for pattern in ad_patterns:
+        if re.search(pattern, full_text):
+            logger.info(f"광고/협찬 글 감지: 패턴 '{pattern}' 매칭")
+            return True
+    
+    return False
+
+
+def is_low_quality_content(text_content: str) -> bool:
+    """콘텐츠 품질이 낮은 글인지 판단 (숫자만 나열, 특수문자 과다)"""
+    if not text_content:
+        return False
+
+    # 텍스트 전처리 (공백 제거)
+    cleaned_text = text_content.strip()
+    if len(cleaned_text) < 100:  # 너무 짧은 글은 별도 체크
+        return False
+
+    # 1. 숫자만 나열된 글 체크 (전화번호, 가격표, 주소 등)
+    # 숫자, 공백, 하이픈, 콤마, 괄호, 원화표시 외에는 거의 없는 경우
+    numbers_and_symbols = re.sub(r'[0-9\s\-,()원₩\.\+#]', '', cleaned_text)
+    if len(numbers_and_symbols) / len(cleaned_text) < 0.3:  # 의미있는 문자가 30% 미만
+        logger.info(f"품질 낮은 글 감지: 숫자/기호만 나열됨 (의미있는 문자 비율: {len(numbers_and_symbols) / len(cleaned_text) * 100:.1f}%)")
+        return True
+
+    # 2. 특수문자 비율이 너무 높은 글 체크
+    # 한글, 영문, 숫자, 공백을 제외한 특수문자 비율
+    special_chars = re.sub(r'[가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9\s]', '', cleaned_text)
+    special_char_ratio = len(special_chars) / len(cleaned_text)
+    if special_char_ratio > 0.15:  # 특수문자가 15% 초과
+        logger.info(f"품질 낮은 글 감지: 특수문자 과다 (비율: {special_char_ratio * 100:.1f}%)")
+        return True
+
+    # 3. 반복 패턴 체크 (같은 문자나 기호의 반복)
+    # 같은 문자 5개 이상 연속 반복 체크
+    if re.search(r'(.)\1{4,}', cleaned_text):  # 같은 문자 5개 이상 반복
+        logger.info("품질 낮은 글 감지: 같은 문자 반복 패턴")
+        return True
+
+    return False
+
+
 def parse_keywords(text: str) -> List[str]:
     """텍스트에서 키워드 파싱 (keyword_analysis와의 호환성)"""
     return TextProcessor.parse_keywords_from_text(text)
@@ -461,3 +548,45 @@ def validate_excel_file(filename: str) -> Tuple[bool, str]:
 
 # === 중복 편의 함수들 제거됨 ===
 # 위에 정의된 함수들을 사용하세요 (parse_keywords, clean_keyword, normalize_keyword)
+
+
+# === 암호화/복호화 유틸리티 ===
+
+def encrypt_password(password: str) -> str:
+    """비밀번호 암호화 (간단한 Base64 인코딩)"""
+    import base64
+    # 실제 운영환경에서는 더 강력한 암호화 사용 권장
+    encoded = base64.b64encode(password.encode('utf-8')).decode('utf-8')
+    return encoded
+
+
+def decrypt_password(encrypted_password: str) -> str:
+    """비밀번호 복호화"""
+    import base64
+    try:
+        decoded = base64.b64decode(encrypted_password.encode('utf-8')).decode('utf-8')
+        return decoded
+    except Exception:
+        return ""
+
+
+# === JSON 처리 유틸리티 ===
+
+def parse_json_response(response: str) -> Any:
+    """AI API 응답에서 JSON 파싱 (마크다운 코드 블록 제거 포함)"""
+    import json
+    
+    try:
+        # 마크다운 코드 블록 제거 (```json...``` 또는 ```...```)
+        cleaned_response = response.strip()
+        if cleaned_response.startswith('```'):
+            lines = cleaned_response.split('\n')
+            if len(lines) > 2 and lines[0].startswith('```') and lines[-1].strip() == '```':
+                cleaned_response = '\n'.join(lines[1:-1])
+
+        return json.loads(cleaned_response)
+    except json.JSONDecodeError as e:
+        from src.foundation.logging import get_logger
+        logger = get_logger("toolbox.text_utils")
+        logger.error(f"JSON 파싱 실패: {e}\nResponse: {response}")
+        raise ValueError(f"JSON 파싱 실패: {str(e)}")

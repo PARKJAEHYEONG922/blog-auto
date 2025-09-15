@@ -115,3 +115,167 @@ def init_blog_automation_db(conn):
     """)
     
     conn.commit()
+
+
+# ============================================
+# 데이터 처리 및 검증 함수들
+# ============================================
+
+def validate_and_create_credentials(platform: str, username: str, password: str) -> BlogCredentials:
+    """자격증명 유효성 검사 및 생성"""
+    from src.foundation.exceptions import ValidationError
+    
+    try:
+        # 플랫폼 변환
+        if platform == "네이버":
+            blog_platform = BlogPlatform.NAVER
+        elif platform == "다음":
+            blog_platform = BlogPlatform.TISTORY
+        elif platform == "구글":
+            blog_platform = BlogPlatform.BLOGGER
+        else:
+            raise ValidationError(f"지원하지 않는 플랫폼: {platform}")
+        
+        credentials = BlogCredentials(
+            platform=blog_platform,
+            username=username.strip(),
+            password=password.strip()
+        )
+        
+        credentials.validate()
+        return credentials
+        
+    except ValueError as e:
+        raise ValidationError(str(e))
+
+
+def create_blog_session(platform: BlogPlatform, username: str) -> BlogSession:
+    """새 블로그 세션 생성"""
+    from datetime import datetime
+    
+    session = BlogSession(
+        platform=platform,
+        username=username,
+        status=LoginStatus.NOT_LOGGED_IN,
+        created_at=datetime.now()
+    )
+    
+    return session
+
+
+def save_blog_session(session: BlogSession) -> None:
+    """블로그 세션을 데이터베이스에 저장"""
+    from src.foundation.db import get_db
+    from src.foundation.logging import get_logger
+    
+    logger = get_logger("blog_automation.models")
+    
+    if not session:
+        return
+    
+    try:
+        with get_db().get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO blog_sessions 
+                (platform, username, status, created_at, last_activity)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                session.platform.value,
+                session.username,
+                session.status.value,
+                session.created_at,
+                session.last_activity
+            ))
+            conn.commit()
+            logger.info("블로그 세션 저장 완료")
+            
+    except Exception as e:
+        logger.error(f"세션 저장 실패: {e}")
+
+
+def save_blog_credentials(credentials: BlogCredentials) -> None:
+    """로그인 자격증명 저장 (암호화)"""
+    from src.foundation.db import get_db
+    from src.foundation.exceptions import BusinessError
+    from src.foundation.logging import get_logger
+    from src.toolbox.text_utils import encrypt_password
+    from datetime import datetime
+    
+    logger = get_logger("blog_automation.models")
+    
+    try:
+        encrypted_password = encrypt_password(credentials.password)
+        
+        with get_db().get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO blog_credentials 
+                (platform, username, encrypted_password, updated_at)
+                VALUES (?, ?, ?, ?)
+            """, (
+                credentials.platform.value,
+                credentials.username,
+                encrypted_password,
+                datetime.now()
+            ))
+            conn.commit()
+            logger.info(f"블로그 자격증명 저장: {credentials.platform.value} - {credentials.username}")
+            
+    except Exception as e:
+        logger.error(f"자격증명 저장 실패: {e}")
+        raise BusinessError(f"자격증명 저장 실패: {str(e)}")
+
+
+def load_saved_blog_credentials(platform: BlogPlatform) -> Optional[tuple]:
+    """저장된 자격증명 로드"""
+    from src.foundation.db import get_db
+    from src.foundation.logging import get_logger
+    from src.toolbox.text_utils import decrypt_password
+    from typing import Optional
+    
+    logger = get_logger("blog_automation.models")
+    
+    try:
+        with get_db().get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT username, encrypted_password 
+                FROM blog_credentials 
+                WHERE platform = ?
+                ORDER BY updated_at DESC
+                LIMIT 1
+            """, (platform.value,))
+            
+            result = cursor.fetchone()
+            if result:
+                username, encrypted_password = result
+                password = decrypt_password(encrypted_password)
+                return username, password
+            
+            return None
+            
+    except Exception as e:
+        logger.error(f"자격증명 로드 실패: {e}")
+        return None
+
+
+def delete_saved_blog_credentials(platform: BlogPlatform, username: str) -> None:
+    """저장된 자격증명 삭제"""
+    from src.foundation.db import get_db
+    from src.foundation.logging import get_logger
+    
+    logger = get_logger("blog_automation.models")
+    
+    try:
+        with get_db().get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                DELETE FROM blog_credentials 
+                WHERE platform = ? AND username = ?
+            """, (platform.value, username))
+            conn.commit()
+            logger.info(f"자격증명 삭제: {platform.value} - {username}")
+            
+    except Exception as e:
+        logger.error(f"자격증명 삭제 실패: {e}")

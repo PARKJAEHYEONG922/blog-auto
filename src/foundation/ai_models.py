@@ -689,3 +689,22 @@ class AIAPITester:
         except Exception as e:
             logger.error(f"네이버 API 테스트 오류: {e}")
             return False, f"API 테스트 실패: {str(e)}"
+
+
+def map_ui_model_to_technical_name(ui_model_name: str) -> str:
+    """UI 모델명을 기술적 모델명으로 매핑 - 중앙화된 AI 모델 시스템 사용"""
+    model_mapping = AIModelRegistry.get_model_mapping_for_service()
+    mapped_model = model_mapping.get(ui_model_name, ui_model_name)
+    
+    if mapped_model == ui_model_name and ui_model_name not in model_mapping:
+        logger.warning(f"UI 모델명 '{ui_model_name}'에 대한 매핑을 찾을 수 없음. 원본 모델명 사용")
+    else:
+        logger.info(f"모델 매핑: '{ui_model_name}' -> '{mapped_model}'")
+    
+    return mapped_model
+
+
+def map_ui_image_model_to_technical_name(ui_model_name: str) -> str:
+    """UI 이미지 모델명을 기술적 모델명으로 매핑 - 중앙 관리 시스템 사용"""
+    image_model_mapping = AIModelRegistry.get_image_model_mapping_for_service()
+    return image_model_mapping.get(ui_model_name, ui_model_name)

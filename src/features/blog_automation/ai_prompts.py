@@ -1,10 +1,8 @@
 """
-블로그 자동화 AI 프롬프트 및 구조화된 데이터 생성
+블로그 자동화 AI 프롬프트 및 구조화된 데이터 생성 (engine_local)
+CLAUDE.md 구조: 순수 계산만, I/O/로깅/시그널 금지
 """
 from typing import Dict, List, Any
-from src.foundation.logging import get_logger
-
-logger = get_logger("blog_automation.ai_prompts")
 
 
 class BlogPromptComponents:
@@ -314,7 +312,7 @@ class BlogContentStructure:
             return structured_data
             
         except Exception as e:
-            logger.error(f"블로그 구조 분석 실패: {e}")
+            # engine_local에서는 로깅 금지 - 기본값 반환
             return {}
     
     def extract_blog_structure(self, blog: Dict) -> Dict:
@@ -341,10 +339,7 @@ class BlogSummaryPrompts:
     def generate_content_summary_prompt(selected_title: str, search_keyword: str, main_keyword: str, content_type: str, competitor_blogs: list, sub_keywords: str = "") -> str:
         """정보요약 AI용 1차 가공 프롬프트 생성 - JSON 입력 구조화"""
 
-        # DEBUG: 파라미터 값 확인
-        from src.foundation.logging import get_logger
-        logger = get_logger("ai_prompts.summary_debug")
-        logger.info(f"🔍 DEBUG summary_prompt: search_keyword='{search_keyword}', main_keyword='{main_keyword}'")
+        # engine_local에서는 로깅 금지
 
         import json
 
@@ -419,11 +414,7 @@ class BlogAIPrompts:
     def generate_content_analysis_prompt(main_keyword: str, sub_keywords: str, structured_data: Dict, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", blogger_identity: str = "", summary_result: str = "", selected_title: str = "", search_keyword: str = "") -> str:
         """네이버 SEO 최적화 콘텐츠 분석 기반 AI 프롬프트 생성 (컨텐츠 유형과 말투, 후기 세부 유형 반영)"""
 
-        # DEBUG: 파라미터 값 확인
-        from src.foundation.logging import get_logger
-        logger = get_logger("ai_prompts.debug")
-        logger.info(f"🔍 DEBUG ai_prompts: search_keyword='{search_keyword}', main_keyword='{main_keyword}'")
-        logger.info(f"🔍 DEBUG selected_title: '{selected_title}'")
+        # engine_local에서는 로깅 금지
 
         competitor_info = structured_data.get("competitor_analysis", {})
         top_blogs = competitor_info.get("top_blogs", [])
@@ -431,12 +422,18 @@ class BlogAIPrompts:
         
         # 공용 컴포넌트에서 컨텐츠 지침 가져오기
         current_content = BlogPromptComponents.get_content_guideline(content_type)
+        if not current_content:
+            # 기본값으로 정보/가이드형 사용
+            current_content = BlogPromptComponents.get_content_guideline("정보/가이드형")
         
         # 공용 컴포넌트에서 후기 세부 지침 가져오기
         current_review_detail = BlogPromptComponents.get_review_detail_guideline(review_detail) if review_detail else {}
         
         # 공용 컴포넌트에서 말투 지침 가져오기
         current_tone = BlogPromptComponents.get_tone_guideline(tone)
+        if not current_tone:
+            # 기본값으로 정중한 존댓말체 사용
+            current_tone = BlogPromptComponents.get_tone_guideline("정중한 존댓말체")
         
         # 평균 태그 개수 계산
         avg_tag_count = sum(len(blog.get("tags", [])) for blog in top_blogs) // max(1, len(top_blogs)) if top_blogs else 5
@@ -571,7 +568,35 @@ def create_ai_request_data(main_keyword: str, sub_keywords: str, analyzed_blogs:
         }
         
     except Exception as e:
-        logger.error(f"AI 요청 데이터 생성 실패: {e}")
+        # engine_local에서는 로깅 금지 - 기본값 반환
         return {}
+
+
+def combine_blog_contents(analyzed_blogs: list) -> str:
+    """분석된 블로그들의 텍스트 콘텐츠를 하나로 통합 (AI 프롬프트용 데이터 전처리)"""
+    combined_parts = []
+    
+    for i, blog in enumerate(analyzed_blogs):
+        title = blog.get('title', '제목 없음')
+        text_content = blog.get('text_content', '')
+        
+        if text_content and text_content != '분석 실패':
+            blog_section = f"""=== {i+1}위 블로그: {title} ===
+
+{text_content}
+
+===============================
+"""
+            combined_parts.append(blog_section)
+            # engine_local에서는 로깅 금지
+    
+    if not combined_parts:
+        return "분석할 수 있는 블로그 콘텐츠가 없습니다."
+    
+    combined_content = '\n'.join(combined_parts)
+    # engine_local에서는 로깅 금지
+    return combined_content
+
+
 
 

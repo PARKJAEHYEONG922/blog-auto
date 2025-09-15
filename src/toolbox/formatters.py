@@ -443,3 +443,17 @@ def format_rank(rank: Optional[int]) -> str:
     if rank is None:
         return "—"
     return format_int(rank, default="—", thousand_sep=False)
+
+
+def get_platform_display_name(platform: str) -> str:
+    """플랫폼 표시명 반환 (UI 표시용)"""
+    # BlogPlatform enum 값들에 대한 표시명 매핑
+    display_names = {
+        "NAVER": "네이버 (네이버블로그)",
+        "TISTORY": "다음 (티스토리)", 
+        "BLOGGER": "구글 (블로거)"
+    }
+    
+    # enum 객체의 value를 가져오는 경우와 문자열 직접 비교 케이스 모두 지원
+    platform_value = getattr(platform, 'value', platform) if hasattr(platform, 'value') else str(platform)
+    return display_names.get(platform_value, platform_value)

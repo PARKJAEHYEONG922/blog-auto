@@ -734,40 +734,27 @@ class BlogAutomationStep1UI(QWidget):
         return settings
 
     def save_ai_settings(self):
-        """AI 글쓰기 설정 저장"""
+        """AI 글쓰기 설정 저장 (service 통해 호출)"""
         try:
             settings = self.get_ai_writing_settings()
 
-            # 설정을 config 파일에 저장
-            from src.foundation.config import config_manager
-            api_config = config_manager.load_api_config()
+            # service를 통해 설정 저장
+            if hasattr(self.parent, 'service') and self.parent.service:
+                self.parent.service.save_ai_writing_settings(settings)
+                
+                # 메인 UI의 AI 정보 표시 업데이트
+                if hasattr(self.parent, 'update_ai_info_display'):
+                    self.parent.update_ai_info_display()
 
-            # AI 글쓰기 설정 추가
-            api_config.ai_writing_content_type = settings['content_type']
-            api_config.ai_writing_content_type_id = settings['content_type_id']
-            api_config.ai_writing_tone = settings['tone']
-            api_config.ai_writing_tone_id = settings['tone_id']
-            api_config.ai_writing_blogger_identity = settings['blogger_identity']
-
-            # 후기 세부 옵션이 있는 경우 추가
-            if 'review_detail' in settings:
-                api_config.ai_writing_review_detail = settings['review_detail']
-                api_config.ai_writing_review_detail_id = settings['review_detail_id']
-
-            # 설정 저장
-            config_manager.save_api_config(api_config)
-
-            logger.info(f"AI 글쓰기 설정 저장됨: {settings['content_type']}, {settings['tone']}")
-
-            # 메인 UI의 AI 정보 표시 업데이트
-            if hasattr(self.parent, 'update_ai_info_display'):
-                self.parent.update_ai_info_display()
-
-            # 성공 다이얼로그
-            TableUIDialogHelper.show_success_dialog(
-                self, "설정 저장 완료",
-                f"AI 글쓰기 설정이 저장되었습니다!\n\n컨텐츠 유형: {settings['content_type']}\n말투 스타일: {settings['tone']}"
-            )
+                # 성공 다이얼로그
+                TableUIDialogHelper.show_success_dialog(
+                    self, "설정 저장 완료",
+                    f"AI 글쓰기 설정이 저장되었습니다!\n\n컨텐츠 유형: {settings['content_type']}\n말투 스타일: {settings['tone']}"
+                )
+            else:
+                TableUIDialogHelper.show_error_dialog(
+                    self, "서비스 오류", "서비스가 초기화되지 않았습니다."
+                )
 
         except Exception as e:
             logger.error(f"AI 글쓰기 설정 저장 실패: {e}")
@@ -776,32 +763,33 @@ class BlogAutomationStep1UI(QWidget):
             )
 
     def load_ai_settings(self):
-        """저장된 AI 글쓰기 설정 로드"""
+        """저장된 AI 글쓰기 설정 로드 (service 통해 호출)"""
         try:
-            from src.foundation.config import config_manager
-            api_config = config_manager.load_api_config()
+            # service를 통해 설정 로드
+            if hasattr(self.parent, 'service') and self.parent.service:
+                settings = self.parent.service.load_ai_writing_settings()
+                
+                # 컨텐츠 유형 로드
+                content_type_id = settings.get('content_type_id', 1)
+                if 0 <= content_type_id <= 2:
+                    self.content_type_combo.setCurrentIndex(content_type_id)
 
-            # 컨텐츠 유형 로드
-            content_type_id = getattr(api_config, 'ai_writing_content_type_id', 1)
-            if 0 <= content_type_id <= 2:
-                self.content_type_combo.setCurrentIndex(content_type_id)
+                # 말투 스타일 로드
+                tone_id = settings.get('tone_id', 1)
+                if 0 <= tone_id <= 2:
+                    self.tone_combo.setCurrentIndex(tone_id)
 
-            # 말투 스타일 로드
-            tone_id = getattr(api_config, 'ai_writing_tone_id', 1)
-            if 0 <= tone_id <= 2:
-                self.tone_combo.setCurrentIndex(tone_id)
+                # 블로거 정체성 로드
+                blogger_identity = settings.get('blogger_identity', '')
+                self.blogger_identity_edit.setText(blogger_identity)
 
-            # 블로거 정체성 로드
-            blogger_identity = getattr(api_config, 'ai_writing_blogger_identity', '')
-            self.blogger_identity_edit.setText(blogger_identity)
+                # 후기 세부 옵션 로드
+                review_detail_id = settings.get('review_detail_id', 0)
+                if 0 <= review_detail_id <= 3:
+                    self.review_detail_combo.setCurrentIndex(review_detail_id)
 
-            # 후기 세부 옵션 로드
-            review_detail_id = getattr(api_config, 'ai_writing_review_detail_id', 0)
-            if 0 <= review_detail_id <= 3:
-                self.review_detail_combo.setCurrentIndex(review_detail_id)
-
-            # 컨텐츠 유형에 따라 후기 세부 옵션 표시/숨김
-            self.on_content_type_changed(self.content_type_combo.currentIndex())
+                # 컨텐츠 유형에 따라 후기 세부 옵션 표시/숨김
+                self.on_content_type_changed(self.content_type_combo.currentIndex())
 
         except Exception as e:
             logger.error(f"AI 설정 로드 실패: {e}")
@@ -822,31 +810,34 @@ class BlogAutomationStep1UI(QWidget):
 
             logger.info(f"제목 추천 요청: {main_keyword}, AI 설정 유형: {content_type}")
 
-            # 공용 컴포넌트를 사용하여 제목 추천 프롬프트 생성
-            from .ai_prompts import BlogPromptComponents
-
             # 후기 세부 유형 가져오기 (후기/리뷰형일 때만)
             review_detail = ""
             if content_type == "후기/리뷰형":
                 review_details = ["내돈내산 후기", "협찬 후기", "체험단 후기", "대여/렌탈 후기"]
                 review_detail = review_details[self.review_detail_combo.currentIndex()]
 
-            prompt = BlogPromptComponents.generate_title_suggestion_prompt(
-                main_keyword=main_keyword,
-                content_type=content_type,
-                sub_keywords=sub_keywords,
-                review_detail=review_detail
-            )
+            # service를 통해 제목 추천 프롬프트 생성
+            if hasattr(self.parent, 'service') and self.parent.service:
+                prompt = self.parent.service.generate_title_suggestions(
+                    main_keyword=main_keyword,
+                    sub_keywords=sub_keywords,
+                    content_type=content_type,
+                    review_detail=review_detail
+                )
 
-            logger.info(f"제목 추천 AI 프롬프트 생성 완료 (보조키워드: '{sub_keywords}', 후기유형: '{review_detail}')")
-            logger.debug(f"생성된 프롬프트: {prompt[:300]}{'...' if len(prompt) > 300 else ''}")
+                logger.info(f"제목 추천 AI 프롬프트 생성 완료 (보조키워드: '{sub_keywords}', 후기유형: '{review_detail}')")
+                logger.debug(f"생성된 프롬프트: {prompt[:300]}{'...' if len(prompt) > 300 else ''}")
 
-            # 버튼 상태 변경
-            self.suggest_title_btn.setText("🔄 AI가 제목을 추천 중...")
-            self.suggest_title_btn.setEnabled(False)
+                # 버튼 상태 변경
+                self.suggest_title_btn.setText("🔄 AI가 제목을 추천 중...")
+                self.suggest_title_btn.setEnabled(False)
 
-            # 실제 AI API 호출하여 제목 추천 받기
-            self.call_ai_for_titles(prompt, main_keyword, content_type)
+                # 실제 AI API 호출하여 제목 추천 받기
+                self.call_ai_for_titles(prompt, main_keyword, content_type)
+            else:
+                TableUIDialogHelper.show_error_dialog(
+                    self, "서비스 오류", "서비스가 초기화되지 않았습니다."
+                )
 
         except Exception as e:
             logger.error(f"제목 추천 오류: {e}")
