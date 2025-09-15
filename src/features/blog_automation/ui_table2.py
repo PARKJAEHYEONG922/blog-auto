@@ -976,7 +976,7 @@ class BlogAutomationStep2UI(QWidget):
                 search_keyword = self.step1_data.get('search_query', main_keyword)
 
             # service를 통해 UI 표시용 프롬프트 생성 (실제 AI 호출과 동일한 프롬프트 보장)
-            ai_data = self.service.generate_ui_prompt_for_display(
+            ai_data = self.parent.service.generate_ui_prompt_for_display(
                 main_keyword=main_keyword,
                 sub_keywords=sub_keywords, 
                 analyzed_blogs=self.analyzed_blogs,
