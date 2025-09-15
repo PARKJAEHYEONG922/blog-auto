@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+<<<<<<< HEAD
       "Bash(powershell:*)",
       "Bash(git commit:*)",
       "Bash(python:*)",
@@ -25,5 +26,41 @@
     ],
     "deny": [],
     "ask": []
+=======
+      "Bash(xcopy:*)",
+      "Bash(robocopy:*)",
+      "Bash(mkdir:*)",
+      "Bash(powershell:*)",
+      "Bash(copy:*)",
+      "Bash(cp:*)",
+      "Bash(git init:*)",
+      "Bash(git remote add:*)",
+      "Bash(git add:*)",
+      "Bash(rm:*)",
+      "Bash(git checkout:*)",
+      "Bash(grep:*)",
+      "Bash(git reset:*)",
+      "Bash(git push:*)",
+      "Bash(git filter-branch:*)",
+      "Bash(git stash:*)",
+      "Bash(ls:*)",
+      "Bash(git rm:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote remove:*)",
+      "Bash(python:*)",
+      "Bash(find:*)",
+      "Bash(del test_prompt.py debug_prompt.txt)",
+      "Bash(cat:*)",
+      "mcp__ide__getDiagnostics",
+      "WebFetch(domain:blog.naver.com)",
+      "Bash(curl:*)",
+      "WebFetch(domain:developers.naver.com)",
+      "Bash(pip install:*)",
+      "Bash(rg:*)",
+      "Bash(dir)",
+      "Bash(sed:*)"
+    ],
+    "deny": []
+>>>>>>> c6c635213a294bfb238fd66e12cbed84ce7b7388
   }
 }
