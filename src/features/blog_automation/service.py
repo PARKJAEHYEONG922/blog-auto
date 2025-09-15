@@ -525,7 +525,7 @@ class BlogAutomationService:
             logger.error(f"AI 콘텐츠 생성 실패: {e}")
             raise BusinessError(f"AI 콘텐츠 생성 실패: {str(e)}")
 
-    def generate_blog_content_with_summary(self, main_keyword: str, sub_keywords: str, analyzed_blogs: list, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", search_keyword: str = "") -> str:
+    def generate_blog_content_with_summary(self, main_keyword: str, sub_keywords: str, analyzed_blogs: list, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", search_keyword: str = "", selected_title: str = "") -> str:
         """2단계 파이프라인: 정보요약 AI → 글작성 AI"""
         try:
             logger.info("2단계 파이프라인으로 블로그 콘텐츠 생성 시작")
@@ -568,7 +568,8 @@ class BlogAutomationService:
                 review_detail=review_detail,
                 blogger_identity=blogger_identity,
                 summary_result=summarized_content,
-                search_keyword=search_keyword
+                search_keyword=search_keyword,
+                selected_title=selected_title
             )
 
             # 글작성 AI로 최종 콘텐츠 생성
@@ -606,7 +607,7 @@ class BlogAutomationService:
         logger.info(f"최종 결합된 전체 콘텐츠 길이: {len(combined_content)}자 (길이 제한 없음)")
         return combined_content
 
-    def _generate_content_without_analysis(self, main_keyword: str, sub_keywords: str, content_type: str, tone: str, review_detail: str, search_keyword: str = "") -> Dict[str, str]:
+    def _generate_content_without_analysis(self, main_keyword: str, sub_keywords: str, content_type: str, tone: str, review_detail: str, search_keyword: str = "", selected_title: str = "") -> Dict[str, str]:
         """분석 없이 AI 글쓰기만으로 콘텐츠 생성"""
         try:
             logger.info("분석 없이 AI 글쓰기로 콘텐츠 생성")
@@ -629,7 +630,8 @@ class BlogAutomationService:
                 review_detail=review_detail,
                 blogger_identity=blogger_identity,
                 summary_result="경쟁 블로그 분석 결과가 없어 직접 작성합니다.",
-                search_keyword=search_keyword
+                search_keyword=search_keyword,
+                selected_title=selected_title
             )
 
             # AI로 직접 콘텐츠 생성
@@ -649,7 +651,7 @@ class BlogAutomationService:
             logger.error(f"분석 없는 AI 글쓰기 실패: {e}")
             raise BusinessError(f"AI 글쓰기 실패: {str(e)}")
     
-    def generate_blog_content_with_summary_detailed(self, main_keyword: str, sub_keywords: str, analyzed_blogs: list, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", search_keyword: str = "") -> Dict[str, str]:
+    def generate_blog_content_with_summary_detailed(self, main_keyword: str, sub_keywords: str, analyzed_blogs: list, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", search_keyword: str = "", selected_title: str = "") -> Dict[str, str]:
         """2단계 파이프라인: 정보요약 AI → 글작성 AI (상세 정보 포함)"""
         try:
             logger.info("2단계 파이프라인으로 블로그 콘텐츠 생성 시작 (상세 정보 포함)")
@@ -657,7 +659,7 @@ class BlogAutomationService:
             # 분석 결과가 없는 경우 폴백 처리
             if not analyzed_blogs or len(analyzed_blogs) == 0:
                 logger.warning("분석된 블로그가 없습니다. 분석 없이 AI 글쓰기로 진행")
-                return self._generate_content_without_analysis(main_keyword, sub_keywords, content_type, tone, review_detail, search_keyword)
+                return self._generate_content_without_analysis(main_keyword, sub_keywords, content_type, tone, review_detail, search_keyword, selected_title)
 
             # 1단계: 분석된 블로그들의 콘텐츠를 하나의 텍스트로 통합
             logger.info("1단계: 경쟁 블로그 콘텐츠 통합")
@@ -665,7 +667,7 @@ class BlogAutomationService:
 
             if not combined_content.strip():
                 logger.warning("통합할 블로그 콘텐츠가 없습니다. 분석 없이 진행")
-                return self._generate_content_without_analysis(main_keyword, sub_keywords, content_type, tone, review_detail, search_keyword)
+                return self._generate_content_without_analysis(main_keyword, sub_keywords, content_type, tone, review_detail, search_keyword, selected_title)
 
             logger.info(f"통합된 콘텐츠 길이: {len(combined_content)}자")
 
@@ -714,7 +716,8 @@ class BlogAutomationService:
                 review_detail=review_detail,
                 blogger_identity=blogger_identity,
                 summary_result=summarized_content,
-                search_keyword=search_keyword
+                search_keyword=search_keyword,
+                selected_title=selected_title
             )
 
             # 글작성 AI로 최종 콘텐츠 생성

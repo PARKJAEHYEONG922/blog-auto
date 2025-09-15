@@ -582,7 +582,8 @@ class AIWritingWorker(QObject):
                     self.content_type,
                     self.tone,
                     self.review_detail,
-                    self.search_keyword
+                    self.search_keyword,
+                    self.target_title
                 )
                 
                 # 각 단계별 시그널 발송

@@ -423,6 +423,7 @@ class BlogAIPrompts:
         from src.foundation.logging import get_logger
         logger = get_logger("ai_prompts.debug")
         logger.info(f"🔍 DEBUG ai_prompts: search_keyword='{search_keyword}', main_keyword='{main_keyword}'")
+        logger.info(f"🔍 DEBUG selected_title: '{selected_title}'")
 
         competitor_info = structured_data.get("competitor_analysis", {})
         top_blogs = competitor_info.get("top_blogs", [])
@@ -463,8 +464,7 @@ class BlogAIPrompts:
 
 ## 🚨 절대 규칙: 제목 고정 🚨
 **❌ 제목 변경 절대 금지 ❌**
-**✅ 반드시 다음 제목을 그대로 복사해서 사용: "{selected_title}"**
-**🔒 이 제목을 1글자도 바꾸지 말고 정확히 그대로 출력하세요 🔒**
+**🔒 기본 정보의 제목으로 내용을 작성해주세요 🔒**
 
 ## 기본 정보
 - **작성할 글 제목**: "{selected_title}"
@@ -504,6 +504,14 @@ class BlogAIPrompts:
 - 이미지: {avg_image_count}개 이상 (이미지) 표시로 배치, 필요시 연속 4개 배치 가능
 - 동영상: 1개 (동영상) 표시로 배치
 
+## 마크다운 구조 규칙 (자동화 호환성)
+- **대제목**: ## 만 사용 (### 사용 금지)
+- **소제목**: ### 텍스트 (세부 항목용)
+- **강조**: **텍스트** (단계명, 중요 포인트)
+- **리스트**: - 항목 (일반 목록)
+- **체크리스트**: ✓ 항목 (완료/확인 항목)
+- **번호 목록**: 1. 항목 (순서가 중요한 경우)
+
 ## 글쓰기 품질 요구사항
 - **자연스러운 문체**: AI 생성티 없는 개성 있고 자연스러운 어투로 작성
 - **완전한 내용**: XX공원, OO병원 같은 placeholder 사용 금지. 구체적인 정보가 없다면 "근처 공원", "동네 병원" 등 일반적 표현 사용"""
@@ -515,9 +523,7 @@ class BlogAIPrompts:
 
 # 🔥 출력 형식 🔥
 
-🚨🚨🚨 제목 변경 절대 금지! 아래 제목을 정확히 복사하세요! 🚨🚨🚨
-**제목: {selected_title}** ← 이것을 정확히 복사해서 출력!
-
+🚨🚨🚨 중요: 제목은 절대 바꾸지 마세요! 🚨🚨🚨
 다른 설명 없이 아래 형식으로만 출력하세요:
 
 ```
@@ -535,9 +541,8 @@ class BlogAIPrompts:
 
 [결론 - 요약 및 독자 행동 유도]
 
-추천 태그: 
 {'[상위 블로그 인기 태그 참고: ' + ', '.join(['#' + tag.lstrip("#") for tag in summary.get("common_tags", [])]) + ']' if summary.get("common_tags") else ''}
-[메인키워드와 보조키워드를 활용하여 글 내용에 적합한 태그 5개 이상 작성]
+[메인키워드와 보조키워드를 활용하여 글 내용에 적합한 태그 5개 이상을 # 형태로 작성]
 ```
 """
         return prompt.strip()
