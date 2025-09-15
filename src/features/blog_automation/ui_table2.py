@@ -543,7 +543,8 @@ class BlogAutomationStep2UI(QWidget):
     def on_analysis_started(self):
         """분석 시작 시그널 처리"""
         logger.info("📊 블로그 분석 시작됨")
-        self.status_label.setText("블로그 검색 중...")
+        if hasattr(self, 'status_label'):
+            self.status_label.setText("블로그 검색 중...")
 
     def on_analysis_progress(self, message: str, progress: int):
         """분석 진행 상황 업데이트"""
