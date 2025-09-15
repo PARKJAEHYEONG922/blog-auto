@@ -2,14 +2,14 @@
 블로그 자동화 Step 3: 네이버 블로그 발행
 """
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QScrollArea
 )
 from PySide6.QtCore import Qt, Signal
 import traceback
 
 from src.foundation.logging import get_logger
 from src.toolbox.ui_kit.components import (
-    ModernButton, ModernCard, ModernDangerButton
+    ModernButton, ModernCard, ModernDangerButton, ModernPrimaryButton
 )
 from src.toolbox.ui_kit.modern_dialog import ModernConfirmDialog
 from src.toolbox.ui_kit.modern_style import ModernStyle
@@ -78,6 +78,10 @@ class BlogAutomationStep3UI(QWidget):
         # 완성된 작업 요약 카드
         summary_card = self.create_summary_card()
         main_layout.addWidget(summary_card)
+
+        # 글 내용 편집 카드
+        content_editor_card = self.create_content_editor_card()
+        main_layout.addWidget(content_editor_card, 1)  # 가장 많은 공간 할당
 
         # 발행 준비 카드
         publish_card = self.create_publish_card()
@@ -179,6 +183,132 @@ class BlogAutomationStep3UI(QWidget):
         card.setLayout(layout)
         return card
 
+    def create_content_editor_card(self) -> ModernCard:
+        """글 내용 편집 카드"""
+        card = ModernCard("✏️ 글 내용 편집")
+        layout = QVBoxLayout()
+        layout.setSpacing(tokens.GAP_8)
+
+        # 안내 메시지
+        info_label = QLabel(
+            "AI가 생성한 글을 확인하고 필요한 부분을 수정할 수 있습니다.\n"
+            "아래 텍스트 에디터에서 자유롭게 내용을 편집해주세요."
+        )
+        info_label.setStyleSheet(f"""
+            QLabel {{
+                color: {ModernStyle.COLORS['text_secondary']};
+                font-size: {tokens.get_font_size('small')}px;
+                padding: {tokens.spx(4)}px 0px;
+            }}
+        """)
+        layout.addWidget(info_label)
+
+        # 텍스트 에디터 (스크롤 가능)
+        self.content_editor = QTextEdit()
+        self.content_editor.setPlainText(self.step2_data.get('generated_content', ''))
+        self.content_editor.setMinimumHeight(tokens.spx(400))
+        self.content_editor.setStyleSheet(f"""
+            QTextEdit {{
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
+                border-radius: {tokens.RADIUS_SM}px;
+                background-color: {ModernStyle.COLORS['bg_card']};
+                color: {ModernStyle.COLORS['text_primary']};
+                font-size: {tokens.get_font_size('normal')}px;
+                font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
+                line-height: 1.6;
+                padding: {tokens.spx(12)}px;
+            }}
+            QTextEdit:focus {{
+                border-color: {ModernStyle.COLORS['primary']};
+            }}
+        """)
+        layout.addWidget(self.content_editor, 1)
+
+        # 글자 수 표시
+        self.char_count_label = QLabel()
+        self.update_char_count()
+        self.char_count_label.setStyleSheet(f"""
+            QLabel {{
+                color: {ModernStyle.COLORS['text_muted']};
+                font-size: {tokens.get_font_size('small')}px;
+                text-align: right;
+                padding: {tokens.spx(4)}px 0px;
+            }}
+        """)
+        self.char_count_label.setAlignment(Qt.AlignRight)
+        layout.addWidget(self.char_count_label)
+
+        # 텍스트 변경 시 글자 수 업데이트
+        self.content_editor.textChanged.connect(self.update_char_count)
+
+        # 편집 기능 버튼들
+        button_layout = QHBoxLayout()
+        
+        # 원본 복원 버튼
+        self.restore_btn = ModernButton("🔄 원본으로 복원")
+        self.restore_btn.clicked.connect(self.restore_original_content)
+        button_layout.addWidget(self.restore_btn)
+
+        button_layout.addStretch()
+
+        # 내용 저장 버튼
+        self.save_content_btn = ModernPrimaryButton("💾 내용 저장")
+        self.save_content_btn.clicked.connect(self.save_edited_content)
+        button_layout.addWidget(self.save_content_btn)
+
+        layout.addLayout(button_layout)
+
+        card.setLayout(layout)
+        return card
+
+    def update_char_count(self):
+        """글자 수 업데이트"""
+        try:
+            content = self.content_editor.toPlainText()
+            char_count = len(content.replace(' ', '').replace('\n', ''))
+            total_chars = len(content)
+            self.char_count_label.setText(f"글자 수: {char_count:,}자 (공백 포함: {total_chars:,}자)")
+        except Exception as e:
+            logger.error(f"글자 수 계산 오류: {e}")
+
+    def restore_original_content(self):
+        """원본 내용으로 복원"""
+        try:
+            original_content = self.step2_data.get('generated_content', '')
+            self.content_editor.setPlainText(original_content)
+            logger.info("원본 내용으로 복원됨")
+            
+            TableUIDialogHelper.show_info_dialog(
+                self, "복원 완료", "AI가 생성한 원본 내용으로 복원되었습니다.", "🔄"
+            )
+        except Exception as e:
+            logger.error(f"원본 복원 오류: {e}")
+
+    def save_edited_content(self):
+        """편집된 내용 저장"""
+        try:
+            edited_content = self.content_editor.toPlainText().strip()
+            if not edited_content:
+                TableUIDialogHelper.show_error_dialog(
+                    self, "내용 없음", "저장할 내용이 없습니다."
+                )
+                return
+
+            # step2_data에 편집된 내용 업데이트
+            self.step2_data['generated_content'] = edited_content
+            self.step2_data['content_edited'] = True
+            
+            logger.info(f"편집된 내용 저장됨 ({len(edited_content):,}자)")
+            
+            TableUIDialogHelper.show_info_dialog(
+                self, "저장 완료", f"편집된 내용이 저장되었습니다.\n글자 수: {len(edited_content.replace(' ', '')):,}자", "💾"
+            )
+        except Exception as e:
+            logger.error(f"내용 저장 오류: {e}")
+            TableUIDialogHelper.show_error_dialog(
+                self, "저장 오류", f"내용 저장 중 오류가 발생했습니다:\n{e}"
+            )
+
     def create_publish_card(self) -> ModernCard:
         """발행 카드"""
         card = ModernCard("🚀 네이버 블로그 발행")
@@ -219,6 +349,14 @@ class BlogAutomationStep3UI(QWidget):
         try:
             logger.info("네이버 블로그 발행 시작")
 
+            # 현재 편집기의 내용 가져오기
+            current_content = self.content_editor.toPlainText().strip()
+            if not current_content:
+                TableUIDialogHelper.show_error_dialog(
+                    self, "내용 없음", "발행할 내용이 없습니다.\n글을 작성해주세요."
+                )
+                return
+
             # TODO: 실제 발행 로직 구현
             # 현재는 구현 예정 메시지만 표시
             TableUIDialogHelper.show_info_dialog(
@@ -226,7 +364,8 @@ class BlogAutomationStep3UI(QWidget):
                 "네이버 블로그 발행 기능은 곧 구현됩니다.\n"
                 f"발행할 내용:\n"
                 f"• 제목: {self.step1_data.get('selected_title', '')}\n"
-                f"• 글자수: {len(self.step2_data.get('generated_content', '').replace(' ', '')):,}자\n\n"
+                f"• 글자수: {len(current_content.replace(' ', '')):,}자\n"
+                f"• 편집 여부: {'수정됨' if self.step2_data.get('content_edited', False) else '원본'}\n\n"
                 "현재는 UI만 구성된 상태입니다.",
                 "🚧"
             )
@@ -253,9 +392,12 @@ class BlogAutomationStep3UI(QWidget):
 
     def get_step3_data(self) -> dict:
         """Step 3 데이터 반환"""
+        current_content = self.content_editor.toPlainText() if hasattr(self, 'content_editor') else self.step2_data.get('generated_content', '')
         return {
             'publish_ready': True,
             'title': self.step1_data.get('selected_title', ''),
-            'content': self.step2_data.get('generated_content', ''),
-            'content_length': len(self.step2_data.get('generated_content', '').replace(' ', ''))
+            'content': current_content,
+            'content_length': len(current_content.replace(' ', '').replace('\n', '')),
+            'content_edited': self.step2_data.get('content_edited', False),
+            'original_content': self.step2_data.get('generated_content', '')
         }

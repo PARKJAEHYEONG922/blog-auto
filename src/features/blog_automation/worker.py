@@ -573,7 +573,7 @@ class AIWritingWorker(QObject):
                 if self.is_cancelled:
                     return
                     
-                self.writing_progress.emit("글작성 AI로 최종 콘텐츠 생성 중... (시간이 좀 걸릴 수 있습니다)", 60)
+                self.writing_progress.emit("글작성 AI로 최종 콘텐츠 생성 중...", 60)
                 
                 # 2단계 파이프라인으로 콘텐츠 생성 (상세 정보 포함)
                 detailed_results = self.service.generate_blog_content_with_summary_detailed(
@@ -621,7 +621,7 @@ class AIWritingWorker(QObject):
                 if self.is_cancelled:
                     return
                     
-                self.writing_progress.emit("콘텐츠 생성 중... (시간이 좀 걸릴 수 있습니다)", 50)
+                self.writing_progress.emit("콘텐츠 생성 중...", 50)
                 
                 # 기존 AI API 호출
                 generated_content = self.service.generate_blog_content(prompt)

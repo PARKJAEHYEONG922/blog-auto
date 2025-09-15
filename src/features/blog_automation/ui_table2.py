@@ -71,6 +71,7 @@ class BlogAutomationStep2UI(QWidget):
         self.ai_writer_worker = None
         self.ai_writer_thread = None
         self.generated_content = ""
+        self.is_ai_working = False  # AI 작업 중인지 상태 추가
 
         self.setup_ui()
 
@@ -288,16 +289,7 @@ class BlogAutomationStep2UI(QWidget):
         """)
         layout.addWidget(self.progress_bar)
 
-        # 상태 메시지
-        self.status_label = QLabel("분석을 시작하려면 '분석 시작' 버튼을 클릭하세요")
-        self.status_label.setStyleSheet(f"""
-            QLabel {{
-                color: {ModernStyle.COLORS['text_secondary']};
-                font-size: {tokens.get_font_size('small')}px;
-                padding: {tokens.spx(4)}px 0px;
-            }}
-        """)
-        layout.addWidget(self.status_label)
+        # 상태 메시지는 메인 UI 왼쪽 상태창에 통합됨
 
         # 분석 시작 버튼
         button_layout = QHBoxLayout()
@@ -543,18 +535,22 @@ class BlogAutomationStep2UI(QWidget):
     def on_analysis_started(self):
         """분석 시작 시그널 처리"""
         logger.info("📊 블로그 분석 시작됨")
-        if hasattr(self, 'status_label'):
-            self.status_label.setText("블로그 검색 중...")
+        
+        # 메인 UI 상태창 업데이트
+        if hasattr(self.parent, 'update_status'):
+            self.parent.update_status("블로그 검색 중...", "progress")
 
     def on_analysis_progress(self, message: str, progress: int):
         """분석 진행 상황 업데이트"""
         logger.info(f"📝 분석 진행: {message} ({progress}%)")
 
+        # 메인 UI 상태창 업데이트
+        if hasattr(self.parent, 'update_status'):
+            self.parent.update_status(f"{message} ({progress}%)", "progress")
+
         # 기존 UI 업데이트 (호환성 유지)
         if hasattr(self, 'progress_bar'):
             self.progress_bar.setValue(progress)
-        if hasattr(self, 'status_label'):
-            self.status_label.setText(f"{message} ({progress}%)")
 
         # 통합 UI 업데이트 - 로그로만 상태 표시
         logger.info(f"1단계: {message} ({progress}%)")
@@ -569,8 +565,7 @@ class BlogAutomationStep2UI(QWidget):
             # 기존 UI 업데이트 (호환성 유지)
             if hasattr(self, 'progress_bar'):
                 self.progress_bar.setValue(100)
-            if hasattr(self, 'status_label'):
-                self.status_label.setText("분석이 완료되었습니다!")
+            # Step2 내부 상태는 메인 상태창으로 통합됨
 
             # 결과 요약 업데이트 (호환성 유지)
             blog_count = len(analyzed_blogs)
@@ -598,12 +593,7 @@ class BlogAutomationStep2UI(QWidget):
             logger.info("✅ 분석 완료! AI 글쓰기 준비됨")
             self.reset_analysis_ui()
 
-            # 성공 다이얼로그
-            TableUIDialogHelper.show_success_dialog(
-                self, "분석 완료",
-                f"블로그 분석이 완료되었습니다!\n\n분석된 블로그: {blog_count}개\n\n이제 3단계로 진행할 수 있습니다.",
-                "🎉"
-            )
+            # 성공 다이얼로그 제거 - 자동으로 다음 단계 진행
 
         except Exception as e:
             logger.error(f"분석 완료 처리 중 오류: {e}")
@@ -614,8 +604,13 @@ class BlogAutomationStep2UI(QWidget):
         try:
             logger.error(f"❌ 블로그 분석 오류: {error_message}")
 
-            self.status_label.setText("분석 중 오류가 발생했습니다.")
-            self.reset_analysis_ui()
+            # Step2 내부 상태는 메인 상태창으로 통합됨
+            # 메인 UI 상태창 업데이트 (오류)
+            if hasattr(self.parent, 'update_status'):
+                self.parent.update_status("분석 중 오류 발생", "error")
+                
+            # 분석 오류시 전체 작업 중단하므로 통합 UI 리셋
+            self.reset_integrated_ui()
 
             TableUIDialogHelper.show_error_dialog(
                 self, "분석 오류", f"블로그 분석 중 오류가 발생했습니다:\n{error_message}"
@@ -626,9 +621,9 @@ class BlogAutomationStep2UI(QWidget):
 
     def reset_analysis_ui(self):
         """분석 UI 상태 초기화"""
-        if hasattr(self, 'start_ai_writing_btn'):
-            self.start_ai_writing_btn.setText("🚀 AI 글쓰기 시작")
-            self.start_ai_writing_btn.setEnabled(True)
+        # 분석 완료 후에는 버튼 상태를 변경하지 않음 (AI 작업이 계속 진행중이므로)
+        # 버튼은 글쓰기 AI가 완료되거나 오류 발생시에만 활성화
+        pass
 
 
     def on_prev_step_clicked(self):
@@ -685,13 +680,39 @@ class BlogAutomationStep2UI(QWidget):
             'blog_count': len(self.analyzed_blogs)
         }
 
+    def update_step1_data(self, new_step1_data: dict):
+        """Step1 데이터 업데이트 (검색어 입력 필드 등 UI 갱신)"""
+        try:
+            logger.info("Step1 데이터 업데이트 중...")
+            
+            # 기존 데이터 업데이트
+            self.step1_data = new_step1_data
+            
+            # UI 업데이트 - 검색어 입력 필드
+            search_query = self.step1_data.get('search_query', '')
+            if hasattr(self, 'search_query_input'):
+                self.search_query_input.setText(search_query)
+                logger.info(f"검색어 입력 필드 업데이트: '{search_query}'")
+            
+            # 선택된 제목 정보 업데이트 (Step1 요약 카드)
+            selected_title = self.step1_data.get('selected_title', '제목 없음')
+            main_keyword = self.step1_data.get('main_keyword', '키워드 없음')
+            ai_settings = self.step1_data.get('ai_settings', {})
+            content_type = ai_settings.get('content_type', '정보/가이드형')
+            tone = ai_settings.get('tone', '정중한 존댓말체')
+            
+            logger.info(f"Step1 정보 업데이트 - 제목: {selected_title[:30]}..., 키워드: {main_keyword}, 유형: {content_type}")
+            
+        except Exception as e:
+            logger.error(f"Step1 데이터 업데이트 오류: {e}")
+
     def create_ai_writing_button_section(self) -> QVBoxLayout:
         """AI 글쓰기 버튼 섹션 (독립적으로 배치)"""
         section_layout = QVBoxLayout()
         section_layout.setSpacing(tokens.GAP_12)
 
         # 설명
-        desc_label = QLabel("선택된 제목으로 블로그를 분석하고 AI가 최적화된 글을 작성합니다")
+        desc_label = QLabel("최적화된 검색어로 상위블로그를 분석해 선택된 제목에 맞는 글을 작성합니다")
         desc_label.setStyleSheet(f"""
             QLabel {{
                 color: {ModernStyle.COLORS['text_secondary']};
@@ -808,13 +829,25 @@ class BlogAutomationStep2UI(QWidget):
         """
 
     def on_start_ai_writing_clicked(self):
-        """AI 글쓰기 시작 버튼 클릭"""
+        """AI 글쓰기 시작/정지 버튼 클릭"""
         try:
+            # 현재 AI 작업 중이면 정지
+            if self.is_ai_working:
+                self.stop_ai_writing()
+                return
+                
             logger.info("🚀 통합 AI 글쓰기 시작")
 
-            # 버튼 상태 변경
-            self.start_ai_writing_btn.setText("🔄 AI가 작업 중...")
-            self.start_ai_writing_btn.setEnabled(False)
+            # 메인 UI 상태창 업데이트
+            if hasattr(self.parent, 'update_status'):
+                self.parent.update_status("AI 글쓰기 준비 중...", "progress")
+
+            # AI 작업 시작 상태로 변경
+            self.is_ai_working = True
+            
+            # 버튼 상태 변경 (정지 버튼으로)
+            self.start_ai_writing_btn.setText("🛑 정지")
+            self.start_ai_writing_btn.setEnabled(True)  # 정지 버튼은 활성 상태 유지
 
             # 분석 시작 (사용자가 수정한 검색어 사용)
             selected_title = self.step1_data.get('selected_title', '')
@@ -880,10 +913,54 @@ class BlogAutomationStep2UI(QWidget):
                 self, "오류", f"AI 글쓰기 시작 중 오류가 발생했습니다:\n{e}"
             )
 
+    def stop_ai_writing(self):
+        """AI 글쓰기 작업 정지"""
+        try:
+            logger.info("🛑 AI 글쓰기 작업 정지 요청")
+            
+            # 실행 중인 워커들 정지
+            if self.analysis_worker:
+                self.analysis_worker.cancel()
+            if self.analysis_thread and self.analysis_thread.isRunning():
+                self.analysis_thread.quit()
+                self.analysis_thread.wait(3000)  # 3초 대기
+                
+            if self.summary_worker:
+                self.summary_worker.cancel()
+            if self.summary_thread and self.summary_thread.isRunning():
+                self.summary_thread.quit()
+                self.summary_thread.wait(3000)
+                
+            if self.ai_writer_worker:
+                self.ai_writer_worker.cancel()
+            if self.ai_writer_thread and self.ai_writer_thread.isRunning():
+                self.ai_writer_thread.quit()
+                self.ai_writer_thread.wait(3000)
+            
+            # 메인 UI 상태창 업데이트 (정지)
+            if hasattr(self.parent, 'update_status'):
+                self.parent.update_status("작업이 정지되었습니다", "warning")
+            
+            # UI 상태 복원
+            self.reset_integrated_ui()
+            
+            logger.info("✅ AI 글쓰기 작업이 정지되었습니다")
+            TableUIDialogHelper.show_info_dialog(
+                self, "작업 정지", "AI 글쓰기 작업이 정지되었습니다.", "🛑"
+            )
+            
+        except Exception as e:
+            logger.error(f"AI 작업 정지 중 오류: {e}")
+
     def reset_integrated_ui(self):
         """통합 UI 상태 초기화"""
+        self.is_ai_working = False
         self.start_ai_writing_btn.setText("🚀 AI 글쓰기 시작")
         self.start_ai_writing_btn.setEnabled(True)
+
+        # 메인 UI 상태창 초기화 (에러나 정지가 아닌 정상 리셋의 경우에만)
+        if hasattr(self.parent, 'update_status') and not hasattr(self, '_suppress_status_reset'):
+            self.parent.update_status("대기 중...", "info")
 
         # 다음 단계 버튼 비활성화
         self.next_step_btn.setEnabled(False)
@@ -893,6 +970,10 @@ class BlogAutomationStep2UI(QWidget):
         try:
             # 2단계: 정보요약 AI 시작
             logger.info("2단계: 정보요약 AI 프롬프트를 생성합니다...")
+            
+            # 메인 UI 상태창 업데이트
+            if hasattr(self.parent, 'update_status'):
+                self.parent.update_status("정보요약 프롬프트 생성 중...", "progress")
 
             # 정보요약 프롬프트 생성 및 탭 업데이트
             from .ai_prompts import BlogSummaryPrompts
@@ -921,6 +1002,10 @@ class BlogAutomationStep2UI(QWidget):
 
             # 3단계: 정보요약 AI 호출
             logger.info("3단계: 정보요약 AI를 호출합니다...")
+            
+            # 메인 UI 상태창 업데이트
+            if hasattr(self.parent, 'update_status'):
+                self.parent.update_status("정보요약 AI 작업 중...", "progress")
 
             # 3단계: 통합 정보요약 AI 워커 호출
             if hasattr(self.parent, 'service') and self.parent.service:
@@ -960,6 +1045,10 @@ class BlogAutomationStep2UI(QWidget):
 
             # 4단계: 글쓰기 AI 프롬프트 생성
             logger.info("4단계: 글쓰기 AI 프롬프트를 생성합니다...")
+            
+            # 메인 UI 상태창 업데이트
+            if hasattr(self.parent, 'update_status'):
+                self.parent.update_status("글쓰기 프롬프트 생성 중...", "progress")
 
             # service를 통한 통합 프롬프트 생성 (CLAUDE.md 구조 준수)
             ai_settings = self.step1_data.get('ai_settings', {})
@@ -1000,6 +1089,10 @@ class BlogAutomationStep2UI(QWidget):
 
             # 5단계: 글쓰기 AI 호출
             logger.info("5단계: 글쓰기 AI가 블로그 글을 생성합니다...")
+            
+            # 메인 UI 상태창 업데이트
+            if hasattr(self.parent, 'update_status'):
+                self.parent.update_status("글쓰기 AI 작업 중...", "progress")
 
             # 5단계: 비동기 글쓰기 AI 워커 호출
             if hasattr(self.parent, 'service') and self.parent.service:
@@ -1043,6 +1136,11 @@ class BlogAutomationStep2UI(QWidget):
         """정보요약 AI 오류 처리"""
         try:
             logger.error(f"❌ 정보요약 AI 오류: {error_message}")
+            
+            # 메인 UI 상태창 업데이트 (오류)
+            if hasattr(self.parent, 'update_status'):
+                self.parent.update_status("정보요약 AI 오류 발생", "error")
+                
             self.reset_integrated_ui()
             TableUIDialogHelper.show_error_dialog(
                 self, "정보요약 AI 오류", f"정보요약 AI 처리 중 오류가 발생했습니다:\n{error_message}"
@@ -1058,10 +1156,17 @@ class BlogAutomationStep2UI(QWidget):
 
             # 최종 완료
             logger.info("✅ AI 블로그 글 생성이 완료되었습니다!")
+            
+            # 메인 UI 상태창 업데이트 (성공)
+            if hasattr(self.parent, 'update_status'):
+                self.parent.update_status("AI 글 생성 완료!", "success")
 
             # 생성된 내용 저장
             self.generated_content = generated_content
 
+            # AI 작업 완료 상태 업데이트
+            self.is_ai_working = False
+            
             # 버튼 상태 복원
             self.start_ai_writing_btn.setText("🚀 AI 글쓰기 시작")
             self.start_ai_writing_btn.setEnabled(True)
@@ -1072,7 +1177,7 @@ class BlogAutomationStep2UI(QWidget):
             # 완료 다이얼로그
             TableUIDialogHelper.show_success_dialog(
                 self, "AI 글쓰기 완료",
-                "AI가 블로그 글 생성을 완료했습니다!\n\n결과는 '글쓰기 AI 답변' 탭에서 확인할 수 있습니다.",
+                "AI가 블로그 글 생성을 완료했습니다!",
                 "🎉"
             )
 
@@ -1084,6 +1189,11 @@ class BlogAutomationStep2UI(QWidget):
         """글쓰기 AI 오류 처리"""
         try:
             logger.error(f"❌ 글쓰기 AI 오류: {error_message}")
+            
+            # 메인 UI 상태창 업데이트 (오류)
+            if hasattr(self.parent, 'update_status'):
+                self.parent.update_status("글쓰기 AI 오류 발생", "error")
+                
             self.reset_integrated_ui()
             TableUIDialogHelper.show_error_dialog(
                 self, "글쓰기 AI 오류", f"글쓰기 AI 처리 중 오류가 발생했습니다:\n{error_message}"

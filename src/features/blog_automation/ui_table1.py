@@ -568,7 +568,7 @@ class BlogAutomationStep1UI(QWidget):
         layout.addLayout(save_layout)
 
         card.setLayout(layout)
-        card.setMaximumHeight(tokens.spx(310))
+        # AI 설정 카드 높이 제한 제거 - 내용에 따라 자동 조절
 
         return card
 
@@ -682,7 +682,7 @@ class BlogAutomationStep1UI(QWidget):
         layout.addLayout(title_select_layout)
 
         card.setLayout(layout)
-        card.setMaximumHeight(tokens.spx(280))
+        # 키워드 & 제목 추천 카드 높이 제한 제거 - 내용에 따라 자동 조절
 
         return card
 
@@ -809,6 +809,10 @@ class BlogAutomationStep1UI(QWidget):
             content_type = ai_settings.get('content_type', '정보/가이드형')
 
             logger.info(f"제목 추천 요청: {main_keyword}, AI 설정 유형: {content_type}")
+            
+            # 메인 UI 상태창 업데이트 - 제목 추천 시작
+            if hasattr(self.parent, 'update_status'):
+                self.parent.update_status("제목 추천 AI 작업 중...", "progress")
 
             # 후기 세부 유형 가져오기 (후기/리뷰형일 때만)
             review_detail = ""
@@ -848,6 +852,10 @@ class BlogAutomationStep1UI(QWidget):
     def on_refresh_titles_clicked(self):
         """새로고침 버튼 클릭"""
         try:
+            # 메인 UI 상태창 업데이트 - 새로고침 시작
+            if hasattr(self.parent, 'update_status'):
+                self.parent.update_status("제목 새로고침 중...", "progress")
+                
             # 새로고침 버튼 상태 변경
             self.refresh_title_btn.setText("🔄 새로고침 중...")
             self.refresh_title_btn.setEnabled(False)
@@ -902,6 +910,10 @@ class BlogAutomationStep1UI(QWidget):
         """AI로부터 제목 추천을 받았을 때"""
         try:
             logger.info(f"AI 제목 추천 완료: {len(titles)}개")
+            
+            # 메인 UI 상태창 업데이트 - 제목 추천 성공
+            if hasattr(self.parent, 'update_status'):
+                self.parent.update_status(f"제목 추천 완료! ({len(titles)}개)", "success")
 
             if titles and len(titles) > 0:
                 # AI가 추천한 제목들 사용
@@ -909,6 +921,9 @@ class BlogAutomationStep1UI(QWidget):
             else:
                 # 빈 결과인 경우 오류 표시
                 logger.warning("AI 제목 추천 결과가 비어있음")
+                # 메인 UI 상태창 업데이트 - 결과 없음
+                if hasattr(self.parent, 'update_status'):
+                    self.parent.update_status("제목 추천 결과 없음", "warning")
                 TableUIDialogHelper.show_error_dialog(
                     self, "제목 추천 결과 없음", "AI가 제목을 생성하지 못했습니다. 다시 시도해주세요."
                 )
@@ -923,6 +938,10 @@ class BlogAutomationStep1UI(QWidget):
         """AI 제목 추천 오류 처리"""
         try:
             logger.error(f"AI 제목 추천 오류: {error_message}")
+            
+            # 메인 UI 상태창 업데이트 - 제목 추천 오류
+            if hasattr(self.parent, 'update_status'):
+                self.parent.update_status("제목 추천 중 오류 발생", "error")
 
             self.reset_title_ui()
 

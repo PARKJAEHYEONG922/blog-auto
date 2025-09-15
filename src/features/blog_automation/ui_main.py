@@ -3,7 +3,8 @@
 """
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QComboBox, QLineEdit, QCheckBox, QFrame, QStackedWidget, QTabWidget
+    QComboBox, QLineEdit, QCheckBox, QFrame, QStackedWidget, QTabWidget,
+    QSizePolicy
 )
 from PySide6.QtCore import Qt
 import traceback
@@ -116,14 +117,19 @@ class BlogAutomationMainUI(QWidget):
         # 메인 콘텐츠 영역 (좌우 분할)
         content_layout = QHBoxLayout()
         content_layout.setSpacing(tokens.spx(tokens.GAP_20))
+        content_layout.setAlignment(Qt.AlignTop)  # 상단 정렬
         
-        # 왼쪽 패널 (상태 + 플랫폼 선택 + 로그인)
+        # 왼쪽 패널 (상태 + 플랫폼 선택 + 로그인) - 너비만 고정
         left_panel = self.create_left_panel()
-        content_layout.addWidget(left_panel, 1)
+        left_panel.setMinimumWidth(tokens.spx(300))  # 최소 너비 고정
+        left_panel.setMaximumWidth(tokens.spx(350))  # 최대 너비 고정
+        left_panel.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)  # 너비 고정, 높이 확장
+        content_layout.addWidget(left_panel, 0, Qt.AlignTop)  # 너비만 고정, 상단 정렬
         
-        # 오른쪽 패널 (블로그 분석 및 작성)
+        # 오른쪽 패널 (블로그 분석 및 작성) - 나머지 공간 사용
         right_panel = self.create_right_panel()
-        content_layout.addWidget(right_panel, 2)
+        right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # 너비와 높이 모두 확장
+        content_layout.addWidget(right_panel, 1, Qt.AlignTop)  # 나머지 공간 모두 사용, 상단 정렬
         
         main_layout.addLayout(content_layout, 1)
         self.setLayout(main_layout)
@@ -181,6 +187,9 @@ class BlogAutomationMainUI(QWidget):
         layout = QVBoxLayout()
         layout.setSpacing(tokens.spx(tokens.GAP_16))
         
+        # 상단 여백 추가 (왼쪽 패널을 아래로 내리기)
+        layout.addSpacing(tokens.spx(80))
+        
         # 상태 표시 카드
         self.status_card = self.create_status_card()
         layout.addWidget(self.status_card)
@@ -213,6 +222,7 @@ class BlogAutomationMainUI(QWidget):
 
         # Step 관리를 위한 QStackedWidget
         self.step_stack = QStackedWidget()
+        self.step_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         # 현재 step과 데이터 관리
         self.current_step = 1
@@ -244,16 +254,51 @@ class BlogAutomationMainUI(QWidget):
         try:
             logger.info("Step 1 완료, Step 2로 이동")
 
+            # 새 Step 1 데이터와 기존 데이터 비교
+            previous_step1_data = self.step_data.get('step1', {})
+            previous_title = previous_step1_data.get('selected_title', '')
+            current_title = step1_data.get('selected_title', '')
+            
+            title_changed = previous_title != current_title
+            logger.info(f"제목 변경 확인: 이전='{previous_title}' -> 현재='{current_title}' -> 변경됨={title_changed}")
+
             # Step 1 데이터 저장
             self.step_data['step1'] = step1_data
 
-            # Step 2 위젯 생성 (Step 1 데이터 전달)
-            self.step2_widget = BlogAutomationStep2UI(step1_data, parent=self)
-            self.step2_widget.step_completed.connect(self.on_step2_completed)
-            self.step2_widget.content_generated.connect(self.on_content_generated)
+            # Step 2 위젯 처리
+            if title_changed or not hasattr(self, 'step2_widget'):
+                logger.info("제목이 변경되었거나 Step2 위젯이 없어서 새로 생성")
+                
+                # 기존 Step 2 위젯이 있으면 제거
+                if hasattr(self, 'step2_widget'):
+                    logger.info("기존 Step2 위젯 제거 중...")
+                    self.step_stack.removeWidget(self.step2_widget)
+                    self.step2_widget.deleteLater()
+                    
+                # Step 2, 3 데이터 초기화 (제목이 바뀌면 기존 분석 결과는 무효)
+                if 'step2' in self.step_data:
+                    del self.step_data['step2']
+                if 'step3' in self.step_data:
+                    del self.step_data['step3']
+                if hasattr(self, 'step3_widget'):
+                    self.step_stack.removeWidget(self.step3_widget)
+                    self.step3_widget.deleteLater()
+                    delattr(self, 'step3_widget')
+                
+                # 새 Step 2 위젯 생성
+                self.step2_widget = BlogAutomationStep2UI(step1_data, parent=self)
+                self.step2_widget.step_completed.connect(self.on_step2_completed)
+                self.step2_widget.content_generated.connect(self.on_content_generated)
+                
+                # Step 2를 스택에 추가
+                self.step_stack.addWidget(self.step2_widget)
+                logger.info("새로운 Step 2 위젯 생성 완료")
+            else:
+                logger.info("제목이 동일하므로 기존 Step2 위젯 재사용")
+                # Step1 데이터만 업데이트 (검색어 수정 등을 반영하기 위해)
+                self.step2_widget.update_step1_data(step1_data)
 
-            # Step 2를 스택에 추가하고 표시
-            self.step_stack.addWidget(self.step2_widget)
+            # Step 2 표시
             self.step_stack.setCurrentWidget(self.step2_widget)
             self.current_step = 2
 
@@ -486,6 +531,10 @@ class BlogAutomationMainUI(QWidget):
         
         # 현재 상태
         self.status_label = QLabel("대기 중...")
+        self.status_label.setWordWrap(True)  # 줄바꿈 허용
+        self.status_label.setMinimumHeight(tokens.spx(50))  # 최소 높이 고정 (2줄 가능)
+        self.status_label.setMaximumHeight(tokens.spx(70))  # 최대 높이 제한
+        self.status_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)  # 위쪽 정렬
         self.status_label.setStyleSheet(f"""
             QLabel {{
                 color: {ModernStyle.COLORS['text_primary']};
@@ -495,6 +544,7 @@ class BlogAutomationMainUI(QWidget):
                 background-color: {ModernStyle.COLORS['bg_muted']};
                 border-radius: {tokens.spx(tokens.RADIUS_SM)}px;
                 border-left: {tokens.spx(3)}px solid {ModernStyle.COLORS['primary']};
+                line-height: 1.3;
             }}
         """)
         layout.addWidget(self.status_label)
@@ -502,6 +552,76 @@ class BlogAutomationMainUI(QWidget):
         card.setLayout(layout)
         return card
     
+    def update_status(self, message: str, status_type: str = "info"):
+        """상태창 업데이트
+        
+        Args:
+            message: 표시할 메시지
+            status_type: 상태 타입 ("info", "progress", "success", "error", "warning")
+        """
+        if not hasattr(self, 'status_label'):
+            return
+            
+        # 상태 타입에 따른 색상 및 아이콘 설정
+        if status_type == "progress":
+            color = ModernStyle.COLORS['primary']
+            border_color = ModernStyle.COLORS['primary']
+            icon = "⏳"
+        elif status_type == "success":
+            color = ModernStyle.COLORS['success']
+            border_color = ModernStyle.COLORS['success']
+            icon = "✅"
+        elif status_type == "error":
+            color = ModernStyle.COLORS['danger']
+            border_color = ModernStyle.COLORS['danger']
+            icon = "❌"
+        elif status_type == "warning":
+            color = ModernStyle.COLORS['warning']
+            border_color = ModernStyle.COLORS['warning']
+            icon = "⚠️"
+        else:  # info
+            color = ModernStyle.COLORS['text_primary']
+            border_color = ModernStyle.COLORS['primary']
+            icon = "ℹ️"
+        
+        # 긴 메시지는 2줄로 나누기 (30자 기준)
+        if len(message) > 30:
+            # 적절한 위치에서 줄바꿈 (공백이나 특정 문자 기준)
+            break_chars = [' ', '(', ',', '.']
+            break_pos = -1
+            
+            # 20-30자 사이에서 줄바꿈 위치 찾기
+            for i in range(min(20, len(message)), min(35, len(message))):
+                if message[i] in break_chars:
+                    break_pos = i
+            
+            if break_pos > 0:
+                line1 = message[:break_pos].strip()
+                line2 = message[break_pos:].strip()
+                display_message = f"{icon} {line1}\n{line2}"
+            else:
+                # 적절한 위치를 못 찾으면 강제로 30자에서 자르기
+                display_message = f"{icon} {message[:30]}\n{message[30:]}"
+        else:
+            # 메시지에 아이콘 추가
+            display_message = f"{icon} {message}"
+        
+        # 스타일 업데이트
+        self.status_label.setStyleSheet(f"""
+            QLabel {{
+                color: {color};
+                font-size: {tokens.fpx(tokens.FONT_NORMAL)}px;
+                font-weight: 600;
+                padding: {tokens.spx(tokens.GAP_8)}px;
+                background-color: {ModernStyle.COLORS['bg_muted']};
+                border-radius: {tokens.spx(tokens.RADIUS_SM)}px;
+                border-left: {tokens.spx(3)}px solid {border_color};
+            }}
+        """)
+        
+        # 메시지 설정
+        self.status_label.setText(display_message)
+        logger.info(f"상태 업데이트: {message} (타입: {status_type})")
     
     def setup_styles(self):
         """스타일 설정"""
@@ -533,7 +653,7 @@ class BlogAutomationMainUI(QWidget):
             # 플랫폼 매핑
             if "네이버" in platform_text:
                 self.current_platform = BlogPlatform.NAVER
-                description = "✅ 완전 구현됨 - 자동 로그인 및 포스팅 지원"
+                description = "✅ 구현완료"
             elif "다음" in platform_text or "티스토리" in platform_text:
                 self.current_platform = BlogPlatform.TISTORY
                 description = "🚧 준비 중 - 아직 구현되지 않았습니다"
