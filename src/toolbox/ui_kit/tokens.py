@@ -4,12 +4,10 @@
 """
 
 # ---- Typography (px) --------------------------------------------------------
-FONT_TITLE  = 20
-FONT_MEGA   = 18    # 대제목 (##)
+FONT_TITLE  = 24
 FONT_HEADER = 18
-FONT_LARGE  = 16    # 소제목 (###)
-FONT_SUPER_NORMAL = 15  # 강조 (**)
-FONT_NORMAL = 14    # 일반 텍스트
+FONT_LARGE  = 16
+FONT_NORMAL = 14
 FONT_SMALL  = 13
 FONT_TINY   = 11
 
@@ -186,10 +184,8 @@ EASE_OUT = "cubic-bezier(0.16, 1, 0.3, 1)"
 # 폰트 크기 상수 캐시 (성능 최적화)
 _FONT_SIZES = {
     'title': FONT_TITLE,
-    'mega': FONT_MEGA,
     'header': FONT_HEADER,
     'large': FONT_LARGE,
-    'super_normal': FONT_SUPER_NORMAL,
     'normal': FONT_NORMAL,
     'small': FONT_SMALL,
     'tiny': FONT_TINY

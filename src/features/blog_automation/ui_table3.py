@@ -210,7 +210,7 @@ class BlogAutomationStep3UI(QWidget):
 
         # 텍스트 편집 도구 모음
         tools_layout = QHBoxLayout()
-        tools_layout.setSpacing(tokens.GAP_8)
+        tools_layout.setSpacing(tokens.GAP_12)
         
         # 글씨 크기 라벨
         font_size_label = QLabel("📏 글씨 크기:")
@@ -223,25 +223,61 @@ class BlogAutomationStep3UI(QWidget):
         """)
         tools_layout.addWidget(font_size_label)
         
-        # 글씨 크기 버튼들
-        self.font_small_btn = ModernButton("작게")
-        self.font_normal_btn = ModernButton("보통")
-        self.font_large_btn = ModernButton("크게")
+        # 글씨 크기 드롭박스
+        from PySide6.QtWidgets import QComboBox
+        self.font_size_combo = QComboBox()
+        self.font_size_combo.addItems([
+            "대제목 (24px)",    # 네이버 24px
+            "소제목 (19px)",    # 네이버 19px  
+            "강조 (16px)",      # 네이버 16px
+            "일반 (15px)"       # 네이버 15px
+        ])
+        self.font_size_combo.setCurrentIndex(3)  # 기본값: 일반
+        self.font_size_combo.currentIndexChanged.connect(self.on_font_size_combo_changed)
         
-        self.font_small_btn.clicked.connect(lambda: self.change_font_size('small'))
-        self.font_normal_btn.clicked.connect(lambda: self.change_font_size('normal'))
-        self.font_large_btn.clicked.connect(lambda: self.change_font_size('large'))
+        # 드롭박스 스타일링
+        self.font_size_combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {ModernStyle.COLORS['bg_card']};
+                color: {ModernStyle.COLORS['text_primary']};
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
+                border-radius: {tokens.RADIUS_SM}px;
+                padding: {tokens.spx(6)}px {tokens.spx(12)}px;
+                font-size: {tokens.get_font_size('small')}px;
+                min-width: {tokens.spx(120)}px;
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                width: {tokens.spx(20)}px;
+            }}
+            QComboBox::down-arrow {{
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 6px solid {ModernStyle.COLORS['text_secondary']};
+                margin-right: {tokens.spx(4)}px;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {ModernStyle.COLORS['bg_card']};
+                border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
+                border-radius: {tokens.RADIUS_SM}px;
+                selection-background-color: {ModernStyle.COLORS['primary']};
+                color: {ModernStyle.COLORS['text_primary']};
+                outline: none;
+            }}
+        """)
+        tools_layout.addWidget(self.font_size_combo)
         
-        # 현재 선택된 크기 표시를 위한 스타일 설정
-        self.current_font_size = 'normal'  # 기본 크기
-        self.update_font_size_buttons()
-        
-        tools_layout.addWidget(self.font_small_btn)
-        tools_layout.addWidget(self.font_normal_btn)
-        tools_layout.addWidget(self.font_large_btn)
+        # 적용 버튼 (선택한 텍스트에 폰트 적용)
+        self.apply_font_btn = ModernButton("🎨 선택 텍스트에 적용")
+        self.apply_font_btn.clicked.connect(self.apply_font_to_selection)
+        tools_layout.addWidget(self.apply_font_btn)
         
         tools_layout.addStretch()
         layout.addLayout(tools_layout)
+        
+        # 현재 폰트 크기 추적 (새 텍스트 입력용)
+        self.current_font_size = '15'  # 기본값: 일반 (15px)
 
         # 텍스트 에디터 (스크롤 가능)
         self.content_editor = QTextEdit()
@@ -259,7 +295,7 @@ class BlogAutomationStep3UI(QWidget):
                 border-radius: {tokens.RADIUS_SM}px;
                 background-color: {ModernStyle.COLORS['bg_card']};
                 color: {ModernStyle.COLORS['text_primary']};
-                font-size: {tokens.get_font_size('normal')}px;
+                font-size: 15px;
                 font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
                 line-height: 1.6;
                 padding: {tokens.spx(12)}px;
@@ -286,6 +322,9 @@ class BlogAutomationStep3UI(QWidget):
 
         # 텍스트 변경 시 글자 수 업데이트
         self.content_editor.textChanged.connect(self.update_char_count)
+        
+        # 커서 위치 변경 시 현재 폰트 크기 감지
+        self.content_editor.cursorPositionChanged.connect(self.update_current_font_from_cursor)
 
         # 편집 기능 버튼들
         button_layout = QHBoxLayout()
@@ -393,31 +432,31 @@ class BlogAutomationStep3UI(QWidget):
                     table_lines = []
                     in_table = False
                 
-                # ## 대제목 - mega 폰트 (18px → 네이버 24px) + ## 제거
+                # ## 대제목 - 24px
                 if line.strip().startswith('## '):
                     title_text = line.strip()[3:].strip()  # ## 제거
-                    html_lines.append(f'<div data-naver-font="24" style="font-size: {tokens.get_font_size("mega")}px; font-weight: 700; margin: 8px 0; color: {ModernStyle.COLORS["text_primary"]};">{title_text}</div>')
+                    html_lines.append(f'<div data-naver-font="24" style="font-size: 24px; font-weight: 700; margin: 8px 0; color: {ModernStyle.COLORS["text_primary"]};">{title_text}</div>')
                     i += 1
                     continue
                 
-                # ### 소제목 - large 폰트 (16px → 네이버 20px) + ### 제거
+                # ### 소제목 - 19px
                 elif line.strip().startswith('### '):
                     subtitle_text = line.strip()[4:].strip()  # ### 제거
-                    html_lines.append(f'<div data-naver-font="20" style="font-size: {tokens.get_font_size("large")}px; font-weight: 600; margin: 6px 0; color: {ModernStyle.COLORS["text_primary"]};">{subtitle_text}</div>')
+                    html_lines.append(f'<div data-naver-font="19" style="font-size: 19px; font-weight: 600; margin: 6px 0; color: {ModernStyle.COLORS["text_primary"]};">{subtitle_text}</div>')
                     i += 1
                     continue
                 
-                # 일반 라인에서 **강조** 처리 - super_normal 폰트 (15px → 네이버 18px)
+                # 일반 라인에서 **강조** 처리 - 16px
                 else:
                     # **텍스트** 패턴 찾기
                     processed_line = re.sub(
                         r'\*\*(.*?)\*\*',
-                        lambda m: f'<span data-naver-font="18" style="font-size: {tokens.get_font_size("super_normal")}px; font-weight: 600; color: {ModernStyle.COLORS["text_primary"]};">{m.group(1)}</span>',
+                        lambda m: f'<span data-naver-font="16" style="font-size: 16px; font-weight: 600; color: {ModernStyle.COLORS["text_primary"]};">{m.group(1)}</span>',
                         line
                     )
                     
-                    # 일반 텍스트 - normal 폰트 (14px → 네이버 16px)
-                    html_lines.append(f'<div data-naver-font="16" style="font-size: {tokens.get_font_size("normal")}px; line-height: 1.6; margin: 2px 0; color: {ModernStyle.COLORS["text_primary"]};">{processed_line}</div>')
+                    # 일반 텍스트 - 15px
+                    html_lines.append(f'<div data-naver-font="15" style="font-size: 15px; font-weight: 400; line-height: 1.6; margin: 2px 0; color: {ModernStyle.COLORS["text_primary"]};">{processed_line}</div>')
                 
                 i += 1
             
@@ -470,7 +509,7 @@ class BlogAutomationStep3UI(QWidget):
                 
                 for col_idx, cell_data in enumerate(row_data):
                     # 자동화 데이터 속성 추가
-                    cell_html = f'<td data-row="{row_idx}" data-col="{col_idx}" data-naver-font="16" style="border: 1px solid #ddd; padding: 12px; text-align: center;">{cell_data}</td>'
+                    cell_html = f'<td data-row="{row_idx}" data-col="{col_idx}" data-naver-font="15" style="border: 1px solid #ddd; padding: 12px; text-align: center;">{cell_data}</td>'
                     html_parts.append(cell_html)
                 
                 html_parts.append('</tr>')
@@ -543,7 +582,20 @@ class BlogAutomationStep3UI(QWidget):
             # 자연스러운 분리점 찾기 (우선순위 순)
             break_points = [
                 ', ',      # 쉼표
-                ' + ',     # 수식/비율 연결 (기존 사료 75% + 새 사료 25%)
+                ' + ',     # 덧셈 (기존 사료 75% + 새 사료 25%)
+                ' - ',     # 뺄셈 (100g - 20g)
+                ' × ',     # 곱셈 (3 × 5)
+                ' ÷ ',     # 나눗셈 (10 ÷ 2)
+                ' = ',     # 등호 (A = B)
+                ' ≠ ',     # 부등호 (A ≠ B)
+                ' > ',     # 크다 (10 > 5)
+                ' < ',     # 작다 (5 < 10)
+                ' ≥ ',     # 크거나 같다 (A ≥ B)
+                ' ≤ ',     # 작거나 같다 (A ≤ B)
+                ' ± ',     # 플러스마이너스 (10 ± 2)
+                '% ',      # 퍼센트 뒤 (20% 이상)
+                '℃ ',     # 섭씨 (25℃ 이상)
+                '° ',      # 도 (90° 각도)
                 '는 ',     # 조사
                 '을 ', '를 ',  # 목적격 조사  
                 '이 ', '가 ',  # 주격 조사
@@ -664,85 +716,101 @@ class BlogAutomationStep3UI(QWidget):
         except Exception as e:
             logger.error(f"글자 수 계산 오류: {e}")
 
-    def change_font_size(self, size_type: str):
-        """텍스트 에디터 글씨 크기 변경"""
+    def on_font_size_combo_changed(self, index: int):
+        """드롭박스에서 폰트 크기 변경 시"""
         try:
-            self.current_font_size = size_type
+            # 네이버 폰트 크기 직접 사용 (표시용도 동일하게)
+            font_sizes = ['24', '19', '16', '15']  # 대제목, 소제목, 강조, 일반
             
-            # 크기별 폰트 사이즈 설정
-            if size_type == 'small':
-                font_size = tokens.get_font_size('small')
-            elif size_type == 'large':
-                font_size = tokens.get_font_size('large')
-            else:  # normal
-                font_size = tokens.get_font_size('normal')
+            self.current_font_size = font_sizes[index]
             
-            # 텍스트 에디터 스타일 업데이트
-            self.content_editor.setStyleSheet(f"""
-                QTextEdit {{
-                    border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
-                    border-radius: {tokens.RADIUS_SM}px;
-                    background-color: {ModernStyle.COLORS['bg_card']};
-                    color: {ModernStyle.COLORS['text_primary']};
-                    font-size: {font_size}px;
-                    font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
-                    line-height: 1.6;
-                    padding: {tokens.spx(12)}px;
-                }}
-                QTextEdit:focus {{
-                    border-color: {ModernStyle.COLORS['primary']};
-                }}
-            """)
+            # 새로운 텍스트 입력을 위해 에디터 폰트 설정 업데이트
+            self.setup_editor_font_insertion()
             
-            # 버튼 스타일 업데이트
-            self.update_font_size_buttons()
-            
-            logger.info(f"글씨 크기 변경: {size_type} ({font_size}px)")
+            logger.info(f"현재 폰트 크기 변경: {self.current_font_size}px")
             
         except Exception as e:
-            logger.error(f"글씨 크기 변경 오류: {e}")
+            logger.error(f"드롭박스 폰트 크기 변경 오류: {e}")
 
-    def update_font_size_buttons(self):
-        """글씨 크기 버튼 스타일 업데이트 (현재 선택된 버튼 강조)"""
+    def apply_font_to_selection(self):
+        """선택된 텍스트에 현재 폰트 크기 적용"""
         try:
-            # 모든 버튼을 기본 스타일로 설정
-            normal_style = f"""
-                QPushButton {{
-                    background-color: {ModernStyle.COLORS['bg_secondary']};
-                    color: {ModernStyle.COLORS['text_primary']};
-                    border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
-                    border-radius: {tokens.RADIUS_SM}px;
-                    padding: {tokens.spx(4)}px {tokens.spx(8)}px;
-                    font-size: {tokens.get_font_size('small')}px;
-                }}
-                QPushButton:hover {{
-                    background-color: {ModernStyle.COLORS['bg_primary']};
-                }}
-            """
+            cursor = self.content_editor.textCursor()
+            if not cursor.hasSelection():
+                TableUIDialogHelper.show_info_dialog(
+                    self, "텍스트 선택 필요", "폰트를 적용할 텍스트를 먼저 선택해주세요.", "ℹ️"
+                )
+                return
+                
+            selected_text = cursor.selectedText()
             
-            # 선택된 버튼 스타일
-            selected_style = f"""
-                QPushButton {{
-                    background-color: {ModernStyle.COLORS['primary']};
-                    color: white;
-                    border: {tokens.spx(1)}px solid {ModernStyle.COLORS['primary']};
-                    border-radius: {tokens.RADIUS_SM}px;
-                    padding: {tokens.spx(4)}px {tokens.spx(8)}px;
-                    font-size: {tokens.get_font_size('small')}px;
-                    font-weight: 600;
-                }}
-                QPushButton:hover {{
-                    background-color: {ModernStyle.COLORS['primary_hover']};
-                }}
-            """
+            # HTML 스타일로 감싸기 (마크다운과 동일한 형식 사용)
+            if self.current_font_size == '24':  # 대제목
+                formatted_text = f'<div data-naver-font="24" style="font-size: 24px; font-weight: 700; margin: 8px 0; color: {ModernStyle.COLORS["text_primary"]};">{selected_text}</div>'
+            elif self.current_font_size == '19':  # 소제목
+                formatted_text = f'<div data-naver-font="19" style="font-size: 19px; font-weight: 600; margin: 6px 0; color: {ModernStyle.COLORS["text_primary"]};">{selected_text}</div>'
+            elif self.current_font_size == '16':  # 강조
+                formatted_text = f'<span data-naver-font="16" style="font-size: 16px; font-weight: 600; color: {ModernStyle.COLORS["text_primary"]};">{selected_text}</span>'
+            else:  # 일반 (15px)
+                formatted_text = f'<div data-naver-font="15" style="font-size: 15px; font-weight: 400; line-height: 1.6; margin: 2px 0; color: {ModernStyle.COLORS["text_primary"]};">{selected_text}</div>'
             
-            # 각 버튼에 적절한 스타일 적용
-            self.font_small_btn.setStyleSheet(selected_style if self.current_font_size == 'small' else normal_style)
-            self.font_normal_btn.setStyleSheet(selected_style if self.current_font_size == 'normal' else normal_style)
-            self.font_large_btn.setStyleSheet(selected_style if self.current_font_size == 'large' else normal_style)
+            # setHtml() 방식으로 통일 (마크다운과 동일한 방식)
+            cursor.removeSelectedText()
+            cursor.insertText(f"__TEMP_REPLACE__{selected_text}__TEMP_REPLACE__")
+            
+            # 전체 HTML 내용 가져와서 임시 마커를 실제 HTML로 교체
+            full_html = self.content_editor.toHtml()
+            updated_html = full_html.replace(f"__TEMP_REPLACE__{selected_text}__TEMP_REPLACE__", formatted_text)
+            self.content_editor.setHtml(updated_html)
+            
+            logger.info(f"텍스트에 폰트 적용: {self.current_font_size}px")
             
         except Exception as e:
-            logger.error(f"글씨 크기 버튼 스타일 업데이트 오류: {e}")
+            logger.error(f"텍스트 폰트 적용 오류: {e}")
+
+    def update_current_font_from_cursor(self):
+        """커서 위치의 폰트 크기를 감지하여 드롭박스 업데이트"""
+        try:
+            cursor = self.content_editor.textCursor()
+            char_format = cursor.charFormat()
+            
+            # 현재 위치의 폰트 크기 확인
+            current_size = int(char_format.fontPointSize()) if char_format.fontPointSize() > 0 else 15
+            
+            # 폰트 크기에 따라 드롭박스 선택 업데이트
+            if current_size >= 24:
+                self.font_size_combo.setCurrentIndex(0)  # 대제목 (24px)
+                self.current_font_size = '24'
+            elif current_size >= 19:
+                self.font_size_combo.setCurrentIndex(1)  # 소제목 (19px)
+                self.current_font_size = '19'
+            elif current_size >= 16:
+                self.font_size_combo.setCurrentIndex(2)  # 강조 (16px)
+                self.current_font_size = '16'
+            else:
+                self.font_size_combo.setCurrentIndex(3)  # 일반 (15px)
+                self.current_font_size = '15'
+                
+        except Exception as e:
+            logger.error(f"커서 폰트 크기 감지 오류: {e}")
+
+    def setup_editor_font_insertion(self):
+        """에디터에서 새 텍스트 입력 시 현재 선택된 폰트로 입력되도록 설정"""
+        try:
+            from PySide6.QtGui import QTextCharFormat
+            
+            cursor = self.content_editor.textCursor()
+            char_format = QTextCharFormat()
+            
+            # 현재 선택된 폰트 크기 적용
+            char_format.setFontPointSize(int(self.current_font_size))
+            cursor.setCharFormat(char_format)
+            
+            # 커서를 에디터에 다시 설정
+            self.content_editor.setTextCursor(cursor)
+            
+        except Exception as e:
+            logger.error(f"에디터 폰트 설정 오류: {e}")
 
     def restore_original_content(self):
         """원본 내용으로 복원"""
