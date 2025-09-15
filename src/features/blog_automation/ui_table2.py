@@ -961,9 +961,7 @@ class BlogAutomationStep2UI(QWidget):
             # 4단계: 글쓰기 AI 프롬프트 생성
             logger.info("4단계: 글쓰기 AI 프롬프트를 생성합니다...")
 
-            # 글쓰기 AI 프롬프트 생성
-            from .ai_prompts import create_ai_request_data, BlogAIPrompts
-
+            # service를 통한 통합 프롬프트 생성 (CLAUDE.md 구조 준수)
             ai_settings = self.step1_data.get('ai_settings', {})
             main_keyword = self.step1_data.get('main_keyword', '')
             sub_keywords = self.step1_data.get('sub_keywords', '')
@@ -971,20 +969,29 @@ class BlogAutomationStep2UI(QWidget):
             content_type = ai_settings.get('content_type', '정보/가이드형')
             tone = ai_settings.get('tone', '정중한 존댓말체')
             review_detail = ai_settings.get('review_detail', '')
-            blogger_identity = ai_settings.get('blogger_identity', '')
 
             # 검색 키워드 가져오기 (동일한 로직)
             search_keyword = self.search_query_input.text().strip()
             if not search_keyword:
                 search_keyword = self.step1_data.get('search_query', main_keyword)
 
-            ai_data = create_ai_request_data(
-                main_keyword, sub_keywords, self.analyzed_blogs,
-                content_type, tone, review_detail, blogger_identity, summary_result, selected_title, search_keyword
+            # service를 통해 UI 표시용 프롬프트 생성 (실제 AI 호출과 동일한 프롬프트 보장)
+            ai_data = self.service.generate_ui_prompt_for_display(
+                main_keyword=main_keyword,
+                sub_keywords=sub_keywords, 
+                analyzed_blogs=self.analyzed_blogs,
+                content_type=content_type,
+                tone=tone,
+                review_detail=review_detail,
+                selected_title=selected_title,
+                search_keyword=search_keyword,
+                summary_result=summary_result
             )
 
             if not ai_data:
                 raise Exception("글쓰기 AI 프롬프트 생성 실패")
+            
+            logger.info(f"🔍 DEBUG: ai_data keys = {list(ai_data.keys()) if ai_data else 'None'}")
 
             writing_prompt = ai_data.get('ai_prompt', '')
 
@@ -1012,7 +1019,8 @@ class BlogAutomationStep2UI(QWidget):
                     content_type,
                     tone,
                     review_detail,
-                    search_keyword
+                    search_keyword,
+                    selected_title
                 )
                 self.ai_writer_thread = WorkerThread(self.ai_writer_worker)
 

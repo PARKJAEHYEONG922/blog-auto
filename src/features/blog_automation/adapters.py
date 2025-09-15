@@ -3101,3 +3101,58 @@ def create_blog_adapter(platform: BlogPlatform):
         return BloggerAdapter()
     else:
         raise BusinessError(f"지원하지 않는 플랫폼: {platform}")
+
+
+class BlogAIPromptAdapter:
+    """블로그 AI 프롬프트 생성 어댑터 - CLAUDE.md 구조 준수"""
+    
+    def __init__(self):
+        self.logger = get_logger("blog_automation.ai_adapter")
+    
+    def generate_unified_prompt(self, main_keyword: str, sub_keywords: str, analyzed_blogs: list, 
+                               content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", 
+                               review_detail: str = "", selected_title: str = "", 
+                               search_keyword: str = "", blogger_identity: str = "",
+                               summary_result: str = "") -> Dict[str, Any]:
+        """
+        통합 AI 프롬프트 생성 - UI 표시용과 실제 호출용 동일한 프롬프트 보장
+        
+        Returns:
+            Dict: {
+                'ai_prompt': str,      # 실제 AI 호출용 프롬프트
+                'summary_prompt': str, # 정보요약 프롬프트 (필요시)
+                'summary_result': str, # 요약 결과 (필요시)
+            }
+        """
+        try:
+            self.logger.info("통합 AI 프롬프트 생성 시작")
+            
+            # ai_prompts 모듈에서 통합 데이터 생성
+            from .ai_prompts import create_ai_request_data
+            
+            ai_data = create_ai_request_data(
+                main_keyword=main_keyword,
+                sub_keywords=sub_keywords, 
+                analyzed_blogs=analyzed_blogs,
+                content_type=content_type,
+                tone=tone,
+                review_detail=review_detail,
+                blogger_identity=blogger_identity,
+                summary_result=summary_result,
+                selected_title=selected_title,
+                search_keyword=search_keyword
+            )
+            
+            if not ai_data:
+                raise BusinessError("AI 프롬프트 생성 실패")
+                
+            self.logger.info("통합 AI 프롬프트 생성 완료")
+            return ai_data
+            
+        except Exception as e:
+            self.logger.error(f"통합 AI 프롬프트 생성 실패: {e}")
+            raise BusinessError(f"AI 프롬프트 생성 실패: {str(e)}")
+
+
+# 전역 AI 어댑터 인스턴스
+blog_ai_adapter = BlogAIPromptAdapter()

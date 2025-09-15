@@ -536,7 +536,7 @@ class AIWritingWorker(QObject):
     summary_completed = Signal(str)  # 정보요약 AI 결과 완료
     writing_prompt_generated = Signal(str)  # 글작성 AI 프롬프트 생성
     
-    def __init__(self, service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, analyzed_blogs: list = None, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", search_keyword: str = ""):
+    def __init__(self, service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, analyzed_blogs: list = None, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", search_keyword: str = "", selected_title: str = ""):
         super().__init__()
         self.service = service
         self.main_keyword = main_keyword
@@ -547,6 +547,7 @@ class AIWritingWorker(QObject):
         self.tone = tone
         self.review_detail = review_detail
         self.search_keyword = search_keyword or main_keyword
+        self.selected_title = selected_title
         self.is_cancelled = False
 
         # DEBUG: 워커 초기화 시 search_keyword 확인
@@ -583,7 +584,7 @@ class AIWritingWorker(QObject):
                     self.tone,
                     self.review_detail,
                     self.search_keyword,
-                    self.target_title
+                    self.selected_title
                 )
                 
                 # 각 단계별 시그널 발송
@@ -658,9 +659,9 @@ def create_ai_blog_analysis_worker(service: BlogAutomationService, search_keywor
     return AIBlogAnalysisWorker(service, search_keyword, target_title, main_keyword, content_type, sub_keywords)
 
 
-def create_ai_writing_worker(service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, analyzed_blogs: list = None, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", search_keyword: str = "") -> AIWritingWorker:
+def create_ai_writing_worker(service: BlogAutomationService, main_keyword: str, sub_keywords: str, structured_data: dict, analyzed_blogs: list = None, content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", review_detail: str = "", search_keyword: str = "", selected_title: str = "") -> AIWritingWorker:
     """AI 글쓰기 워커 생성 (2단계 파이프라인 지원)"""
-    return AIWritingWorker(service, main_keyword, sub_keywords, structured_data, analyzed_blogs, content_type, tone, review_detail, search_keyword)
+    return AIWritingWorker(service, main_keyword, sub_keywords, structured_data, analyzed_blogs, content_type, tone, review_detail, search_keyword, selected_title)
 
 def create_summary_worker(service: BlogAutomationService, prompt: str, response_format: str = "text", context: str = "정보요약") -> SummaryAIWorker:
     """통합 정보요약 워커 생성 팩토리 함수"""

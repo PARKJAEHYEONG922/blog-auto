@@ -548,29 +548,27 @@ class BlogAutomationService:
             # 3단계: 요약된 내용을 포함한 프롬프트로 글작성 AI 호출
             logger.info("3단계: 요약 내용 기반 최종 블로그 글 생성")
 
-            # 블로그 구조 분석
-            from .ai_prompts import BlogContentStructure, BlogAIPrompts
-            structure_analyzer = BlogContentStructure()
-            structured_data = structure_analyzer.analyze_blog_structure(analyzed_blogs)
-
             # 블로거 정체성 가져오기
             from src.foundation.config import config_manager
             api_config = config_manager.load_api_config()
             blogger_identity = getattr(api_config, 'ai_writing_blogger_identity', '')
 
-            # 1차 결과를 포함한 완전한 프롬프트 생성
-            enhanced_prompt = BlogAIPrompts.generate_content_analysis_prompt(
+            # adapters를 통한 통합 AI 프롬프트 생성
+            from .adapters import blog_ai_adapter
+            ai_data = blog_ai_adapter.generate_unified_prompt(
                 main_keyword=main_keyword,
                 sub_keywords=sub_keywords,
-                structured_data=structured_data,
+                analyzed_blogs=analyzed_blogs,
                 content_type=content_type,
                 tone=tone,
                 review_detail=review_detail,
-                blogger_identity=blogger_identity,
-                summary_result=summarized_content,
+                selected_title=selected_title,
                 search_keyword=search_keyword,
-                selected_title=selected_title
+                blogger_identity=blogger_identity,
+                summary_result=summarized_content
             )
+            
+            enhanced_prompt = ai_data.get('ai_prompt', '')
 
             # 글작성 AI로 최종 콘텐츠 생성
             final_content = self.generate_blog_content(enhanced_prompt)
@@ -617,22 +615,22 @@ class BlogAutomationService:
             api_config = config_manager.load_api_config()
             blogger_identity = getattr(api_config, 'ai_writing_blogger_identity', '')
 
-            # 분석 없는 글쓰기 프롬프트 생성 (기존 메서드 활용)
-            from .ai_prompts import BlogAIPrompts
-            # 빈 구조화 데이터로 직접 글쓰기 프롬프트 생성
-            empty_structured_data = {"competitor_analysis": {"top_blogs": [], "summary": {}}}
-            writing_prompt = BlogAIPrompts.generate_content_analysis_prompt(
+            # adapters를 통한 통합 AI 프롬프트 생성 (분석 없음)
+            from .adapters import blog_ai_adapter
+            ai_data = blog_ai_adapter.generate_unified_prompt(
                 main_keyword=main_keyword,
                 sub_keywords=sub_keywords,
-                structured_data=empty_structured_data,
+                analyzed_blogs=[],  # 빈 리스트로 분석 없음 표시
                 content_type=content_type,
                 tone=tone,
                 review_detail=review_detail,
-                blogger_identity=blogger_identity,
-                summary_result="경쟁 블로그 분석 결과가 없어 직접 작성합니다.",
+                selected_title=selected_title,
                 search_keyword=search_keyword,
-                selected_title=selected_title
+                blogger_identity=blogger_identity,
+                summary_result="경쟁 블로그 분석 결과가 없어 직접 작성합니다."
             )
+            
+            writing_prompt = ai_data.get('ai_prompt', '')
 
             # AI로 직접 콘텐츠 생성
             final_content = self.generate_blog_content(writing_prompt)
@@ -696,29 +694,27 @@ class BlogAutomationService:
             # 3단계: 요약된 내용을 포함한 프롬프트로 글작성 AI 호출
             logger.info("3단계: 요약 내용 기반 최종 블로그 글 생성")
             
-            # 블로그 구조 분석
-            from .ai_prompts import BlogContentStructure, BlogAIPrompts
-            structure_analyzer = BlogContentStructure()
-            structured_data = structure_analyzer.analyze_blog_structure(analyzed_blogs)
-            
             # 블로거 정체성 가져오기
             from src.foundation.config import config_manager
             api_config = config_manager.load_api_config()
             blogger_identity = getattr(api_config, 'ai_writing_blogger_identity', '')
             
-            # 1차 결과를 포함한 완전한 프롬프트 생성
-            enhanced_prompt = BlogAIPrompts.generate_content_analysis_prompt(
+            # adapters를 통한 통합 AI 프롬프트 생성
+            from .adapters import blog_ai_adapter
+            ai_data = blog_ai_adapter.generate_unified_prompt(
                 main_keyword=main_keyword,
                 sub_keywords=sub_keywords,
-                structured_data=structured_data,
+                analyzed_blogs=analyzed_blogs,
                 content_type=content_type,
                 tone=tone,
                 review_detail=review_detail,
-                blogger_identity=blogger_identity,
-                summary_result=summarized_content,
+                selected_title=selected_title,
                 search_keyword=search_keyword,
-                selected_title=selected_title
+                blogger_identity=blogger_identity,
+                summary_result=summarized_content
             )
+            
+            enhanced_prompt = ai_data.get('ai_prompt', '')
 
             # 글작성 AI로 최종 콘텐츠 생성
             final_content = self.generate_blog_content(enhanced_prompt)
@@ -821,4 +817,42 @@ class BlogAutomationService:
         except Exception as e:
             logger.error(f"AI 이미지 생성 실패: {e}")
             raise BusinessError(f"AI 이미지 생성 실패: {str(e)}")
+    
+    def generate_ui_prompt_for_display(self, main_keyword: str, sub_keywords: str, analyzed_blogs: list,
+                                     content_type: str = "정보/가이드형", tone: str = "정중한 존댓말체", 
+                                     review_detail: str = "", selected_title: str = "", 
+                                     search_keyword: str = "", summary_result: str = "") -> Dict[str, Any]:
+        """
+        UI 표시용 프롬프트 생성 - CLAUDE.md 구조 준수
+        adapters를 통해 통합된 프롬프트 생성으로 실제 AI 호출과 동일함을 보장
+        """
+        try:
+            logger.info("UI 표시용 프롬프트 생성")
+            
+            # 블로거 정체성 가져오기
+            from src.foundation.config import config_manager
+            api_config = config_manager.load_api_config()
+            blogger_identity = getattr(api_config, 'ai_writing_blogger_identity', '')
+            
+            # adapters를 통한 통합 AI 프롬프트 생성 (실제 호출과 동일)
+            from .adapters import blog_ai_adapter
+            ai_data = blog_ai_adapter.generate_unified_prompt(
+                main_keyword=main_keyword,
+                sub_keywords=sub_keywords,
+                analyzed_blogs=analyzed_blogs,
+                content_type=content_type,
+                tone=tone,
+                review_detail=review_detail,
+                selected_title=selected_title,
+                search_keyword=search_keyword,
+                blogger_identity=blogger_identity,
+                summary_result=summary_result
+            )
+            
+            logger.info("UI 표시용 프롬프트 생성 완료")
+            return ai_data
+            
+        except Exception as e:
+            logger.error(f"UI 표시용 프롬프트 생성 실패: {e}")
+            raise BusinessError(f"프롬프트 생성 실패: {str(e)}")
 
