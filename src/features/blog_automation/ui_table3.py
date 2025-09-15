@@ -2,7 +2,8 @@
 블로그 자동화 Step 3: 네이버 블로그 발행
 """
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QScrollArea
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QScrollArea,
+    QTableWidget, QTableWidgetItem, QHeaderView
 )
 from PySide6.QtCore import Qt, Signal
 import traceback
@@ -227,10 +228,10 @@ class BlogAutomationStep3UI(QWidget):
         from PySide6.QtWidgets import QComboBox
         self.font_size_combo = QComboBox()
         self.font_size_combo.addItems([
-            "대제목 (24px)",    # 네이버 24px
-            "소제목 (19px)",    # 네이버 19px  
-            "강조 (16px)",      # 네이버 16px
-            "일반 (15px)"       # 네이버 15px
+            "대제목 (20px)",    # UI 표시 20px (발행시 24px)
+            "소제목 (15px)",    # UI 표시 15px (발행시 19px)  
+            "강조 (12px)",      # UI 표시 12px (발행시 16px)
+            "일반 (11px)"       # UI 표시 11px (발행시 15px)
         ])
         self.font_size_combo.setCurrentIndex(3)  # 기본값: 일반
         self.font_size_combo.currentIndexChanged.connect(self.on_font_size_combo_changed)
@@ -277,17 +278,14 @@ class BlogAutomationStep3UI(QWidget):
         layout.addLayout(tools_layout)
         
         # 현재 폰트 크기 추적 (새 텍스트 입력용)
-        self.current_font_size = '15'  # 기본값: 일반 (15px)
+        self.current_font_size = '11'  # 기본값: UI 일반 (11px, 발행시 15px)
 
         # 텍스트 에디터 (스크롤 가능)
         self.content_editor = QTextEdit()
         
-        # 원본 내용을 모바일 최적화 형태로 자동 변환
+        # 원본 내용을 모바일 최적화 형태로 자동 변환 (QTextCharFormat 방식)
         original_content = self.step2_data.get('generated_content', '')
-        formatted_content = self.auto_format_for_mobile(original_content)
-        
-        # HTML 컨텐츠 설정 (마크다운 폰트 적용을 위해)
-        self.content_editor.setHtml(formatted_content)
+        self.auto_format_for_mobile(original_content)  # 에디터에 직접 적용됨
         self.content_editor.setMinimumHeight(tokens.spx(400))
         self.content_editor.setStyleSheet(f"""
             QTextEdit {{
@@ -323,8 +321,8 @@ class BlogAutomationStep3UI(QWidget):
         # 텍스트 변경 시 글자 수 업데이트
         self.content_editor.textChanged.connect(self.update_char_count)
         
-        # 커서 위치 변경 시 현재 폰트 크기 감지
-        self.content_editor.cursorPositionChanged.connect(self.update_current_font_from_cursor)
+        # 클릭 시에만 폰트 크기 감지 (드래그 시에는 방해하지 않음)
+        self.content_editor.cursorPositionChanged.connect(self.smart_update_font_from_cursor)
 
         # 편집 기능 버튼들
         button_layout = QHBoxLayout()
@@ -383,22 +381,32 @@ class BlogAutomationStep3UI(QWidget):
                     result_lines.append(line)
                     prev_empty = False
             
-            # 마크다운 폰트 적용 HTML 변환
-            formatted_content = self.apply_markdown_fonts('\n'.join(result_lines))
-            logger.info(f"모바일 최적화 + 마크다운 폰트 적용 완료: 원본 {len(content)}자 → 변환 {len(formatted_content)}자")
-            return formatted_content
+            # 마크다운 폰트 적용 QTextCharFormat 방식
+            plain_content = '\n'.join(result_lines)
+            self.apply_markdown_fonts_qtformat(plain_content)
+            logger.info(f"모바일 최적화 + 마크다운 폰트 적용 완료: 원본 {len(content)}자")
+            return ""  # QTextCharFormat 방식은 에디터에 직접 적용됨
             
         except Exception as e:
             logger.error(f"모바일 최적화 오류: {e}")
             return content  # 오류 시 원본 반환
 
-    def apply_markdown_fonts(self, content: str) -> str:
-        """마크다운 기반 폰트 크기 적용 + 네이버 블로그 자동화 준비 (HTML 변환)"""
+    def apply_markdown_fonts_qtformat(self, content: str):
+        """하이브리드 렌더링: 표는 HTML, 텍스트는 QTextCharFormat 적용"""
         try:
             import re
+            from PySide6.QtGui import QTextCursor, QTextCharFormat, QFont
+            from PySide6.QtCore import Qt
             
-            html_lines = []
+            logger.info(f"🔄 하이브리드 마크다운 적용 시작 (표=HTML, 텍스트=QTextCharFormat). 내용 길이: {len(content)}자")
+            
+            # 에디터 초기화
+            self.content_editor.clear()
+            cursor = self.content_editor.textCursor()
+            
             lines = content.split('\n')
+            logger.info(f"📄 총 {len(lines)}줄 처리 예정")
+            
             
             # 표 처리를 위한 상태 변수
             in_table = False
@@ -407,19 +415,28 @@ class BlogAutomationStep3UI(QWidget):
             i = 0
             while i < len(lines):
                 line = lines[i]
+                stripped = line.strip()
                 
-                if not line.strip():
+                if not stripped:
                     if in_table:
-                        # 표가 끝났으면 처리
-                        html_lines.append(self.convert_markdown_table_to_naver_format(table_lines))
+                        # 표가 끝났으면 HTML 방식으로 처리
+                        self.insert_table_html(table_lines, cursor)
                         table_lines = []
                         in_table = False
-                    html_lines.append('<br>')
+                    # 빈 줄 처리
+                    cursor.insertText('\n')
                     i += 1
                     continue
                 
-                # 마크다운 표 감지
-                if line.strip().startswith('|') and line.strip().endswith('|') and line.strip().count('|') >= 3:
+                # 마크다운 표 감지 (기존 HTML 방식과 동일한 조건)
+                stripped_line = line.strip()
+                is_table_line = (
+                    stripped_line.startswith('|') and 
+                    stripped_line.endswith('|') and 
+                    stripped_line.count('|') >= 3  # 기존과 동일하게 3개 이상
+                )
+                
+                if is_table_line:
                     if not in_table:
                         in_table = True
                     table_lines.append(line)
@@ -428,50 +445,100 @@ class BlogAutomationStep3UI(QWidget):
                 
                 # 표가 진행 중이었는데 표가 아닌 라인을 만나면 표 처리
                 if in_table:
-                    html_lines.append(self.convert_markdown_table_to_naver_format(table_lines))
+                    self.insert_table_html(table_lines, cursor)
                     table_lines = []
                     in_table = False
+                    # 🔥 중요: 현재 라인을 다시 처리하기 위해 continue하지 않음!
                 
-                # ## 대제목 - 24px
+                # ## 대제목 처리 (QTextCharFormat)
                 if line.strip().startswith('## '):
-                    title_text = line.strip()[3:].strip()  # ## 제거
-                    html_lines.append(f'<div data-naver-font="24" style="font-size: 24px; font-weight: 700; margin: 8px 0; color: {ModernStyle.COLORS["text_primary"]};">{title_text}</div>')
-                    i += 1
-                    continue
-                
-                # ### 소제목 - 19px
-                elif line.strip().startswith('### '):
-                    subtitle_text = line.strip()[4:].strip()  # ### 제거
-                    html_lines.append(f'<div data-naver-font="19" style="font-size: 19px; font-weight: 600; margin: 6px 0; color: {ModernStyle.COLORS["text_primary"]};">{subtitle_text}</div>')
-                    i += 1
-                    continue
-                
-                # 일반 라인에서 **강조** 처리 - 16px
-                else:
-                    # **텍스트** 패턴 찾기
-                    processed_line = re.sub(
-                        r'\*\*(.*?)\*\*',
-                        lambda m: f'<span data-naver-font="16" style="font-size: 16px; font-weight: 600; color: {ModernStyle.COLORS["text_primary"]};">{m.group(1)}</span>',
-                        line
-                    )
+                    title_text = line.strip()[3:].strip()
+                    format = QTextCharFormat()
+                    format.setFontPointSize(20)  # UI 표시용 20px (발행시 +4해서 24px)
+                    format.setFontWeight(QFont.DemiBold)  # font-weight: 600 (드롭다운과 통일)
+                    cursor.insertText(title_text, format)
                     
-                    # 일반 텍스트 - 15px
-                    html_lines.append(f'<div data-naver-font="15" style="font-size: 15px; font-weight: 400; line-height: 1.6; margin: 2px 0; color: {ModernStyle.COLORS["text_primary"]};">{processed_line}</div>')
+                # ### 소제목 처리 (QTextCharFormat)
+                elif line.strip().startswith('### '):
+                    subtitle_text = line.strip()[4:].strip()
+                    format = QTextCharFormat()
+                    format.setFontPointSize(15)  # UI 표시용 15px (발행시 +4해서 19px)
+                    format.setFontWeight(QFont.DemiBold)  # font-weight: 600
+                    cursor.insertText(subtitle_text, format)
+                
+                # 일반 라인에서 **강조** 처리 (QTextCharFormat)
+                else:
+                    # **텍스트** 패턴 찾기 및 처리
+                    parts = re.split(r'(\*\*.*?\*\*)', line)
+                    
+                    for part in parts:
+                        if part.startswith('**') and part.endswith('**'):
+                            # 강조 텍스트
+                            bold_text = part[2:-2]  # ** 제거
+                            format = QTextCharFormat()
+                            format.setFontPointSize(12)  # UI 표시용 12px (발행시 +4해서 16px)
+                            format.setFontWeight(QFont.DemiBold)  # font-weight: 600
+                            cursor.insertText(bold_text, format)
+                        else:
+                            # 일반 텍스트
+                            format = QTextCharFormat()
+                            format.setFontPointSize(11)  # UI 표시용 11px (발행시 +4해서 15px)
+                            format.setFontWeight(QFont.Normal)  # font-weight: 400
+                            cursor.insertText(part, format)
+                
+                # 줄바꿈 추가 (마지막 줄 제외)
+                if i < len(lines) - 1:
+                    cursor.insertText('\n')
                 
                 i += 1
             
-            # 마지막에 표가 남아있다면 처리
+            # 마지막에 표가 남아있다면 HTML로 처리
             if in_table and table_lines:
-                html_lines.append(self.convert_markdown_table_to_naver_format(table_lines))
+                self.insert_table_html(table_lines, cursor)
             
-            return '\n'.join(html_lines)
+            logger.info(f"하이브리드 방식으로 마크다운 폰트 적용 완료")
             
         except Exception as e:
-            logger.error(f"마크다운 폰트 적용 오류: {e}")
-            return content
+            logger.error(f"QTextCharFormat 마크다운 폰트 적용 오류: {e}")
+            # 오류 시 원본 텍스트만 삽입
+            self.content_editor.setPlainText(content)
+    
+    def insert_table_html(self, table_lines: list, cursor):
+        """마크다운 표를 HTML 형식으로 변환하여 삽입 (하이브리드 렌더링)"""
+        try:
+            if not table_lines:
+                return
+            
+            logger.debug(f"HTML 표 변환 시작. 표 라인 수: {len(table_lines)}")
+            
+            # 마크다운 표를 HTML로 변환
+            html_table = self.convert_markdown_table_to_html(table_lines)
+            
+            if html_table:
+                logger.debug(f"생성된 HTML 표: {html_table[:200]}...")
+                
+                # HTML 형식으로 표 삽입
+                cursor.insertHtml(html_table)
+                cursor.insertText('\n')  # 표 다음에 줄바꿈 추가
+                
+                logger.info(f"HTML 표 삽입 완료")
+            else:
+                logger.warning("HTML 표 변환 실패 - 일반 텍스트로 삽입")
+                # 변환 실패시 마크다운 원본 삽입
+                for line in table_lines:
+                    cursor.insertText(line + '\n')
+                    
+        except Exception as e:
+            logger.error(f"HTML 표 삽입 오류: {e}")
+            # 오류 시 마크다운 원본 삽입
+            try:
+                for line in table_lines:
+                    cursor.insertText(line + '\n')
+            except:
+                pass
 
-    def convert_markdown_table_to_naver_format(self, table_lines: list) -> str:
-        """마크다운 표를 네이버 블로그 자동화 형식으로 변환"""
+    def convert_markdown_table_to_html(self, table_lines: list) -> str:
+        """마크다운 표를 HTML 표로 변환 (기존 깃 방식과 동일한 가로줄 세로줄 포함)"""
         try:
             if not table_lines:
                 return ""
@@ -493,37 +560,34 @@ class BlogAutomationStep3UI(QWidget):
             rows = len(table_data)
             cols = len(table_data[0]) if table_data else 0
             
-            # 네이버 블로그 자동화를 위한 데이터 구조 생성
-            html_parts = []
-            html_parts.append(f'<div class="naver-auto-table" data-table-rows="{rows}" data-table-cols="{cols}">')
-            
-            # 시각적 표 표시 (Step 3 에디터용)
-            html_parts.append('<table style="border-collapse: collapse; width: 100%; margin: 10px 0; border: 1px solid #ddd;">')
+            # 기존 깃 방식과 동일한 스타일로 표 생성
+            html_parts = ['<table style="border-collapse: collapse; width: 100%; margin: 10px 0; border: 1px solid #ddd;">']
             
             for row_idx, row_data in enumerate(table_data):
-                # 헤더 행 스타일
+                # 헤더 행 스타일 (기존과 동일)
                 if row_idx == 0:
                     html_parts.append('<tr style="background-color: #f8f9fa;">')
                 else:
                     html_parts.append('<tr>')
                 
                 for col_idx, cell_data in enumerate(row_data):
-                    # 자동화 데이터 속성 추가
-                    cell_html = f'<td data-row="{row_idx}" data-col="{col_idx}" data-naver-font="15" style="border: 1px solid #ddd; padding: 12px; text-align: center;">{cell_data}</td>'
+                    # 기존 깃과 동일한 셀 스타일: 가로줄 세로줄 + 패딩 + 가운데 정렬
+                    cell_html = f'<td style="border: 1px solid #ddd; padding: 12px; text-align: center;">{cell_data}</td>'
                     html_parts.append(cell_html)
                 
                 html_parts.append('</tr>')
             
             html_parts.append('</table>')
-            html_parts.append('</div>')
             
-            logger.info(f"표 변환 완료: {rows}행 × {cols}열")
-            return ''.join(html_parts)
+            html_result = ''.join(html_parts)
+            logger.debug(f"HTML 표 변환 완료 (가로줄 세로줄 포함): {rows}행 × {cols}열")
+            return html_result
             
         except Exception as e:
-            logger.error(f"표 변환 오류: {e}")
-            # 실패 시 원본 마크다운 표 반환
-            return '\n'.join(table_lines)
+            logger.error(f"마크다운→HTML 표 변환 오류: {e}")
+            return ""
+    
+
 
     def split_for_mobile_korean(self, line: str) -> list:
         """한국어 텍스트를 모바일 최적화 길이(25~28자)로 분리"""
@@ -719,8 +783,8 @@ class BlogAutomationStep3UI(QWidget):
     def on_font_size_combo_changed(self, index: int):
         """드롭박스에서 폰트 크기 변경 시"""
         try:
-            # 네이버 폰트 크기 직접 사용 (표시용도 동일하게)
-            font_sizes = ['24', '19', '16', '15']  # 대제목, 소제목, 강조, 일반
+            # UI 표시용 폰트 크기 (발행시 +4해서 네이버 크기로)
+            font_sizes = ['20', '15', '12', '11']  # UI용: 20, 15, 12, 11 (발행시: 24, 19, 16, 15)
             
             self.current_font_size = font_sizes[index]
             
@@ -733,43 +797,73 @@ class BlogAutomationStep3UI(QWidget):
             logger.error(f"드롭박스 폰트 크기 변경 오류: {e}")
 
     def apply_font_to_selection(self):
-        """선택된 텍스트에 현재 폰트 크기 적용"""
+        """선택된 텍스트에 현재 폰트 크기 적용 - QTextCharFormat 방식"""
         try:
+            from PySide6.QtGui import QTextCharFormat, QFont
+            
             cursor = self.content_editor.textCursor()
             if not cursor.hasSelection():
                 TableUIDialogHelper.show_info_dialog(
                     self, "텍스트 선택 필요", "폰트를 적용할 텍스트를 먼저 선택해주세요.", "ℹ️"
                 )
                 return
-                
-            selected_text = cursor.selectedText()
             
-            # HTML 스타일로 감싸기 (마크다운과 동일한 형식 사용)
-            if self.current_font_size == '24':  # 대제목
-                formatted_text = f'<div data-naver-font="24" style="font-size: 24px; font-weight: 700; margin: 8px 0; color: {ModernStyle.COLORS["text_primary"]};">{selected_text}</div>'
-            elif self.current_font_size == '19':  # 소제목
-                formatted_text = f'<div data-naver-font="19" style="font-size: 19px; font-weight: 600; margin: 6px 0; color: {ModernStyle.COLORS["text_primary"]};">{selected_text}</div>'
-            elif self.current_font_size == '16':  # 강조
-                formatted_text = f'<span data-naver-font="16" style="font-size: 16px; font-weight: 600; color: {ModernStyle.COLORS["text_primary"]};">{selected_text}</span>'
-            else:  # 일반 (15px)
-                formatted_text = f'<div data-naver-font="15" style="font-size: 15px; font-weight: 400; line-height: 1.6; margin: 2px 0; color: {ModernStyle.COLORS["text_primary"]};">{selected_text}</div>'
+            # QTextCharFormat으로 폰트 설정
+            format = QTextCharFormat()
+            font_size = int(self.current_font_size)
+            format.setFontPointSize(font_size)
             
-            # setHtml() 방식으로 통일 (마크다운과 동일한 방식)
-            cursor.removeSelectedText()
-            cursor.insertText(f"__TEMP_REPLACE__{selected_text}__TEMP_REPLACE__")
+            # 폰트 굵기 설정 (UI 표시용 크기 기준)
+            if font_size == 20:  # UI 대제목 (발행시 24px)
+                format.setFontWeight(QFont.DemiBold)  # font-weight: 600 (자동 로딩과 통일)
+            elif font_size == 15:  # UI 소제목 (발행시 19px)
+                format.setFontWeight(QFont.DemiBold)  # font-weight: 600
+            elif font_size == 12:  # UI 강조 (발행시 16px)
+                format.setFontWeight(QFont.DemiBold)  # font-weight: 600
+            else:  # UI 일반 (11px, 발행시 15px)
+                format.setFontWeight(QFont.Normal)  # font-weight: 400
             
-            # 전체 HTML 내용 가져와서 임시 마커를 실제 HTML로 교체
-            full_html = self.content_editor.toHtml()
-            updated_html = full_html.replace(f"__TEMP_REPLACE__{selected_text}__TEMP_REPLACE__", formatted_text)
-            self.content_editor.setHtml(updated_html)
+            # 선택된 텍스트에 포맷 적용
+            cursor.mergeCharFormat(format)
             
-            logger.info(f"텍스트에 폰트 적용: {self.current_font_size}px")
+            logger.info(f"텍스트에 QTextCharFormat 폰트 적용: {self.current_font_size}px")
             
         except Exception as e:
             logger.error(f"텍스트 폰트 적용 오류: {e}")
 
+    def smart_update_font_from_cursor(self):
+        """스마트 폰트 크기 감지 - 텍스트 선택 중이 아닐 때만 드롭박스 업데이트"""
+        try:
+            cursor = self.content_editor.textCursor()
+            
+            # 텍스트가 선택되어 있으면 드롭박스 업데이트하지 않음 (드래그 방해 방지)
+            if cursor.hasSelection():
+                return
+                
+            char_format = cursor.charFormat()
+            
+            # 현재 위치의 폰트 크기 확인
+            current_size = int(char_format.fontPointSize()) if char_format.fontPointSize() > 0 else 11
+            
+            # UI 표시용 폰트 크기에 따라 드롭박스 선택 업데이트
+            if current_size >= 20:
+                self.font_size_combo.setCurrentIndex(0)  # UI 대제목 (20px)
+                self.current_font_size = '20'
+            elif current_size >= 15:
+                self.font_size_combo.setCurrentIndex(1)  # UI 소제목 (15px)
+                self.current_font_size = '15'
+            elif current_size >= 12:
+                self.font_size_combo.setCurrentIndex(2)  # UI 강조 (12px)
+                self.current_font_size = '12'
+            else:
+                self.font_size_combo.setCurrentIndex(3)  # UI 일반 (11px)
+                self.current_font_size = '11'
+                
+        except Exception as e:
+            logger.error(f"스마트 폰트 크기 감지 오류: {e}")
+
     def update_current_font_from_cursor(self):
-        """커서 위치의 폰트 크기를 감지하여 드롭박스 업데이트"""
+        """커서 위치의 폰트 크기를 감지하여 드롭박스 업데이트 (기존 메서드 유지)"""
         try:
             cursor = self.content_editor.textCursor()
             char_format = cursor.charFormat()
@@ -797,13 +891,25 @@ class BlogAutomationStep3UI(QWidget):
     def setup_editor_font_insertion(self):
         """에디터에서 새 텍스트 입력 시 현재 선택된 폰트로 입력되도록 설정"""
         try:
-            from PySide6.QtGui import QTextCharFormat
+            from PySide6.QtGui import QTextCharFormat, QFont
             
             cursor = self.content_editor.textCursor()
             char_format = QTextCharFormat()
             
             # 현재 선택된 폰트 크기 적용
-            char_format.setFontPointSize(int(self.current_font_size))
+            font_size = int(self.current_font_size)
+            char_format.setFontPointSize(font_size)
+            
+            # 폰트 두께도 함께 설정 (UI 표시용 크기 기준)
+            if font_size == 20:  # UI 대제목 (발행시 24px)
+                char_format.setFontWeight(QFont.DemiBold)  # font-weight: 600
+            elif font_size == 15:  # UI 소제목 (발행시 19px)
+                char_format.setFontWeight(QFont.DemiBold)  # font-weight: 600
+            elif font_size == 12:  # UI 강조 (발행시 16px)
+                char_format.setFontWeight(QFont.DemiBold)  # font-weight: 600
+            else:  # UI 일반 (11px, 발행시 15px)
+                char_format.setFontWeight(QFont.Normal)  # font-weight: 400
+            
             cursor.setCharFormat(char_format)
             
             # 커서를 에디터에 다시 설정
@@ -813,13 +919,12 @@ class BlogAutomationStep3UI(QWidget):
             logger.error(f"에디터 폰트 설정 오류: {e}")
 
     def restore_original_content(self):
-        """원본 내용으로 복원"""
+        """원본 내용으로 복원 - QTextCharFormat 방식"""
         try:
             original_content = self.step2_data.get('generated_content', '')
-            # 원본 내용도 마크다운 폰트 적용하여 복원
-            formatted_content = self.auto_format_for_mobile(original_content)
-            self.content_editor.setHtml(formatted_content)
-            logger.info("원본 내용으로 복원됨")
+            # 원본 내용을 QTextCharFormat 방식으로 복원
+            self.auto_format_for_mobile(original_content)  # 이미 QTextCharFormat 방식으로 에디터에 직접 적용됨
+            logger.info("원본 내용으로 복원됨 (QTextCharFormat 방식)")
             
             TableUIDialogHelper.show_info_dialog(
                 self, "복원 완료", "AI가 생성한 원본 내용으로 복원되었습니다.", "🔄"

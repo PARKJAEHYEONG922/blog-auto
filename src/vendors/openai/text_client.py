@@ -144,13 +144,26 @@ class OpenAITextClient:
 
         try:
             response = default_http_client.post(url, headers=headers, json=payload)
+            
+            # HTTP 상태 코드 체크 (사용자 친화적 오류 메시지)
+            if response.status_code != 200:
+                from src.foundation.exceptions import ExceptionMapper
+                user_friendly_error = ExceptionMapper.get_user_friendly_message(
+                    response.status_code, 
+                    f"OpenAI API Error: {response.text}"
+                )
+                raise OpenAIError(user_friendly_error)
+            
             data = response.json()
 
             if 'error' in data:
                 error_msg = data['error'].get('message', 'Unknown error')
                 error_type = data['error'].get('type', 'unknown_error')
                 logger.error(f"OpenAI API 에러 [{error_type}]: {error_msg}")
-                raise OpenAIError(f"API 에러: {error_msg}")
+                
+                # OpenAI 특정 오류도 사용자 친화적으로 변환
+                user_friendly_error = f"🤖 OpenAI 오류\n{error_msg}\n잠시 후 다시 시도해주세요."
+                raise OpenAIError(user_friendly_error)
 
             if 'choices' in data and len(data['choices']) > 0:
                 choice = data['choices'][0]
@@ -178,14 +191,17 @@ class OpenAITextClient:
 
                 return generated_text
             else:
-                raise OpenAIError("API 응답에 생성된 텍스트가 없습니다")
+                raise OpenAIError("🤖 OpenAI가 텍스트를 생성하지 못했습니다.\n잠시 후 다시 시도해주세요.")
 
         except json.JSONDecodeError as e:
             logger.error(f"OpenAI API 응답 파싱 실패: {e}")
-            raise OpenAIError(f"API 응답 파싱 실패: {e}")
+            raise OpenAIError(f"🤖 OpenAI 응답 처리 중 오류가 발생했습니다.\n잠시 후 다시 시도해주세요.\n기술적 세부사항: {e}")
+        except OpenAIError:
+            # 이미 사용자 친화적 메시지인 경우 그대로 전파
+            raise
         except Exception as e:
             logger.error(f"OpenAI 텍스트 생성 API 호출 실패: {e}")
-            raise OpenAIError(f"API 호출 실패: {e}")
+            raise OpenAIError(f"🤖 OpenAI 연결 중 문제가 발생했습니다.\n네트워크를 확인하고 잠시 후 다시 시도해주세요.\n기술적 세부사항: {e}")
 
 
 # 전역 클라이언트 인스턴스

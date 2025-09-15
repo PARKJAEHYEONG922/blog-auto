@@ -127,23 +127,39 @@ class GeminiTextClient:
         
         try:
             response = default_http_client.post(url, headers=headers, json=data)
+            
+            # HTTP 상태 코드 체크 (사용자 친화적 오류 메시지)
+            if response.status_code != 200:
+                from src.foundation.exceptions import ExceptionMapper
+                user_friendly_error = ExceptionMapper.get_user_friendly_message(
+                    response.status_code, 
+                    f"Google Gemini API Error: {response.text}"
+                )
+                raise BusinessError(user_friendly_error)
+            
             result = response.json()
             
             if 'error' in result:
-                raise BusinessError(f"Gemini API 에러: {result['error'].get('message', 'Unknown error')}")
+                error_message = result['error'].get('message', 'Unknown error')
+                # Gemini 특정 오류도 사용자 친화적으로 변환
+                user_friendly_error = f"🤖 Google Gemini 오류\n{error_message}\n잠시 후 다시 시도해주세요."
+                raise BusinessError(user_friendly_error)
             
             if 'candidates' in result and len(result['candidates']) > 0:
                 content = result['candidates'][0]['content']['parts'][0]['text']
                 logger.info(f"Gemini 텍스트 생성 완료: {len(content)}자")
                 return content
             else:
-                raise BusinessError("Gemini API 응답이 예상과 다릅니다")
+                raise BusinessError("🤖 Google Gemini가 텍스트를 생성하지 못했습니다.\n잠시 후 다시 시도해주세요.")
             
         except json.JSONDecodeError as e:
-            raise BusinessError(f"API 응답 파싱 실패: {e}")
+            raise BusinessError(f"🤖 Google Gemini 응답 처리 중 오류가 발생했습니다.\n잠시 후 다시 시도해주세요.\n기술적 세부사항: {e}")
+        except BusinessError:
+            # 이미 사용자 친화적 메시지인 경우 그대로 전파
+            raise
         except Exception as e:
             logger.error(f"Gemini 텍스트 생성 API 호출 실패: {e}")
-            raise BusinessError(f"API 호출 실패: {e}")
+            raise BusinessError(f"🤖 Google Gemini 연결 중 문제가 발생했습니다.\n네트워크를 확인하고 잠시 후 다시 시도해주세요.\n기술적 세부사항: {e}")
 
 
 # 전역 클라이언트 인스턴스

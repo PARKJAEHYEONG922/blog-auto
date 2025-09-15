@@ -284,23 +284,71 @@ class ExceptionMapper:
     
     @staticmethod
     def map_http_exception(status_code: int, message: str, details: str = "") -> APIError:
-        """HTTP 상태 코드를 적절한 API 예외로 매핑"""
+        """HTTP 상태 코드를 적절한 API 예외로 매핑 (사용자 친화적 메시지)"""
         context = {'status_code': status_code, 'details': details}
         
+        # 사용자 친화적 메시지 생성
+        user_message = ExceptionMapper.get_user_friendly_message(status_code, message)
+        
         if status_code == 400:
-            return APIError(message, error_code="HTTP_400", context=context)
+            return APIError(user_message, error_code="HTTP_400", context=context)
         elif status_code == 401:
-            return APIAuthenticationError(message, error_code="HTTP_401", context=context)
+            return APIAuthenticationError(user_message, error_code="HTTP_401", context=context)
         elif status_code == 403:
-            return APIAuthenticationError(message, error_code="HTTP_403", context=context)
+            return APIAuthenticationError(user_message, error_code="HTTP_403", context=context)
         elif status_code == 404:
-            return APIResponseError(message, error_code="HTTP_404", context=context)
+            return APIResponseError(user_message, error_code="HTTP_404", context=context)
         elif status_code == 429:
-            return APIRateLimitError(message, error_code="HTTP_429", context=context)
+            return APIRateLimitError(user_message, error_code="HTTP_429", context=context)
         elif status_code >= 500:
-            return APIResponseError(message, error_code=f"HTTP_{status_code}", context=context)
+            return APIResponseError(user_message, error_code=f"HTTP_{status_code}", context=context)
         else:
-            return APIError(message, error_code=f"HTTP_{status_code}", context=context)
+            return APIError(user_message, error_code=f"HTTP_{status_code}", context=context)
+    
+    @staticmethod
+    def get_user_friendly_message(status_code: int, original_message: str) -> str:
+        """HTTP 상태 코드별 사용자 친화적 메시지 생성"""
+        # AI 서비스 종류 감지
+        ai_service = ExceptionMapper.detect_ai_service(original_message)
+        
+        status_messages = {
+            400: f"❌ 요청 오류 (400)\n{ai_service}에 잘못된 요청을 보냈습니다.\n잠시 후 다시 시도해주세요.",
+            
+            401: f"🔐 인증 오류 (401)\n{ai_service} API 키가 잘못되었거나 만료되었습니다.\nAPI 키를 확인해주세요.",
+            
+            402: f"💳 결제 필요 (402)\n{ai_service} 크레딧이 부족하거나 결제 정보가 필요합니다.\n계정에 크레딧을 충전하거나 결제 정보를 등록해주세요.",
+            
+            403: f"🚫 권한 오류 (403)\n{ai_service} API 사용 권한이 없거나 계정이 제한되었습니다.\n결제 상태나 계정 설정을 확인해주세요.",
+            
+            404: f"🔍 찾을 수 없음 (404)\n{ai_service} 서비스에 연결할 수 없습니다.\n잠시 후 다시 시도해주세요.",
+            
+            429: f"⏰ 사용량 한도 초과 (429)\n{ai_service} API 요청 한도를 초과했습니다.\n크레딧을 확인하거나 1시간 후 다시 시도해주세요.",
+            
+            500: f"🔧 서버 오류 (500)\n{ai_service} 서버에 문제가 발생했습니다.\n잠시 후 다시 시도해주세요.",
+            
+            502: f"🌐 게이트웨이 오류 (502)\n{ai_service} 서버 연결에 문제가 있습니다.\n잠시 후 다시 시도해주세요.",
+            
+            503: f"⚠️ 서비스 중단 (503)\n{ai_service} 서비스가 일시적으로 중단되었습니다.\n몇 분 후 다시 시도해주세요.",
+            
+            529: f"🔄 서버 과부하 (529)\n{ai_service} 서버가 과부하 상태입니다.\n1-2분 후 다시 시도해주세요."
+        }
+        
+        return status_messages.get(status_code, 
+            f"❌ 알 수 없는 오류 ({status_code})\n{ai_service}에서 오류가 발생했습니다.\n잠시 후 다시 시도해주세요.")
+    
+    @staticmethod
+    def detect_ai_service(message: str) -> str:
+        """오류 메시지에서 AI 서비스 종류 감지"""
+        message_lower = message.lower()
+        
+        if any(keyword in message_lower for keyword in ['claude', 'anthropic']):
+            return "Claude AI"
+        elif any(keyword in message_lower for keyword in ['openai', 'gpt', 'chatgpt']):
+            return "OpenAI"
+        elif any(keyword in message_lower for keyword in ['gemini', 'google', 'bard']):
+            return "Google Gemini"
+        else:
+            return "AI 서비스"
     
     @staticmethod
     def map_requests_exception(exc: Exception) -> BaseApplicationError:

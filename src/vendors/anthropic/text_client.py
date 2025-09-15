@@ -117,23 +117,40 @@ class ClaudeTextClient:
         
         try:
             response = default_http_client.post(url, headers=headers, json=payload)
+            
+            # HTTP 상태 코드 체크 (사용자 친화적 오류 메시지)
+            if response.status_code != 200:
+                from src.foundation.exceptions import ExceptionMapper
+                user_friendly_error = ExceptionMapper.get_user_friendly_message(
+                    response.status_code, 
+                    f"Claude API Error: {response.text}"
+                )
+                raise ClaudeAPIError(user_friendly_error)
+            
             data = response.json()
             
             if 'error' in data:
-                raise ClaudeAPIError(f"API 에러: {data['error'].get('message', 'Unknown error')}")
+                error_message = data['error'].get('message', 'Unknown error')
+                # Claude 특정 오류도 사용자 친화적으로 변환
+                user_friendly_error = f"🤖 Claude AI 오류\n{error_message}\n잠시 후 다시 시도해주세요."
+                raise ClaudeAPIError(user_friendly_error)
             
             if 'content' in data and len(data['content']) > 0:
                 generated_text = data['content'][0]['text']
                 logger.info(f"Claude 텍스트 생성 완료: {len(generated_text)}자")
                 return generated_text
             else:
-                raise ClaudeAPIError("API 응답에 생성된 텍스트가 없습니다")
+                raise ClaudeAPIError("🤖 Claude AI가 텍스트를 생성하지 못했습니다.\n잠시 후 다시 시도해주세요.")
             
         except json.JSONDecodeError as e:
-            raise ClaudeAPIError(f"API 응답 파싱 실패: {e}")
+            raise ClaudeAPIError(f"🤖 Claude AI 응답 처리 중 오류가 발생했습니다.\n잠시 후 다시 시도해주세요.\n기술적 세부사항: {e}")
+        except ClaudeAPIError:
+            # 이미 사용자 친화적 메시지인 경우 그대로 전파
+            raise
         except Exception as e:
             logger.error(f"Claude 텍스트 생성 API 호출 실패: {e}")
-            raise ClaudeAPIError(f"API 호출 실패: {e}")
+            # 일반 오류도 사용자 친화적으로 변환
+            raise ClaudeAPIError(f"🤖 Claude AI 연결 중 문제가 발생했습니다.\n네트워크를 확인하고 잠시 후 다시 시도해주세요.\n기술적 세부사항: {e}")
 
 
 # 전역 클라이언트 인스턴스
