@@ -209,14 +209,14 @@ class HTTPClient:
     def __init__(self, 
                  timeout: float = 60.0,
                  max_retries: int = 3,
-                 backoff_factor: float = 1.0):
+                 backoff_factor: float = 10.0):
         """
         HTTP 클라이언트 초기화
         
         Args:
             timeout: 요청 타임아웃 (초)
-            max_retries: 최대 재시도 횟수
-            backoff_factor: 재시도 간격 계수
+            max_retries: 최대 재시도 횟수 (기본 3회)
+            backoff_factor: 재시도 간격 계수 (기본 10초 - 2회차: 10초, 3회차: 20초)
         """
         self.timeout = timeout
         self.max_retries = max_retries
@@ -225,12 +225,12 @@ class HTTPClient:
         # 세션 설정
         self.session = requests.Session()
         
-        # 재시도 전략 설정
+        # 재시도 전략 설정 (백오프 시간 증가: 1회차 즉시, 2-3회차 10초 간격)
         retry_strategy = Retry(
             total=max_retries,
             read=max_retries,
             connect=max_retries,
-            backoff_factor=backoff_factor,
+            backoff_factor=10.0,  # 10초 백오프 (2회차: 10초, 3회차: 20초)
             status_forcelist=[429, 500, 502, 503, 504],  # 재시도할 HTTP 상태 코드
             allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],  # 재시도할 HTTP 메서드
             raise_on_redirect=False,  # 리다이렉트 시 예외 발생 안함

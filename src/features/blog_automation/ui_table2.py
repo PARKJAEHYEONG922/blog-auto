@@ -72,6 +72,10 @@ class BlogAutomationStep2UI(QWidget):
         self.ai_writer_thread = None
         self.generated_content = ""
         self.is_ai_working = False  # AI 작업 중인지 상태 추가
+        
+        # 스마트 재시작을 위한 변수들
+        self.writing_prompt = ""  # 글쓰기 프롬프트 저장
+        self.last_search_keyword = ""  # 마지막 사용된 검색어 추적
 
         self.setup_ui()
 
@@ -836,11 +840,39 @@ class BlogAutomationStep2UI(QWidget):
                 self.stop_ai_writing()
                 return
                 
-            logger.info("🚀 통합 AI 글쓰기 시작")
+            # 현재 검색어 가져오기
+            current_search_keyword = self.search_query_input.text().strip()
+            selected_title = self.step1_data.get('selected_title', '')
+            
+            # 검색어가 비어있으면 기본값 사용
+            if not current_search_keyword:
+                current_search_keyword = self.step1_data.get('search_query', selected_title)
+            
+            # 검색어 변경 감지
+            search_keyword_changed = current_search_keyword != self.last_search_keyword
+            
+            if search_keyword_changed:
+                # 검색어가 변경되면 기존 데이터 초기화
+                self.writing_prompt = ""
+                self.analyzed_blogs = []
+                self.last_search_keyword = current_search_keyword
+                logger.info(f"🔄 검색어 변경 감지: 기존 데이터 초기화하고 처음부터 시작")
+                start_mode = "full_pipeline"
+            elif self.writing_prompt:
+                # 같은 검색어 + 기존 프롬프트 있음 → 글쓰기만 재시도
+                logger.info("♻️ 기존 글쓰기 프롬프트로 최종 AI 글쓰기만 재시도")
+                start_mode = "writing_only"
+            else:
+                # 같은 검색어 + 처음 시작
+                logger.info("🚀 처음부터 전체 파이프라인 시작")
+                start_mode = "full_pipeline"
 
             # 메인 UI 상태창 업데이트
             if hasattr(self.parent, 'update_status'):
-                self.parent.update_status("AI 글쓰기 준비 중...", "progress")
+                if start_mode == "writing_only":
+                    self.parent.update_status("기존 프롬프트로 AI 글쓰기 재시도 중...", "progress")
+                else:
+                    self.parent.update_status("AI 글쓰기 준비 중...", "progress")
 
             # AI 작업 시작 상태로 변경
             self.is_ai_working = True
@@ -849,71 +881,11 @@ class BlogAutomationStep2UI(QWidget):
             self.start_ai_writing_btn.setText("🛑 정지")
             self.start_ai_writing_btn.setEnabled(True)  # 정지 버튼은 활성 상태 유지
 
-            # 분석 시작 (사용자가 수정한 검색어 사용)
-            selected_title = self.step1_data.get('selected_title', '')
-            # 사용자가 수정한 검색어를 search_keyword로 사용
-            search_keyword = self.search_query_input.text().strip()
-
-            if not search_keyword:
-                # 입력이 비어있으면 기본 검색어 사용
-                search_keyword = self.step1_data.get('search_query', selected_title)
-
-            if not search_keyword:
-                raise Exception("검색할 키워드가 없습니다.")
-
-            # 로그용으로만 원래 검색어 저장
-            original_query = self.step1_data.get('search_query', selected_title)
-
-            # 검색어 정보 로그
-            if search_keyword != original_query:
-                logger.info(f"🎯 제목: {selected_title}")
-                logger.info(f"🔍 AI 추천 검색어: {original_query}")
-                logger.info(f"✏️  사용자 수정 검색어: {search_keyword}")
+            # 시작 모드에 따라 분기
+            if start_mode == "writing_only":
+                self.start_final_writing_only()
             else:
-                logger.info(f"🎯 제목: {selected_title}")
-                logger.info(f"🔍 검색어: {search_keyword}")
-
-            logger.info(f"🚀 통합 AI 글쓰기 - 워커에게 전달할 키워드: {search_keyword}")
-
-            # AI 기반 워커 생성 및 시작 (추가 파라미터 수집)
-            from .worker import create_ai_blog_analysis_worker, WorkerThread
-
-            # AI 설정 정보 수집
-            main_keyword = self.step1_data.get('main_keyword', selected_title)
-            sub_keywords = self.step1_data.get('sub_keywords', '')
-            ai_settings = self.step1_data.get('ai_settings', {})
-            content_type = ai_settings.get('content_type', '정보/가이드형')
-
-            logger.info(f"🤖 AI 워커 파라미터: search={search_keyword}, target={selected_title}, main={main_keyword}, sub={sub_keywords}, type={content_type}")
-
-            # 기존 로그인 세션 확인 (있으면 재사용, 없으면 새로 생성)
-            try:
-                if self.parent.service.check_login_status():
-                    logger.info("✅ 기존 로그인된 브라우저 세션을 AI 글쓰기에서 재사용합니다")
-                else:
-                    logger.info("ℹ️ 로그인된 세션이 없어 새로운 브라우저를 시작합니다")
-            except Exception as e:
-                logger.debug(f"로그인 상태 확인 중 오류: {e}")
-
-            self.analysis_worker = create_ai_blog_analysis_worker(
-                self.parent.service,
-                search_keyword,
-                selected_title,
-                main_keyword,
-                content_type,
-                sub_keywords
-            )
-            self.analysis_thread = WorkerThread(self.analysis_worker)
-
-            # 시그널 연결
-            self.analysis_worker.analysis_started.connect(self.on_analysis_started)
-            self.analysis_worker.analysis_progress.connect(self.on_analysis_progress)
-            self.analysis_worker.analysis_completed.connect(self.on_analysis_completed)
-            self.analysis_worker.error_occurred.connect(self.on_analysis_error)
-
-            # 워커 시작
-            self.analysis_thread.start()
-            logger.info("✅ 통합 AI 글쓰기 블로그 분석 워커 시작됨")
+                self.start_full_pipeline(current_search_keyword, selected_title)
 
         except Exception as e:
             logger.error(f"통합 AI 글쓰기 시작 오류: {e}")
@@ -1093,6 +1065,10 @@ class BlogAutomationStep2UI(QWidget):
 
             writing_prompt = ai_data.get('ai_prompt', '')
 
+            # 재시도를 위한 프롬프트 저장
+            self.writing_prompt = writing_prompt
+            logger.info(f"📝 글쓰기 프롬프트 저장 완료: {len(writing_prompt)}자")
+
             # 글쓰기 AI 프롬프트 탭 업데이트
             self.tab4_writing_prompt.setPlainText(writing_prompt)
 
@@ -1130,6 +1106,8 @@ class BlogAutomationStep2UI(QWidget):
                 self.ai_writer_worker.writing_progress.connect(self.on_analysis_progress)
                 self.ai_writer_worker.writing_completed.connect(self.on_writing_ai_completed)
                 self.ai_writer_worker.error_occurred.connect(self.on_writing_ai_error)
+                # 프롬프트 생성 시그널 연결 (재시도를 위한 저장)
+                self.ai_writer_worker.writing_prompt_generated.connect(self.on_writing_prompt_generated)
 
                 # 워커 시작
                 self.ai_writer_thread.start()
@@ -1209,3 +1187,143 @@ class BlogAutomationStep2UI(QWidget):
             )
         except Exception as e:
             logger.error(f"글쓰기 AI 오류 처리 중 오류: {e}")
+
+    def start_full_pipeline(self, search_keyword: str, selected_title: str):
+        """전체 파이프라인 시작 (크롤링부터 글쓰기까지)"""
+        try:
+            if not search_keyword:
+                raise Exception("검색할 키워드가 없습니다.")
+
+            # 로그용으로만 원래 검색어 저장
+            original_query = self.step1_data.get('search_query', selected_title)
+
+            # 검색어 정보 로그
+            if search_keyword != original_query:
+                logger.info(f"🎯 제목: {selected_title}")
+                logger.info(f"🔍 AI 추천 검색어: {original_query}")
+                logger.info(f"✏️  사용자 수정 검색어: {search_keyword}")
+            else:
+                logger.info(f"🎯 제목: {selected_title}")
+                logger.info(f"🔍 검색어: {search_keyword}")
+
+            logger.info(f"🚀 통합 AI 글쓰기 - 워커에게 전달할 키워드: {search_keyword}")
+
+            # 기존 로그인 세션 확인 (있으면 재사용, 없으면 새로 생성)
+            try:
+                if self.parent.service.check_login_status():
+                    logger.info("✅ 기존 로그인된 브라우저 세션을 AI 글쓰기에서 재사용합니다")
+                else:
+                    logger.info("ℹ️ 로그인된 세션이 없어 새로운 브라우저를 시작합니다")
+            except Exception as e:
+                logger.debug(f"로그인 상태 확인 중 오류: {e}")
+
+            # AI 기반 워커 생성 및 시작 (추가 파라미터 수집)
+            from .worker import create_ai_blog_analysis_worker, WorkerThread
+
+            # AI 설정 정보 수집
+            main_keyword = self.step1_data.get('main_keyword', selected_title)
+            sub_keywords = self.step1_data.get('sub_keywords', '')
+            ai_settings = self.step1_data.get('ai_settings', {})
+            content_type = ai_settings.get('content_type', '정보/가이드형')
+            
+            logger.info(f"🤖 AI 워커 파라미터: search={search_keyword}, target={selected_title}, main={main_keyword}, sub={sub_keywords}, type={content_type}")
+
+            # 1단계: AI 블로그 분석 워커 생성 및 시작
+            self.analysis_worker = create_ai_blog_analysis_worker(
+                self.parent.service,
+                search_keyword,
+                selected_title,
+                main_keyword,
+                content_type,
+                sub_keywords
+            )
+
+            # 워커 시그널 연결
+            self.analysis_worker.analysis_started.connect(self.on_analysis_started)
+            self.analysis_worker.analysis_completed.connect(self.on_analysis_completed)
+            self.analysis_worker.analysis_progress.connect(self.on_analysis_progress)  
+            self.analysis_worker.error_occurred.connect(self.on_analysis_error)
+
+            # 워커 스레드에서 실행
+            self.analysis_thread = WorkerThread(self.analysis_worker)
+            self.analysis_thread.start()
+            
+        except Exception as e:
+            logger.error(f"전체 파이프라인 시작 오류: {e}")
+            self.reset_integrated_ui()
+            TableUIDialogHelper.show_error_dialog(
+                self, "AI 글쓰기 오류", f"AI 글쓰기 시작 중 오류가 발생했습니다:\n{e}"
+            )
+
+    def start_final_writing_only(self):
+        """기존 프롬프트로 최종 글쓰기만 재시도"""
+        try:
+            if not self.writing_prompt:
+                logger.warning("저장된 글쓰기 프롬프트가 없습니다. 전체 파이프라인을 시작합니다.")
+                current_search_keyword = self.search_query_input.text().strip()
+                selected_title = self.step1_data.get('selected_title', '')
+                self.start_full_pipeline(current_search_keyword, selected_title)
+                return
+
+            logger.info("📝 기존 글쓰기 프롬프트로 최종 AI 글쓰기만 실행")
+
+            # AI 워커 생성을 위한 파라미터 수집
+            from .worker import create_ai_writing_worker, WorkerThread
+            
+            main_keyword = self.step1_data.get('main_keyword', '')
+            sub_keywords = self.step1_data.get('sub_keywords', '')
+            ai_settings = self.step1_data.get('ai_settings', {})
+            content_type = ai_settings.get('content_type', '정보/가이드형')
+            tone = ai_settings.get('tone', '정중한 존댓말체')
+            review_detail = ai_settings.get('review_detail', '')
+            selected_title = self.step1_data.get('selected_title', '')
+            search_keyword = self.last_search_keyword
+
+            # 구조화된 데이터 (기존 analyzed_blogs에서 추출)
+            structured_data = {}
+            if self.analyzed_blogs:
+                structured_data = {
+                    'analyzed_count': len(self.analyzed_blogs),
+                    'blogs': self.analyzed_blogs
+                }
+
+            # AI 글쓰기 워커 생성 (분석된 블로그 데이터 전달)
+            self.ai_writer_worker = create_ai_writing_worker(
+                self.parent.service,
+                main_keyword,
+                sub_keywords,
+                structured_data,
+                self.analyzed_blogs,  # 기존 분석 데이터 재사용
+                content_type,
+                tone,
+                review_detail,
+                search_keyword,
+                selected_title
+            )
+
+            # 시그널 연결
+            self.ai_writer_worker.writing_completed.connect(self.on_writing_ai_completed)
+            self.ai_writer_worker.writing_progress.connect(self.on_writing_ai_progress)
+            self.ai_writer_worker.error_occurred.connect(self.on_writing_ai_error)
+            # 프롬프트 생성 시그널 연결 (재시도를 위한 저장)
+            self.ai_writer_worker.writing_prompt_generated.connect(self.on_writing_prompt_generated)
+
+            # 워커 시작
+            self.ai_writer_thread = WorkerThread(self.ai_writer_worker)
+            self.ai_writer_thread.start()
+
+        except Exception as e:
+            logger.error(f"최종 글쓰기 재시도 오류: {e}")
+            self.reset_integrated_ui()
+            TableUIDialogHelper.show_error_dialog(
+                self, "AI 글쓰기 재시도 오류", f"AI 글쓰기 재시도 중 오류가 발생했습니다:\n{e}"
+            )
+
+    def on_writing_prompt_generated(self, prompt: str):
+        """글쓰기 프롬프트 생성 완료 처리 (재시도를 위한 저장)"""
+        try:
+            self.writing_prompt = prompt
+            logger.info(f"📝 글쓰기 프롬프트 저장 완료: {len(prompt)}자")
+            logger.debug(f"저장된 프롬프트 미리보기: {prompt[:200]}...")
+        except Exception as e:
+            logger.error(f"글쓰기 프롬프트 저장 오류: {e}")
