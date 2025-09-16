@@ -853,16 +853,15 @@ class BlogAutomationStep3UI(QWidget):
             clipboard = QApplication.clipboard()
             clipboard.setText(formatted_content)
             
-            logger.info(f"클립보드 복사 완료 ({len(formatted_content):,}자)")
+            # 편집기와 동일한 방식으로 글자수 계산 (원본 텍스트 기준)
+            char_count = len(plain_content.replace(' ', '').replace('\n', ''))
             
-            # 테이블 변환 여부 확인
-            table_converted = "테이블이 읽기 쉬운 형태로 변환됨" if "<table" in html_content else "일반 텍스트"
+            logger.info(f"클립보드 복사 완료 ({len(formatted_content):,}자)")
             
             TableUIDialogHelper.show_info_dialog(
                 self, "복사 완료", 
                 f"편집된 내용이 클립보드에 복사되었습니다.\n"
-                f"글자 수: {len(formatted_content.replace(' ', '').replace('\n', '')):,}자\n"
-                f"형식: {table_converted}", 
+                f"글자 수: {char_count:,}자", 
                 "📋"
             )
             
