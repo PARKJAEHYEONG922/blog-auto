@@ -274,11 +274,6 @@ class BlogAutomationStep3UI(QWidget):
         """)
         tools_layout.addWidget(self.font_size_combo)
         
-        # 적용 버튼 (선택한 텍스트에 폰트 적용)
-        self.apply_font_btn = ModernButton("🎨 선택 텍스트에 적용")
-        self.apply_font_btn.clicked.connect(self.apply_font_to_selection)
-        tools_layout.addWidget(self.apply_font_btn)
-        
         tools_layout.addStretch()
         layout.addLayout(tools_layout)
         
@@ -295,8 +290,8 @@ class BlogAutomationStep3UI(QWidget):
         from src.toolbox.text_utils import clean_ai_generated_content
         cleaned_content = clean_ai_generated_content(original_content)
         
-        # 모바일 최적화 적용
-        self.auto_format_for_mobile(cleaned_content)  # 에디터에 직접 적용됨
+        # 마크다운 처리와 줄바꿈을 한 번에 처리 (포맷팅 손실 없음)
+        self.apply_markdown_fonts_with_line_breaks(cleaned_content)
         self.content_editor.setMinimumHeight(tokens.spx(400))
         self.content_editor.setStyleSheet(f"""
             QTextEdit {{
@@ -356,64 +351,60 @@ class BlogAutomationStep3UI(QWidget):
         card.setLayout(layout)
         return card
 
-    def auto_format_for_mobile(self, content: str) -> str:
-        """원본 글을 모바일 최적화 형태로 자동 변환 + 마크다운 폰트 적용"""
-        try:
-            if not content:
-                return content
-            
-            # 기본 줄바꿈으로 분리
-            lines = content.split('\n')
-            formatted_lines = []
-            
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    formatted_lines.append('')  # 빈 줄 유지
-                    continue
-                    
-                # 한 줄이 너무 길면 모바일 최적화 길이로 분리 (28자 기준)
-                if len(line) > 30:  # 30자 이상이면 분리 검토
-                    # 구조화된 콘텐츠는 분리하지 않음 (해시태그, 표, 리스트 등)
-                    if self.is_structured_content(line):
-                        formatted_lines.append(line)
-                    else:
-                        sentences = self.simple_split_by_space(line, 25)
-                        formatted_lines.extend(sentences)
-                else:
-                    formatted_lines.append(line)
-            
-            # 연속된 빈 줄 제거 (최대 1개만 유지)
-            result_lines = []
-            prev_empty = False
-            
-            for line in formatted_lines:
-                if line.strip() == '':
-                    if not prev_empty:
-                        result_lines.append('')
-                        prev_empty = True
-                else:
-                    result_lines.append(line)
-                    prev_empty = False
-            
-            # 마크다운 폰트 적용 QTextCharFormat 방식
-            plain_content = '\n'.join(result_lines)
-            self.apply_markdown_fonts_qtformat(plain_content)
-            logger.info(f"모바일 최적화 + 마크다운 폰트 적용 완료: 원본 {len(content)}자")
-            return ""  # QTextCharFormat 방식은 에디터에 직접 적용됨
-            
-        except Exception as e:
-            logger.error(f"모바일 최적화 오류: {e}")
-            return content  # 오류 시 원본 반환
 
-    def apply_markdown_fonts_qtformat(self, content: str):
-        """하이브리드 렌더링: 표는 HTML, 텍스트는 QTextCharFormat 적용"""
+    def simple_split_by_space(self, text: str, max_length: int) -> list:
+        """공백 기준으로 텍스트를 분할 (최대 길이 제한)"""
+        if len(text) <= max_length:
+            return [text]
+        
+        words = text.split()
+        lines = []
+        current_line = ""
+        
+        for word in words:
+            test_line = current_line + (" " if current_line else "") + word
+            if len(test_line) <= max_length:
+                current_line = test_line
+            else:
+                if current_line:
+                    lines.append(current_line)
+                current_line = word
+        
+        if current_line:
+            lines.append(current_line)
+        
+        return lines if lines else [text]
+
+    def is_structured_content(self, text: str) -> bool:
+        """구조화된 콘텐츠인지 확인 (대제목, 소제목, 표, 이미지 등)"""
+        text = text.strip()
+        
+        # 대제목, 소제목
+        if text.startswith('##') or text.startswith('###'):
+            return True
+        
+        # 표 형태
+        if text.startswith('|') and text.endswith('|') and text.count('|') >= 3:
+            return True
+        
+        # 이미지 표시
+        if '(이미지)' in text or '[이미지]' in text:
+            return True
+        
+        # 체크리스트 형태
+        if text.startswith('✓') or text.startswith('- ') or text.startswith('* '):
+            return True
+        
+        return False
+
+    def apply_markdown_fonts_with_line_breaks(self, content: str):
+        """마크다운 처리와 줄바꿈을 동시에 처리 (포맷팅 손실 없음)"""
         try:
             import re
             from PySide6.QtGui import QTextCursor, QTextCharFormat, QFont
             from PySide6.QtCore import Qt
             
-            logger.info(f"🔄 하이브리드 마크다운 적용 시작 (표=HTML, 텍스트=QTextCharFormat). 내용 길이: {len(content)}자")
+            logger.info(f"🔄 통합 마크다운+줄바꿈 처리 시작. 내용 길이: {len(content)}자")
             
             # 에디터 초기화
             self.content_editor.clear()
@@ -421,7 +412,6 @@ class BlogAutomationStep3UI(QWidget):
             
             lines = content.split('\n')
             logger.info(f"📄 총 {len(lines)}줄 처리 예정")
-            
             
             # 표 처리를 위한 상태 변수
             in_table = False
@@ -443,12 +433,12 @@ class BlogAutomationStep3UI(QWidget):
                     i += 1
                     continue
                 
-                # 마크다운 표 감지 (기존 HTML 방식과 동일한 조건)
+                # 마크다운 표 감지
                 stripped_line = line.strip()
                 is_table_line = (
                     stripped_line.startswith('|') and 
                     stripped_line.endswith('|') and 
-                    stripped_line.count('|') >= 3  # 기존과 동일하게 3개 이상
+                    stripped_line.count('|') >= 3
                 )
                 
                 if is_table_line:
@@ -463,43 +453,38 @@ class BlogAutomationStep3UI(QWidget):
                     self.insert_table_html(table_lines, cursor)
                     table_lines = []
                     in_table = False
-                    # 🔥 중요: 현재 라인을 다시 처리하기 위해 continue하지 않음!
                 
-                # ## 대제목 처리 (QTextCharFormat)
+                # ## 대제목 처리 (줄바꿈 체크 없음 - 한 줄 유지)
                 if line.strip().startswith('## '):
                     title_text = line.strip()[3:].strip()
                     format = QTextCharFormat()
-                    format.setFontPointSize(20)  # UI 표시용 20px (발행시 +4해서 24px)
-                    format.setFontWeight(QFont.DemiBold)  # font-weight: 600 (드롭다운과 통일)
+                    format.setFontPointSize(20)
+                    format.setFontWeight(QFont.DemiBold)
                     cursor.insertText(title_text, format)
                     
-                # ### 소제목 처리 (QTextCharFormat)
+                # ### 소제목 처리 (줄바꿈 체크 없음 - 한 줄 유지)
                 elif line.strip().startswith('### '):
                     subtitle_text = line.strip()[4:].strip()
                     format = QTextCharFormat()
-                    format.setFontPointSize(15)  # UI 표시용 15px (발행시 +4해서 19px)
-                    format.setFontWeight(QFont.DemiBold)  # font-weight: 600
+                    format.setFontPointSize(15)
+                    format.setFontWeight(QFont.DemiBold)
                     cursor.insertText(subtitle_text, format)
                 
-                # 일반 라인에서 **강조** 처리 (QTextCharFormat)
+                # 일반 라인에서 **강조** 처리 + 줄바꿈 체크
                 else:
-                    # **텍스트** 패턴 찾기 및 처리
-                    parts = re.split(r'(\*\*.*?\*\*)', line)
-                    
-                    for part in parts:
-                        if part.startswith('**') and part.endswith('**'):
-                            # 강조 텍스트
-                            bold_text = part[2:-2]  # ** 제거
-                            format = QTextCharFormat()
-                            format.setFontPointSize(12)  # UI 표시용 12px (발행시 +4해서 16px)
-                            format.setFontWeight(QFont.DemiBold)  # font-weight: 600
-                            cursor.insertText(bold_text, format)
-                        else:
-                            # 일반 텍스트
-                            format = QTextCharFormat()
-                            format.setFontPointSize(11)  # UI 표시용 11px (발행시 +4해서 15px)
-                            format.setFontWeight(QFont.Normal)  # font-weight: 400
-                            cursor.insertText(part, format)
+                    # 긴 줄인지 체크
+                    if len(stripped) > 30 and not self.is_structured_content(stripped):
+                        # 긴 줄을 짧게 나누기
+                        split_lines = self.simple_split_by_space(stripped, 25)
+                        
+                        for split_idx, split_line in enumerate(split_lines):
+                            self.process_text_line_with_bold(cursor, split_line)
+                            # 마지막 분할 라인이 아니면 줄바꿈 추가
+                            if split_idx < len(split_lines) - 1:
+                                cursor.insertText('\n')
+                    else:
+                        # 짧은 줄은 그대로 처리
+                        self.process_text_line_with_bold(cursor, stripped)
                 
                 # 줄바꿈 추가 (마지막 줄 제외)
                 if i < len(lines) - 1:
@@ -511,13 +496,34 @@ class BlogAutomationStep3UI(QWidget):
             if in_table and table_lines:
                 self.insert_table_html(table_lines, cursor)
             
-            logger.info(f"하이브리드 방식으로 마크다운 폰트 적용 완료")
+            logger.info("✅ 통합 마크다운+줄바꿈 처리 완료")
             
         except Exception as e:
-            logger.error(f"QTextCharFormat 마크다운 폰트 적용 오류: {e}")
-            # 오류 시 원본 텍스트만 삽입
-            self.content_editor.setPlainText(content)
-    
+            logger.error(f"❌ 통합 마크다운+줄바꿈 처리 오류: {e}")
+
+    def process_text_line_with_bold(self, cursor, text_line):
+        """한 줄에서 **강조** 처리"""
+        import re
+        from PySide6.QtGui import QTextCharFormat, QFont
+        
+        # **텍스트** 패턴 찾기 및 처리
+        parts = re.split(r'(\*\*.*?\*\*)', text_line)
+        
+        for part in parts:
+            if part.startswith('**') and part.endswith('**'):
+                # 강조 텍스트
+                bold_text = part[2:-2]  # ** 제거
+                format = QTextCharFormat()
+                format.setFontPointSize(12)
+                format.setFontWeight(QFont.DemiBold)
+                cursor.insertText(bold_text, format)
+            else:
+                # 일반 텍스트
+                format = QTextCharFormat()
+                format.setFontPointSize(11)
+                format.setFontWeight(QFont.Normal)
+                cursor.insertText(part, format)
+
     def insert_table_html(self, table_lines: list, cursor):
         """마크다운 표를 HTML 형식으로 변환하여 삽입 (하이브리드 렌더링)"""
         try:
@@ -722,41 +728,6 @@ class BlogAutomationStep3UI(QWidget):
             
         except Exception as e:
             logger.error(f"드롭박스 폰트 크기 변경 오류: {e}")
-
-    def apply_font_to_selection(self):
-        """선택된 텍스트에 현재 폰트 크기 적용 - QTextCharFormat 방식"""
-        try:
-            from PySide6.QtGui import QTextCharFormat, QFont
-            
-            cursor = self.content_editor.textCursor()
-            if not cursor.hasSelection():
-                TableUIDialogHelper.show_info_dialog(
-                    self, "텍스트 선택 필요", "폰트를 적용할 텍스트를 먼저 선택해주세요.", "ℹ️"
-                )
-                return
-            
-            # QTextCharFormat으로 폰트 설정
-            format = QTextCharFormat()
-            font_size = int(self.current_font_size)
-            format.setFontPointSize(font_size)
-            
-            # 폰트 굵기 설정 (UI 표시용 크기 기준)
-            if font_size == 20:  # UI 대제목 (발행시 24px)
-                format.setFontWeight(QFont.DemiBold)  # font-weight: 600 (자동 로딩과 통일)
-            elif font_size == 15:  # UI 소제목 (발행시 19px)
-                format.setFontWeight(QFont.DemiBold)  # font-weight: 600
-            elif font_size == 12:  # UI 강조 (발행시 16px)
-                format.setFontWeight(QFont.DemiBold)  # font-weight: 600
-            else:  # UI 일반 (11px, 발행시 15px)
-                format.setFontWeight(QFont.Normal)  # font-weight: 400
-            
-            # 선택된 텍스트에 포맷 적용
-            cursor.mergeCharFormat(format)
-            
-            logger.info(f"텍스트에 QTextCharFormat 폰트 적용: {self.current_font_size}px")
-            
-        except Exception as e:
-            logger.error(f"텍스트 폰트 적용 오류: {e}")
 
     def smart_update_font_from_cursor(self):
         """스마트 폰트 크기 감지 - 텍스트 선택 중이 아닐 때만 드롭박스 업데이트"""

@@ -601,16 +601,28 @@ def clean_ai_generated_content(content: str) -> str:
         if cleaned_content.startswith('```') and cleaned_content.endswith('```'):
             cleaned_content = cleaned_content[3:-3].strip()
         
-        # 이미지 표시 앞뒤 텍스트와 분리
-        # 텍스트 [이미지] → 텍스트\n[이미지]
-        cleaned_content = re.sub(r'([^\n\r])\s*\[이미지\]', r'\1\n[이미지]', cleaned_content)
-        # 텍스트 (이미지) → 텍스트\n(이미지)
-        cleaned_content = re.sub(r'([^\n\r])\s*\(이미지\)', r'\1\n(이미지)', cleaned_content)
+        # 연속된 이미지들 정규화 (공백, 콤마 제거)
+        # (이미지) (이미지) → (이미지)(이미지)
+        cleaned_content = re.sub(r'\(이미지\)\s*[,\s]*\s*\(이미지\)', '(이미지)(이미지)', cleaned_content)
+        # [이미지] [이미지] → [이미지][이미지]  
+        cleaned_content = re.sub(r'\[이미지\]\s*[,\s]*\s*\[이미지\]', '[이미지][이미지]', cleaned_content)
         
-        # [이미지] 텍스트 → [이미지]\n텍스트  
-        cleaned_content = re.sub(r'\[이미지\]\s*([^\n\r])', r'[이미지]\n\1', cleaned_content)
-        # (이미지) 텍스트 → (이미지)\n텍스트
-        cleaned_content = re.sub(r'\(이미지\)\s*([^\n\r])', r'(이미지)\n\1', cleaned_content)
+        # 3개 이상 연속된 이미지들도 처리
+        # (이미지)(이미지) (이미지) → (이미지)(이미지)(이미지)
+        cleaned_content = re.sub(r'(\(이미지\)+)\s*[,\s]*\s*\(이미지\)', r'\1(이미지)', cleaned_content)
+        # [이미지][이미지] [이미지] → [이미지][이미지][이미지]
+        cleaned_content = re.sub(r'(\[이미지\]+)\s*[,\s]*\s*\[이미지\]', r'\1[이미지]', cleaned_content)
+        
+        # 이미지 그룹 앞뒤 텍스트와 분리
+        # 텍스트(이미지)(이미지) → 텍스트\n(이미지)(이미지)
+        cleaned_content = re.sub(r'([^\n\r])(\(이미지\)+)', r'\1\n\2', cleaned_content)
+        # 텍스트[이미지][이미지] → 텍스트\n[이미지][이미지]
+        cleaned_content = re.sub(r'([^\n\r])(\[이미지\]+)', r'\1\n\2', cleaned_content)
+        
+        # (이미지)(이미지)텍스트 → (이미지)(이미지)\n텍스트
+        cleaned_content = re.sub(r'(\(이미지\)+)([^\n\r])', r'\1\n\2', cleaned_content)
+        # [이미지][이미지]텍스트 → [이미지][이미지]\n텍스트  
+        cleaned_content = re.sub(r'(\[이미지\]+)([^\n\r])', r'\1\n\2', cleaned_content)
         
         # 불필요한 구조 설명 제거
         patterns_to_remove = [
