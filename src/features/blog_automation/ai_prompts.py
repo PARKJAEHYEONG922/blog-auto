@@ -518,9 +518,9 @@ class BlogAIPrompts:
         prompt += f"""
 
 
-# 🔥 출력 형식 🔥
+# 출력 형식
 
-🚨🚨🚨 중요: 제목은 절대 바꾸지 마세요! 🚨🚨🚨
+중요: 제목은 절대 바꾸지 마세요!
 다른 설명 없이 아래 형식으로만 출력하세요:
 
 ```
@@ -538,8 +538,8 @@ class BlogAIPrompts:
 
 [결론 - 요약 및 독자 행동 유도]
 
-{'[상위 블로그 인기 태그 참고: ' + ', '.join(['#' + tag.lstrip("#") for tag in summary.get("common_tags", [])]) + ']' if summary.get("common_tags") else ''}
-[메인키워드와 보조키워드를 활용하여 글 내용에 적합한 태그 5개 이상을 # 형태로 작성]
+{f"[상위 블로그 인기 태그 참고: {', '.join(['#' + tag.lstrip('#') for tag in summary.get('common_tags', [])])}]" if summary.get("common_tags") else ""}
+[위 참고 태그와 작성한 글 내용을 토대로 적합한 태그 5개 이상을 # 형태로 작성]
 ```
 """
         return prompt.strip()

@@ -140,8 +140,13 @@ class BlogAutomationStep3UI(QWidget):
         generated_content = self.step2_data.get('generated_content', '')
         content_length = len(generated_content.replace(' ', '')) if generated_content else 0
         
-        # 이미지 태그 개수 계산
-        image_count = generated_content.count('(이미지)') if generated_content else 0
+        # 이미지 태그 개수 계산 (괄호형과 대괄호형 모두 포함)
+        if generated_content:
+            paren_images = generated_content.count('(이미지)')
+            bracket_images = generated_content.count('[이미지]')
+            image_count = paren_images + bracket_images
+        else:
+            image_count = 0
 
         # 제목 정보
         title_info = QLabel(f"🎯 선택된 제목: {selected_title}")
@@ -285,7 +290,13 @@ class BlogAutomationStep3UI(QWidget):
         
         # 원본 내용을 모바일 최적화 형태로 자동 변환 (QTextCharFormat 방식)
         original_content = self.step2_data.get('generated_content', '')
-        self.auto_format_for_mobile(original_content)  # 에디터에 직접 적용됨
+        
+        # 3단계에서 AI 콘텐츠 정리 (구조 설명, 태그 정리 등)
+        from src.toolbox.text_utils import clean_ai_generated_content
+        cleaned_content = clean_ai_generated_content(original_content)
+        
+        # 모바일 최적화 적용
+        self.auto_format_for_mobile(cleaned_content)  # 에디터에 직접 적용됨
         self.content_editor.setMinimumHeight(tokens.spx(400))
         self.content_editor.setStyleSheet(f"""
             QTextEdit {{
@@ -361,10 +372,14 @@ class BlogAutomationStep3UI(QWidget):
                     formatted_lines.append('')  # 빈 줄 유지
                     continue
                     
-                # 한 줄이 너무 길면 모바일 최적화 길이로 분리 (25~28자 기준)
+                # 한 줄이 너무 길면 모바일 최적화 길이로 분리 (28자 기준)
                 if len(line) > 30:  # 30자 이상이면 분리 검토
-                    sentences = self.split_for_mobile_korean(line)
-                    formatted_lines.extend(sentences)
+                    # 구조화된 콘텐츠는 분리하지 않음 (해시태그, 표, 리스트 등)
+                    if self.is_structured_content(line):
+                        formatted_lines.append(line)
+                    else:
+                        sentences = self.simple_split_by_space(line, 25)
+                        formatted_lines.extend(sentences)
                 else:
                     formatted_lines.append(line)
             
@@ -586,131 +601,35 @@ class BlogAutomationStep3UI(QWidget):
         except Exception as e:
             logger.error(f"마크다운→HTML 표 변환 오류: {e}")
             return ""
-    
 
-
-    def split_for_mobile_korean(self, line: str) -> list:
-        """한국어 텍스트를 모바일 최적화 길이(25~28자)로 분리"""
-        try:
-            if len(line) <= 28:
-                return [line]
-            
-            # 구조화된 콘텐츠는 분리하지 않음
-            if self.is_structured_content(line):
-                return [line]
-                
-            result = []
-            current = line
-            
-            # 1순위: 문장 끝 기호로 분리 (. ! ? 등)
-            sentence_endings = ['. ', '! ', '? ', '.', '!', '?']
-            for ending in sentence_endings:
-                if ending in current:
-                    parts = current.split(ending)
-                    if len(parts) > 1:
-                        temp_result = []
-                        for i, part in enumerate(parts[:-1]):
-                            sentence = part.strip() + ending
-                            if len(sentence) <= 28:
-                                temp_result.append(sentence)
-                            else:
-                                # 문장이 너무 길면 재귀적으로 분리
-                                temp_result.extend(self.split_by_natural_breaks(sentence, 25))
-                        
-                        if parts[-1].strip():  # 마지막 부분
-                            last_part = parts[-1].strip()
-                            if len(last_part) <= 28:
-                                temp_result.append(last_part)
-                            else:
-                                temp_result.extend(self.split_by_natural_breaks(last_part, 25))
-                        
-                        if len(temp_result) > 1:
-                            return temp_result
-            
-            # 2순위: 자연스러운 구분점으로 분리
-            return self.split_by_natural_breaks(current, 25)
-            
-        except Exception as e:
-            logger.error(f"한국어 모바일 분리 오류: {e}")
-            return [line]
-
-    def split_by_natural_breaks(self, text: str, target_length: int) -> list:
-        """자연스러운 구분점을 찾아서 텍스트 분리"""
-        if len(text) <= target_length + 3:  # 여유분 3자
+    def simple_split_by_space(self, text: str, target_length: int) -> list:
+        """단순 길이 기반 텍스트 분리 (공백 우선)"""
+        if len(text) <= target_length + 3:
             return [text]
         
         result = []
         current = text
         
         while len(current) > target_length + 3:
-            # 자연스러운 분리점 찾기 (우선순위 순)
-            break_points = [
-                ', ',      # 쉼표
-                ' + ',     # 덧셈 (기존 사료 75% + 새 사료 25%)
-                ' - ',     # 뺄셈 (100g - 20g)
-                ' × ',     # 곱셈 (3 × 5)
-                ' ÷ ',     # 나눗셈 (10 ÷ 2)
-                ' = ',     # 등호 (A = B)
-                ' ≠ ',     # 부등호 (A ≠ B)
-                ' > ',     # 크다 (10 > 5)
-                ' < ',     # 작다 (5 < 10)
-                ' ≥ ',     # 크거나 같다 (A ≥ B)
-                ' ≤ ',     # 작거나 같다 (A ≤ B)
-                ' ± ',     # 플러스마이너스 (10 ± 2)
-                '% ',      # 퍼센트 뒤 (20% 이상)
-                '℃ ',     # 섭씨 (25℃ 이상)
-                '° ',      # 도 (90° 각도)
-                '는 ',     # 조사
-                '을 ', '를 ',  # 목적격 조사  
-                '이 ', '가 ',  # 주격 조사
-                '에 ', '에서 ', '으로 ', '로 ',  # 부사격 조사
-                '와 ', '과 ', '하고 ',  # 접속 조사
-                '입니다 ', '습니다 ', '합니다 ',  # 존댓말 어미
-                '있습니다 ', '없습니다 ',
-                '됩니다 ', '됐습니다 ',
-                '한다 ', '한다는 ', '하는 ',  # 관형사형
-                '하지만 ', '그러나 ', '또한 ', '그리고 ',  # 접속사
-                ' 때문에 ', ' 덕분에 ', ' 위해 ',
-                ' 등 ', ' 및 ', ' 또는 ',
-            ]
+            # 25±3자 범위에서 가장 적절한 공백 찾기
+            best_pos = target_length
             
-            found_break = False
+            # target_length-3 ~ target_length+5 범위에서 공백 찾기
+            for i in range(max(target_length - 3, 10), min(target_length + 6, len(current))):
+                if current[i] == ' ':
+                    best_pos = i
+                    break
             
-            # target_length 근처에서 적절한 분리점 찾기
-            for break_point in break_points:
-                # target_length-5 ~ target_length+8 범위에서 찾기
-                start_search = max(target_length - 5, 15)  # 최소 15자
-                end_search = min(target_length + 8, len(current))
-                
-                search_area = current[start_search:end_search]
-                if break_point in search_area:
-                    break_index = current.find(break_point, start_search)
-                    if break_index != -1:
-                        split_point = break_index + len(break_point)
-                        result.append(current[:split_point].strip())
-                        current = current[split_point:].strip()
-                        found_break = True
-                        break
-            
-            if not found_break:
-                # 자연스러운 분리점을 못 찾으면 공백 기준으로 분리
-                words = current[:target_length + 5].split(' ')
-                if len(words) > 1:
-                    # 마지막 단어를 제외하고 분리 (단어가 잘리지 않게)
-                    split_text = ' '.join(words[:-1])
-                    if split_text.strip():
-                        result.append(split_text.strip())
-                        remaining_words = words[-1:] + current[target_length + 5:].split(' ')
-                        current = ' '.join(remaining_words).strip()
-                    else:
-                        # 단어가 너무 길어서 분리가 안 되는 경우 강제 분리
-                        result.append(current[:target_length])
-                        current = current[target_length:].strip()
-                else:
-                    # 공백이 없는 긴 단어는 강제 분리
-                    result.append(current[:target_length])
-                    current = current[target_length:].strip()
+            # 공백을 찾았으면 그 위치에서 분리
+            if best_pos < len(current) and current[best_pos] == ' ':
+                result.append(current[:best_pos].strip())
+                current = current[best_pos:].strip()
+            else:
+                # 공백이 없으면 target_length에서 강제 분리
+                result.append(current[:target_length])
+                current = current[target_length:]
         
+        # 남은 텍스트 추가
         if current.strip():
             result.append(current.strip())
         
@@ -720,6 +639,14 @@ class BlogAutomationStep3UI(QWidget):
         """구조화된 콘텐츠인지 판별 (리스트, 단계별 설명 등)"""
         try:
             line_strip = line.strip()
+            
+            # 해시태그 줄 (# 기호가 여러 개 있는 경우 - 줄바꿈 제외)
+            if '#' in line_strip and len([part for part in line_strip.split() if part.startswith('#')]) >= 2:
+                return True
+            
+            # 마크다운 소제목 (## 또는 ###로 시작 - 줄바꿈 제외)
+            if line_strip.startswith('## ') or line_strip.startswith('### '):
+                return True
             
             # 체크리스트/불릿 포인트 패턴 (다양한 형태)
             bullet_patterns = [

@@ -590,3 +590,86 @@ def parse_json_response(response: str) -> Any:
         logger = get_logger("toolbox.text_utils")
         logger.error(f"JSON 파싱 실패: {e}\nResponse: {response}")
         raise ValueError(f"JSON 파싱 실패: {str(e)}")
+
+
+def clean_ai_generated_content(content: str) -> str:
+    """AI 생성 콘텐츠에서 불필요한 구조 설명과 코드 블록 제거"""
+    try:
+        cleaned_content = content.strip()
+        
+        # 코드 블록(```) 제거
+        if cleaned_content.startswith('```') and cleaned_content.endswith('```'):
+            cleaned_content = cleaned_content[3:-3].strip()
+        
+        # 이미지 표시 앞뒤 텍스트와 분리
+        # 텍스트 [이미지] → 텍스트\n[이미지]
+        cleaned_content = re.sub(r'([^\n\r])\s*\[이미지\]', r'\1\n[이미지]', cleaned_content)
+        # 텍스트 (이미지) → 텍스트\n(이미지)
+        cleaned_content = re.sub(r'([^\n\r])\s*\(이미지\)', r'\1\n(이미지)', cleaned_content)
+        
+        # [이미지] 텍스트 → [이미지]\n텍스트  
+        cleaned_content = re.sub(r'\[이미지\]\s*([^\n\r])', r'[이미지]\n\1', cleaned_content)
+        # (이미지) 텍스트 → (이미지)\n텍스트
+        cleaned_content = re.sub(r'\(이미지\)\s*([^\n\r])', r'(이미지)\n\1', cleaned_content)
+        
+        # 불필요한 구조 설명 제거
+        patterns_to_remove = [
+            r'\[서론 - 3초의 법칙으로 핵심 답변 즉시 제시\]',
+            r'\[본문은 다양한 형식으로 구성하세요\]',
+            r'\[결론 - 요약 및 독자 행동 유도\]',
+            r'\[메인키워드와 보조키워드를 활용하여 글 내용에 적합한 태그.*?\]',
+            r'\[상위 블로그 인기 태그 참고:.*?\]'  # 태그 설명 제거
+        ]
+        
+        for pattern in patterns_to_remove:
+            cleaned_content = re.sub(pattern, '', cleaned_content, flags=re.IGNORECASE | re.DOTALL)
+        
+        # 태그 정리 처리
+        cleaned_content = _clean_hashtags(cleaned_content)
+        
+        # 연속된 공백과 줄바꿈 정리
+        cleaned_content = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned_content)
+        cleaned_content = cleaned_content.strip()
+        
+        logger.debug(f"콘텐츠 정리 완료: {len(content)}자 -> {len(cleaned_content)}자")
+        return cleaned_content
+        
+    except Exception as e:
+        logger.warning(f"콘텐츠 정리 중 오류: {e}, 원본 반환")
+        return content
+
+
+def _clean_hashtags(content: str) -> str:
+    """해시태그 정리: 중복 제거하고 한 줄로 정리"""
+    try:
+        # 모든 해시태그 찾기
+        hashtags = re.findall(r'#\w+', content)
+        
+        if not hashtags:
+            return content
+        
+        # 중복 제거하되 순서 유지
+        seen = set()
+        unique_hashtags = []
+        for tag in hashtags:
+            if tag.lower() not in seen:
+                seen.add(tag.lower())
+                unique_hashtags.append(tag)
+        
+        # 원본에서 해시태그 부분 제거
+        content_without_tags = re.sub(r'#\w+', '', content)
+        
+        content_without_tags = content_without_tags.strip()
+        
+        # 정리된 태그들을 마지막에 한 줄로 추가
+        if unique_hashtags:
+            tags_line = ' '.join(unique_hashtags)
+            return f"{content_without_tags}\n\n{tags_line}"
+        
+        return content_without_tags
+        
+    except Exception as e:
+        logger.warning(f"해시태그 정리 중 오류: {e}")
+        return content
+
+
