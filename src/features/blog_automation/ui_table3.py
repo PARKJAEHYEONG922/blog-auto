@@ -928,7 +928,7 @@ class BlogAutomationStep3UI(QWidget):
             return plain_content
     
     def parse_html_table_to_text(self, table_html: str) -> str:
-        """개별 HTML 테이블을 읽기 쉬운 텍스트로 파싱"""
+        """개별 HTML 테이블을 마크다운 테이블 형태로 변환"""
         try:
             import re
             from html import unescape
@@ -941,7 +941,6 @@ class BlogAutomationStep3UI(QWidget):
                 return ""
             
             text_rows = []
-            max_widths = []  # 각 열의 최대 너비
             
             # 각 행의 셀 데이터 추출
             for row_html in rows:
@@ -953,47 +952,35 @@ class BlogAutomationStep3UI(QWidget):
                 for cell in cells:
                     clean_cell = re.sub(r'<[^>]+>', '', cell)
                     clean_cell = unescape(clean_cell).strip()
+                    # 마크다운 파이프 문자 이스케이프
+                    clean_cell = clean_cell.replace('|', '\\|')
                     clean_cells.append(clean_cell)
                 
                 text_rows.append(clean_cells)
-                
-                # 각 열의 최대 너비 계산
-                for i, cell in enumerate(clean_cells):
-                    if i >= len(max_widths):
-                        max_widths.append(0)
-                    max_widths[i] = max(max_widths[i], len(cell))
             
             if not text_rows:
                 return ""
             
-            # 테이블 텍스트 생성
+            # 마크다운 테이블 생성
             result_lines = []
             
-            # 테이블 시작 구분선
-            separator_line = "+" + "+".join("-" * (width + 2) for width in max_widths) + "+"
-            result_lines.append(separator_line)
-            
-            for row_idx, row in enumerate(text_rows):
-                # 셀 데이터 포맷팅 (가운데 정렬)
-                formatted_cells = []
-                for i, cell in enumerate(row):
-                    if i < len(max_widths):
-                        width = max_widths[i]
-                        formatted_cell = f" {cell.center(width)} "
-                    else:
-                        formatted_cell = f" {cell} "
-                    formatted_cells.append(formatted_cell)
+            # 첫 번째 행(헤더)
+            if text_rows:
+                header_row = "| " + " | ".join(text_rows[0]) + " |"
+                result_lines.append(header_row)
                 
-                # 행 생성
-                row_line = "|" + "|".join(formatted_cells) + "|"
-                result_lines.append(row_line)
+                # 구분선 (열 개수만큼 생성)
+                separator = "|" + "|".join("------" for _ in text_rows[0]) + "|"
+                result_lines.append(separator)
                 
-                # 헤더 행 다음에 구분선 추가
-                if row_idx == 0:
-                    result_lines.append(separator_line)
-            
-            # 테이블 끝 구분선
-            result_lines.append(separator_line)
+                # 나머지 행들(데이터)
+                for row in text_rows[1:]:
+                    # 헤더와 열 개수 맞추기
+                    while len(row) < len(text_rows[0]):
+                        row.append("")
+                    
+                    data_row = "| " + " | ".join(row[:len(text_rows[0])]) + " |"
+                    result_lines.append(data_row)
             
             return "\n".join(result_lines)
             
