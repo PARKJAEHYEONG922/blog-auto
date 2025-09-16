@@ -80,13 +80,13 @@ class BlogAutomationStep3UI(QWidget):
         summary_card = self.create_summary_card()
         main_layout.addWidget(summary_card)
 
-        # 글 내용 편집 카드
+        # 글 내용 편집 카드 (더 많은 공간 할당)
         content_editor_card = self.create_content_editor_card()
-        main_layout.addWidget(content_editor_card, 1)  # 가장 많은 공간 할당
+        main_layout.addWidget(content_editor_card, 2)  # stretch factor를 2로 증가
 
-        # 발행 준비 카드
+        # 발행 준비 카드 (최소 공간)
         publish_card = self.create_publish_card()
-        main_layout.addWidget(publish_card)
+        main_layout.addWidget(publish_card, 0)  # 고정 크기 유지
 
         # 네비게이션 버튼들
         nav_layout = QHBoxLayout()
@@ -200,11 +200,8 @@ class BlogAutomationStep3UI(QWidget):
         layout = QVBoxLayout()
         layout.setSpacing(tokens.GAP_8)
 
-        # 안내 메시지
-        info_label = QLabel(
-            "AI가 생성한 글을 확인하고 필요한 부분을 수정할 수 있습니다.\n"
-            "아래 텍스트 에디터에서 자유롭게 내용을 편집해주세요."
-        )
+        # 안내 메시지 (간결하게)
+        info_label = QLabel("AI 생성 글을 확인하고 자유롭게 편집하세요.")
         info_label.setStyleSheet(f"""
             QLabel {{
                 color: {ModernStyle.COLORS['text_secondary']};
@@ -274,7 +271,21 @@ class BlogAutomationStep3UI(QWidget):
         """)
         tools_layout.addWidget(self.font_size_combo)
         
+        # 글자 수 표시를 도구 영역 맨 오른쪽에 추가
+        self.char_count_label = QLabel()
+        self.char_count_label.setStyleSheet(f"""
+            QLabel {{
+                color: {ModernStyle.COLORS['text_muted']};
+                font-size: {tokens.get_font_size('small')}px;
+                text-align: right;
+                padding: {tokens.spx(4)}px {tokens.spx(8)}px;
+                margin-left: {tokens.spx(12)}px;
+            }}
+        """)
+        self.char_count_label.setAlignment(Qt.AlignRight)
+        
         tools_layout.addStretch()
+        tools_layout.addWidget(self.char_count_label)
         layout.addLayout(tools_layout)
         
         # 현재 폰트 크기 추적 (새 텍스트 입력용)
@@ -292,7 +303,7 @@ class BlogAutomationStep3UI(QWidget):
         
         # 마크다운 처리와 줄바꿈을 한 번에 처리 (포맷팅 손실 없음)
         self.apply_markdown_fonts_with_line_breaks(cleaned_content)
-        self.content_editor.setMinimumHeight(tokens.spx(400))
+        self.content_editor.setMinimumHeight(tokens.spx(300))  # 최소 높이 조정 (350→300px)
         self.content_editor.setStyleSheet(f"""
             QTextEdit {{
                 border: {tokens.spx(1)}px solid {ModernStyle.COLORS['border']};
@@ -309,20 +320,9 @@ class BlogAutomationStep3UI(QWidget):
             }}
         """)
         layout.addWidget(self.content_editor, 1)
-
-        # 글자 수 표시
-        self.char_count_label = QLabel()
+        
+        # 글자수 초기 업데이트
         self.update_char_count()
-        self.char_count_label.setStyleSheet(f"""
-            QLabel {{
-                color: {ModernStyle.COLORS['text_muted']};
-                font-size: {tokens.get_font_size('small')}px;
-                text-align: right;
-                padding: {tokens.spx(4)}px 0px;
-            }}
-        """)
-        self.char_count_label.setAlignment(Qt.AlignRight)
-        layout.addWidget(self.char_count_label)
 
         # 텍스트 변경 시 글자 수 업데이트
         self.content_editor.textChanged.connect(self.update_char_count)
@@ -341,10 +341,10 @@ class BlogAutomationStep3UI(QWidget):
 
         button_layout.addStretch()
 
-        # 내용 저장 버튼
-        self.save_content_btn = ModernPrimaryButton("💾 내용 저장")
-        self.save_content_btn.clicked.connect(self.save_edited_content)
-        button_layout.addWidget(self.save_content_btn)
+        # 클립보드 복사 버튼
+        self.copy_content_btn = ModernPrimaryButton("📋 클립보드 복사")
+        self.copy_content_btn.clicked.connect(self.copy_content_to_clipboard)
+        button_layout.addWidget(self.copy_content_btn)
 
         layout.addLayout(button_layout)
 
@@ -830,29 +830,33 @@ class BlogAutomationStep3UI(QWidget):
         except Exception as e:
             logger.error(f"원본 복원 오류: {e}")
 
-    def save_edited_content(self):
-        """편집된 내용 저장"""
+    def copy_content_to_clipboard(self):
+        """편집기 내용을 클립보드에 복사"""
         try:
-            edited_content = self.content_editor.toPlainText().strip()
-            if not edited_content:
+            from PySide6.QtWidgets import QApplication
+            
+            # 편집기 내용 가져오기
+            content = self.content_editor.toPlainText().strip()
+            if not content:
                 TableUIDialogHelper.show_error_dialog(
-                    self, "내용 없음", "저장할 내용이 없습니다."
+                    self, "내용 없음", "복사할 내용이 없습니다."
                 )
                 return
-
-            # step2_data에 편집된 내용 업데이트
-            self.step2_data['generated_content'] = edited_content
-            self.step2_data['content_edited'] = True
             
-            logger.info(f"편집된 내용 저장됨 ({len(edited_content):,}자)")
+            # 클립보드에 복사
+            clipboard = QApplication.clipboard()
+            clipboard.setText(content)
+            
+            logger.info(f"클립보드 복사 완료 ({len(content):,}자)")
             
             TableUIDialogHelper.show_info_dialog(
-                self, "저장 완료", f"편집된 내용이 저장되었습니다.\n글자 수: {len(edited_content.replace(' ', '')):,}자", "💾"
+                self, "복사 완료", f"편집된 내용이 클립보드에 복사되었습니다.\n글자 수: {len(content.replace(' ', '')):,}자", "📋"
             )
+            
         except Exception as e:
-            logger.error(f"내용 저장 오류: {e}")
+            logger.error(f"클립보드 복사 오류: {e}")
             TableUIDialogHelper.show_error_dialog(
-                self, "저장 오류", f"내용 저장 중 오류가 발생했습니다:\n{e}"
+                self, "복사 오류", f"클립보드 복사 중 오류가 발생했습니다:\n{e}"
             )
 
     def create_publish_card(self) -> ModernCard:
@@ -861,11 +865,8 @@ class BlogAutomationStep3UI(QWidget):
         layout = QVBoxLayout()
         layout.setSpacing(tokens.GAP_12)
 
-        # 발행 안내
-        info_label = QLabel(
-            "생성된 블로그 글을 네이버 블로그에 자동으로 발행합니다.\n"
-            "발행 전에 결과 탭에서 생성된 글을 한 번 더 확인해보세요."
-        )
+        # 발행 안내 (간결하게)
+        info_label = QLabel("완성된 글을 네이버 블로그에 자동 발행합니다.")
         info_label.setStyleSheet(f"""
             QLabel {{
                 color: {ModernStyle.COLORS['text_secondary']};
