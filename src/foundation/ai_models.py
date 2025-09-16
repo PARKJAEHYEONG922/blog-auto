@@ -116,38 +116,28 @@ class AIModelRegistry:
             is_test_model=True  # API 테스트용으로 사용 (가장 경제적)
         ),
 
-        # Google Gemini Models (2025 최신 - Gemini 2.5 시리즈)
-        "gemini-2-5-pro": AIModel(
-            id="gemini-2.5-pro-preview",
-            display_name="Gemini 2.5 Pro (유료, 최고성능)",
+        # Google Gemini Models (2025 최신)
+        "gemini-2-5-flash": AIModel(
+            id="gemini-2.5-flash",
+            display_name="Gemini 2.5 Flash (무료+유료, 최고성능)",
             provider=AIProvider.GOOGLE,
             model_type=AIModelType.MULTIMODAL,
-            description="최신 Gemini 2.5 Pro 모델 - 수학, 과학, 코딩에서 최고 성능. 사고 과정 지원",
+            description="최신 Gemini 2.5 Flash 모델 - 사고 과정 지원. 무료로 시작, 한도 초과시 유료",
             max_tokens=8192,
             context_window=1000000,
-            tier="enterprise",
+            tier="premium",
             is_default=True
         ),
-        "gemini-2-5-flash": AIModel(
-            id="gemini-2.5-flash-preview",
-            display_name="Gemini 2.5 Flash (유료, 균형)",
-            provider=AIProvider.GOOGLE,
-            model_type=AIModelType.MULTIMODAL,
-            description="최신 Gemini 2.5 Flash 모델 - 가성비와 성능의 균형. 사고 과정 지원",
-            max_tokens=8192,
-            context_window=1000000,
-            tier="premium"
-        ),
         "gemini-2-0-flash": AIModel(
-            id="gemini-2.0-flash-preview",
-            display_name="Gemini 2.0 Flash (부분무료, 고효율)",
+            id="gemini-2.0-flash",
+            display_name="Gemini 2.0 Flash (무료+유료, 경제적)",
             provider=AIProvider.GOOGLE,
             model_type=AIModelType.MULTIMODAL,
-            description="Gemini 2.0 Flash 모델 - 빠르고 효율적. 네이티브 도구 사용 지원. 무료 할당량 제공",
+            description="Gemini 2.0 Flash 모델 - 빠르고 경제적. 무료로 시작, 유료시에도 더 저렴",
             max_tokens=8192,
             context_window=1000000,
             tier="basic",
-            is_test_model=True  # API 테스트용으로 사용 (가장 효율적)
+            is_test_model=True  # API 테스트용으로 사용 (가장 경제적)
         ),
 
         # OpenAI Image Models (2025 최신)

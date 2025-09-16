@@ -53,14 +53,11 @@ class BlogAutomationService:
         try:
             logger.info(f"블로그 로그인 시작: {credentials.platform.value} - {credentials.username}")
             
-            # 어댑터 생성
-            self.adapter = create_blog_adapter(credentials.platform)
+            # 기존 어댑터 재사용 또는 새로 생성 (로그인용)
+            self.adapter = self.get_or_create_adapter(credentials.platform, for_login=True)
             
             # 세션 생성
             self.create_session(credentials.platform, credentials.username)
-            
-            # 브라우저 시작
-            self.adapter.start_browser()
             
             # 로그인 수행
             login_status = self.adapter.login_with_credentials(credentials)
@@ -117,6 +114,47 @@ class BlogAutomationService:
             logger.error(f"로그인 상태 확인 실패: {e}")
             return False
     
+    def get_or_create_adapter(self, platform: BlogPlatform = BlogPlatform.NAVER, for_login: bool = False) -> object:
+        """기존 어댑터를 재사용하거나 새로 생성
+        
+        Args:
+            platform: 블로그 플랫폼
+            for_login: 로그인용 브라우저인지 여부
+            
+        Returns:
+            어댑터 인스턴스
+        """
+        try:
+            # 기존 어댑터가 있고 로그인 상태가 유효한 경우 재사용
+            if self.adapter and self.check_login_status():
+                logger.info("기존 로그인된 브라우저 세션을 재사용합니다")
+                return self.adapter
+            
+            # 기존 어댑터가 있지만 로그인이 안된 경우
+            if self.adapter:
+                logger.info("기존 브라우저 세션이 있지만 로그인 상태가 아닙니다. 새로 시작합니다")
+                try:
+                    self.adapter.close_browser()
+                except:
+                    pass
+            
+            # 새 어댑터 생성
+            logger.info("새로운 브라우저 세션을 시작합니다")
+            self.adapter = create_blog_adapter(platform)
+            
+            if for_login:
+                # 로그인용: 직접 로그인 페이지로 시작
+                self.adapter.start_browser(for_login=True)
+            else:
+                # 분석용: 브라우저만 시작
+                self.adapter.start_browser_for_analysis()
+                
+            return self.adapter
+            
+        except Exception as e:
+            logger.error(f"어댑터 생성/재사용 실패: {e}")
+            raise BusinessError(f"브라우저 세션 생성 실패: {str(e)}")
+
     def force_stop_browser_session(self):
         """브라우저 세션 강제 중단"""
         try:
@@ -142,12 +180,8 @@ class BlogAutomationService:
             if not cleaned_keyword:
                 raise ValidationError("유효한 키워드를 입력해주세요")
 
-            # 어댑터 생성 (분석 전용)
-            if not self.adapter:
-                self.adapter = create_blog_adapter(BlogPlatform.NAVER)
-
-            # 분석 전용 브라우저 시작
-            self.adapter.start_browser_for_analysis()
+            # 기존 어댑터 재사용 또는 새로 생성 (분석용)
+            self.adapter = self.get_or_create_adapter(BlogPlatform.NAVER, for_login=False)
 
             # 1단계: 블로그 제목 30개 수집
             logger.info("🔍 1단계: 블로그 제목 30개 수집 중...")

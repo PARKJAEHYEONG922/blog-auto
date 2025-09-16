@@ -38,7 +38,7 @@ class NaverBlogAdapter:
 
         # 네이버 블로그 URL들
         self.main_url = "https://section.blog.naver.com/"
-        self.login_start_url = "https://section.blog.naver.com/"
+        self.login_start_url = "https://nid.naver.com/nidlogin.login"  # 직접 로그인 페이지로 시작
         self.blog_home_url = "https://section.blog.naver.com/BlogHome.naver?directoryNo=0&currentPage=1&groupId=0"
     
     @handle_web_automation_errors("브라우저 시작")
@@ -48,9 +48,9 @@ class NaverBlogAdapter:
         self.helper.initialize()
         
         if for_login:
-            # 로그인용: 블로그 홈으로 이동
+            # 로그인용: 직접 네이버 로그인 페이지로 이동
             self.helper.goto(self.login_start_url)
-            logger.info("네이버 블로그 로그인 페이지 로드 완료")
+            logger.info("네이버 로그인 페이지 직접 로드 완료")
         else:
             # 분석 전용: 초기 페이지 로딩 없이 브라우저만 시작
             logger.info("분석 전용 브라우저 시작 완료")
@@ -187,40 +187,16 @@ class NaverBlogAdapter:
         try:
             logger.info(f"네이버 블로그 로그인 시작: {credentials.username}")
             
-            # 로그인 페이지가 아니면 로그인 버튼 클릭
+            # 이미 로그인 페이지에 있는지 확인
             current_url = self.helper.current_url
-            logger.info(f"현재 URL: {current_url}")
-            
             if "nid.naver.com/nidlogin.login" not in current_url:
-                logger.info("로그인 페이지가 아님, 로그인 버튼 클릭 시도")
-                
-                # 여러 번 시도
-                login_clicked = False
-                for attempt in range(3):
-                    logger.info(f"로그인 버튼 클릭 시도 {attempt + 1}/3")
-                    
-                    if self.click_login_button():
-                        # 잠시 대기 후 URL 확인
-                        time.sleep(2)
-                        current_url = self.helper.current_url
-                        logger.info(f"클릭 후 URL: {current_url}")
-                        
-                        if "nid.naver.com/nidlogin.login" in current_url:
-                            logger.info("로그인 페이지로 성공적으로 이동")
-                            login_clicked = True
-                            break
-                        else:
-                            logger.warning(f"아직 로그인 페이지로 이동하지 않음. 재시도... (시도 {attempt + 1})")
-                    else:
-                        logger.warning(f"로그인 버튼 클릭 실패 (시도 {attempt + 1})")
-                    
-                    time.sleep(1)  # 재시도 전 대기
-                
-                if not login_clicked:
-                    logger.error("로그인 버튼 클릭 최종 실패")
-                    return LoginStatus.LOGIN_FAILED
+                # 브라우저 시작할 때 직접 로그인 페이지로 가므로 여기 올 일은 거의 없음
+                login_url = "https://nid.naver.com/nidlogin.login"
+                logger.info(f"네이버 로그인 페이지로 이동: {login_url}")
+                self.helper.goto(login_url)
+                time.sleep(2)
             else:
-                logger.info("이미 로그인 페이지에 있음")
+                logger.info("이미 네이버 로그인 페이지에 있음")
             
             # 로그인 폼 대기 (nidlogin 페이지) - WebDriverWait 사용
             logger.info("로그인 폼 로딩 대기 중...")
@@ -327,14 +303,14 @@ class NaverBlogAdapter:
             # 로그인 버튼 클릭 (nidlogin 페이지의 로그인 버튼) - WebDriverWait 사용
             logger.info("로그인 버튼 찾는 중...")
             
-            # 다양한 셀렉터로 로그인 버튼 찾기
+            # 사용자 제공 HTML 구조에 맞는 로그인 버튼 찾기
             login_btn_selectors = [
-                (By.ID, "log.login"),  # ID 선택자
-                (By.CSS_SELECTOR, "button[id='log.login']"),  # 속성 선택자
-                (By.CSS_SELECTOR, "button.btn_login"),  # 클래스 선택자
-                (By.CSS_SELECTOR, "button[type='submit'].btn_login"),  # 복합 선택자
-                (By.CSS_SELECTOR, "button[type='submit']"),  # 기본 submit 버튼
-                (By.CSS_SELECTOR, ".btn_login_wrap button"),  # 부모 클래스 기반
+                (By.ID, "log.login"),  # button#log.login
+                (By.CSS_SELECTOR, "button#log\\.login"),  # 점 이스케이프
+                (By.CSS_SELECTOR, "button[id='log.login']"),  # 속성 선택자 
+                (By.CSS_SELECTOR, ".btn_login_wrap button"),  # div.btn_login_wrap > button
+                (By.CSS_SELECTOR, "button.btn_login.off.next_step"),  # 전체 클래스
+                (By.CSS_SELECTOR, "button[type='submit']")  # submit 버튼
             ]
             
             login_btn = None
@@ -357,39 +333,30 @@ class NaverBlogAdapter:
                     logger.debug(f"셀렉터 {selector} 실패: {e}")
                     continue
             
-            # CSS 셀렉터로 못 찾으면 XPath도 시도
+            # CSS 셀렉터로 못 찾으면 JavaScript로 직접 클릭
             if not login_btn:
-                xpath_selectors = [
-                    "//button[@id='log.login']",
-                    "//button[contains(@class, 'btn_login')]",
-                    "//button[@type='submit']",
-                    "//div[@class='btn_login_wrap']//button"
-                ]
+                logger.info("CSS 셀렉터로 로그인 버튼을 찾지 못함. JavaScript로 직접 클릭 시도...")
+                click_result = self.helper.driver.execute_script("""
+                    var loginBtn = document.getElementById('log.login') || 
+                                  document.querySelector('button.btn_login') ||
+                                  document.querySelector('.btn_login_wrap button') ||
+                                  document.querySelector('button[type="submit"]');
+                    if (loginBtn) {
+                        loginBtn.click();
+                        return true;
+                    }
+                    return false;
+                """)
                 
-                for xpath in xpath_selectors:
-                    try:
-                        logger.debug(f"XPath로 로그인 버튼 찾기 시도: {xpath}")
-                        login_btn = wait.until(
-                            EC.element_to_be_clickable((By.XPATH, xpath))
-                        )
-                        if login_btn:
-                            used_selector = xpath
-                            logger.info(f"XPath로 로그인 버튼 발견: {xpath}")
-                            break
-                    except TimeoutException:
-                        logger.debug(f"XPath {xpath} 타임아웃")
-                        continue
-                    except Exception as e:
-                        logger.debug(f"XPath {xpath} 실패: {e}")
-                        continue
-            
-            if not login_btn:
-                raise BusinessError("네이버 로그인 버튼을 찾을 수 없습니다")
-            
-            # 로그인 버튼 클릭
-            logger.info(f"로그인 버튼 클릭 시도 (셀렉터: {used_selector})")
-            login_btn.click()
-            logger.info("로그인 버튼 클릭 완료")
+                if click_result:
+                    logger.info("JavaScript로 로그인 버튼 클릭 성공")
+                else:
+                    raise BusinessError("로그인 버튼을 찾을 수 없습니다")
+            else:
+                # 로그인 버튼 클릭
+                logger.info(f"로그인 버튼 클릭 시도 (셀렉터: {used_selector})")
+                login_btn.click()
+                logger.info("로그인 버튼 클릭 완료")
             
             # 로그인 결과 대기 및 확인
             return self._wait_for_login_result(credentials=credentials)
@@ -410,8 +377,9 @@ class NaverBlogAdapter:
                 current_url = self.helper.current_url
                 logger.info(f"🔍 현재 URL: {current_url}")
 
-                # 1. 기기 등록 페이지 → 등록안함 버튼 클릭 (먼저 체크!)
-                if "deviceConfirm" in current_url and not device_registration_attempted:
+                # 1. 기기 등록 페이지 확인 (사용자 제공 URL 기반)
+                # URL: https://nid.naver.com/login/ext/deviceConfirm?svctype=1&locale=ko_KR&url=https%3A%2F%2Fwww.naver.com&id=wogud925&key=...
+                if ("nid.naver.com/login/ext/deviceConfirm" in current_url or "deviceConfirm" in current_url) and not device_registration_attempted:
                     logger.info("🆔 새로운 기기 등록 페이지 감지!")
                     device_registration_attempted = True
 
@@ -423,15 +391,16 @@ class NaverBlogAdapter:
                         logger.info("등록안함 버튼이 나타날 때까지 대기 중...")
                         wait = WebDriverWait(self.helper.driver, 15)
 
-                        # 다양한 셀렉터로 등록안함 버튼 찾기 시도 (정확한 HTML 구조 기반)
+                        # 등록안함 버튼 찾기 (기존 방식 + JavaScript 직접 클릭)
                         selectors = [
+                            "//a[contains(text(), '등록안함')]",  # 텍스트 기반 (가장 확실)
+                            "//button[contains(text(), '등록안함')]",
                             "#new\\.dontsave",  # CSS 이스케이프 방식
                             "[id='new.dontsave']",  # 속성 방식
                             "a[id='new.dontsave']",  # 태그+속성 방식
                             ".btn_cancel a",  # 부모 클래스 > 자식
                             ".btn_cancel a.btn",  # 더 구체적
                             "//a[@id='new.dontsave']",  # XPath 방식
-                            "//a[contains(text(), '등록안함')]",
                             "//span[@class='btn_cancel']//a",
                             ".btn_cancel",
                             "#skipBtn",
@@ -572,19 +541,31 @@ class NaverBlogAdapter:
                         logger.error(f"❌ 기기 등록 버튼 클릭 실패: {e}")
                         logger.info("💡 수동으로 등록 또는 등록안함 버튼을 클릭해주세요...")
 
-                # 2. 로그인 성공 체크 - 최종 목적지 페이지 도달
-                elif current_url.startswith("https://section.blog.naver.com/BlogHome.naver"):
-                    logger.info("✅ 네이버 블로그 로그인 성공! 최종 페이지 도달")
+                # 2. 로그인 성공 체크 - 여러 성공 패턴 지원
+                elif (current_url.startswith("https://section.blog.naver.com/BlogHome.naver") or
+                      current_url == "https://www.naver.com/" or  # 사용자 제공 성공 URL
+                      current_url == "https://www.naver.com"):   # 슬래시 없는 버전도 포함
+                    logger.info(f"✅ 네이버 로그인 성공! 최종 페이지 도달: {current_url}")
                     self.is_logged_in = True
                     if credentials:
                         self.username = credentials.username
                         logger.info(f"👤 사용자 아이디 저장: {self.username}")
                     return LoginStatus.LOGGED_IN
 
-                # 3. 2차 인증 페이지 → 사용자 입력 대기
+                # 3. 2차 인증 감지 및 처리 (사용자가 완료할 때까지 대기)
                 elif any(keyword in current_url for keyword in ["auth", "otp", "verify"]):
-                    logger.info("🔐 2차 인증 페이지 감지 - 사용자 입력 대기 중...")
-                    return LoginStatus.TWO_FACTOR_AUTH_REQUIRED
+                    if not self.two_factor_auth_detected:
+                        logger.info("🔐 2차 인증 페이지 감지!")
+                        logger.info("📱 2차 인증을 완료해 주세요. 완료될 때까지 대기합니다...")
+                        self.two_factor_auth_detected = True
+                    
+                    # 2차 인증 진행 중 표시
+                    if int(time.time() - start_time) % 10 == 0:  # 10초마다 메시지 출력
+                        logger.info(f"⏳ 2차 인증 대기 중... ({int(time.time() - start_time)}초 경과)")
+                    
+                    # 2차 인증이 완료되어 다른 페이지로 이동했는지 확인
+                    time.sleep(2)
+                    continue
 
                 # 4. 로그인 실패 체크 (빠른 체크)
                 elif current_url == "https://nid.naver.com/nidlogin.login":
@@ -623,26 +604,33 @@ class NaverBlogAdapter:
     #         return False
     
     def check_login_status(self) -> bool:
-        """현재 로그인 상태 확인"""
+        """현재 로그인 상태 확인 (페이지 이동 없이)"""
         try:
-            # 현재 URL이 블로그 홈이면 로그인됨
-            current_url = self.helper.current_url
-            
-            if "BlogHome.naver" in current_url:
-                self.is_logged_in = True
-                return True
-            
-            # 블로그 홈으로 이동 시도
-            self.helper.goto(self.blog_home_url)
-            time.sleep(3)
-            
-            current_url = self.helper.current_url
-            if "BlogHome.naver" in current_url:
-                self.is_logged_in = True
-                return True
-            else:
+            # 브라우저가 없으면 로그인 안됨
+            if not self.helper or not self.helper.driver:
                 self.is_logged_in = False
                 return False
+            
+            current_url = self.helper.current_url
+            logger.debug(f"로그인 상태 확인 - 현재 URL: {current_url}")
+            
+            # 1. 네이버 관련 페이지에 있고 로그인 페이지가 아니면 로그인됨
+            if (("naver.com" in current_url) and 
+                ("nidlogin.login" not in current_url) and 
+                ("deviceConfirm" not in current_url)):
+                self.is_logged_in = True
+                logger.debug("URL 기반 로그인 상태 확인: 로그인됨")
+                return True
+            
+            # 2. 로그인 상태 변수가 이미 설정되어 있으면 그대로 사용
+            if hasattr(self, 'is_logged_in') and self.is_logged_in:
+                logger.debug("기존 로그인 상태 변수 사용: 로그인됨")
+                return True
+            
+            # 3. 그 외의 경우는 로그인 안됨으로 판단
+            self.is_logged_in = False
+            logger.debug("로그인 상태 확인 결과: 로그인 안됨")
+            return False
                 
         except Exception as e:
             logger.error(f"로그인 상태 확인 실패: {e}")

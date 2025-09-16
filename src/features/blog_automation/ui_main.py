@@ -1025,7 +1025,7 @@ class BlogAutomationMainUI(QWidget):
                 dialog = ModernConfirmDialog(
                     self,
                     title="로그인 성공",
-                    message=f"{self.current_platform_text} 로그인이 완료되었습니다.",
+                    message="네이버 로그인이 완료되었습니다.",
                     confirm_text="확인",
                     cancel_text=None,
                     icon="🎉"

@@ -2026,8 +2026,8 @@ class APISettingsDialog(QDialog):
                     '"Create API key in new project" 선택',
                     '생성된 키를 복사하여 붙여넣기'
                 ],
-                'cost': '비용: Gemini 2.0 Flash $0.075/$0.30/1M토큰, Gemini 2.5 Flash $0.15/$0.60/1M토큰, Gemini 2.5 Pro $1.25/$10/1M토큰 (입력/출력)',
-                'note': '🆓 무료 할당량: 하루 25회 요청 (Google AI Studio) 또는 1,000회 (Gemini CLI) | 💰 새 계정 시 Google Cloud $300 크레딧 90일간 제공'
+                'cost': '💰 비용: Gemini 2.0 Flash $0.10/$0.40/1M토큰, Gemini 2.5 Flash $0.30/$2.50/1M토큰 (입력/출력)',
+                'note': '🆓 무료 할당량: Gemini 2.5 Flash 분당 10회/일일 250회, Gemini 2.0 Flash 분당 15회/일일 200회. 초과시 유료 전환'
             },
             {
                 'title': '🌟 Anthropic (Claude) API',

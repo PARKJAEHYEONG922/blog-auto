@@ -886,6 +886,15 @@ class BlogAutomationStep2UI(QWidget):
 
             logger.info(f"🤖 AI 워커 파라미터: search={search_keyword}, target={selected_title}, main={main_keyword}, sub={sub_keywords}, type={content_type}")
 
+            # 기존 로그인 세션 확인 (있으면 재사용, 없으면 새로 생성)
+            try:
+                if self.parent.service.check_login_status():
+                    logger.info("✅ 기존 로그인된 브라우저 세션을 AI 글쓰기에서 재사용합니다")
+                else:
+                    logger.info("ℹ️ 로그인된 세션이 없어 새로운 브라우저를 시작합니다")
+            except Exception as e:
+                logger.debug(f"로그인 상태 확인 중 오류: {e}")
+
             self.analysis_worker = create_ai_blog_analysis_worker(
                 self.parent.service,
                 search_keyword,
