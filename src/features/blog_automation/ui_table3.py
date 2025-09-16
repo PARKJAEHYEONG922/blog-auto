@@ -831,26 +831,39 @@ class BlogAutomationStep3UI(QWidget):
             logger.error(f"원본 복원 오류: {e}")
 
     def copy_content_to_clipboard(self):
-        """편집기 내용을 클립보드에 복사"""
+        """편집기 내용을 클립보드에 복사 (테이블 구조 보존)"""
         try:
             from PySide6.QtWidgets import QApplication
+            import re
             
-            # 편집기 내용 가져오기
-            content = self.content_editor.toPlainText().strip()
-            if not content:
+            # HTML 내용과 일반 텍스트 내용 모두 가져오기
+            html_content = self.content_editor.toHtml()
+            plain_content = self.content_editor.toPlainText().strip()
+            
+            if not plain_content:
                 TableUIDialogHelper.show_error_dialog(
                     self, "내용 없음", "복사할 내용이 없습니다."
                 )
                 return
             
+            # 테이블이 포함된 경우 구조화된 텍스트로 변환
+            formatted_content = self.convert_html_tables_to_readable_text(html_content, plain_content)
+            
             # 클립보드에 복사
             clipboard = QApplication.clipboard()
-            clipboard.setText(content)
+            clipboard.setText(formatted_content)
             
-            logger.info(f"클립보드 복사 완료 ({len(content):,}자)")
+            logger.info(f"클립보드 복사 완료 ({len(formatted_content):,}자)")
+            
+            # 테이블 변환 여부 확인
+            table_converted = "테이블이 읽기 쉬운 형태로 변환됨" if "<table" in html_content else "일반 텍스트"
             
             TableUIDialogHelper.show_info_dialog(
-                self, "복사 완료", f"편집된 내용이 클립보드에 복사되었습니다.\n글자 수: {len(content.replace(' ', '')):,}자", "📋"
+                self, "복사 완료", 
+                f"편집된 내용이 클립보드에 복사되었습니다.\n"
+                f"글자 수: {len(formatted_content.replace(' ', '').replace('\n', '')):,}자\n"
+                f"형식: {table_converted}", 
+                "📋"
             )
             
         except Exception as e:
@@ -858,6 +871,135 @@ class BlogAutomationStep3UI(QWidget):
             TableUIDialogHelper.show_error_dialog(
                 self, "복사 오류", f"클립보드 복사 중 오류가 발생했습니다:\n{e}"
             )
+
+    def convert_html_tables_to_readable_text(self, html_content: str, plain_content: str) -> str:
+        """HTML 테이블을 읽기 쉬운 텍스트 형태로 변환"""
+        try:
+            import re
+            from html import unescape
+            
+            # HTML에 테이블이 없으면 일반 텍스트 반환
+            if "<table" not in html_content:
+                return plain_content
+            
+            logger.info("HTML 테이블을 텍스트로 변환 시작")
+            
+            # HTML 테이블 추출 및 변환
+            table_pattern = r'<table[^>]*>(.*?)</table>'
+            tables = re.findall(table_pattern, html_content, re.DOTALL | re.IGNORECASE)
+            
+            if not tables:
+                return plain_content
+            
+            # 원본 HTML을 기반으로 테이블별로 변환
+            result_content = html_content
+            
+            for table_html in tables:
+                # 테이블을 읽기 쉬운 텍스트로 변환
+                readable_table = self.parse_html_table_to_text(f"<table>{table_html}</table>")
+                
+                # 원본 테이블을 변환된 텍스트로 교체
+                original_table = f"<table[^>]*>{re.escape(table_html)}</table>"
+                result_content = re.sub(original_table, readable_table, result_content, flags=re.DOTALL | re.IGNORECASE)
+            
+            # HTML 태그 제거하고 텍스트만 추출
+            # <p>, <div>, <br> 등은 줄바꿈으로 변환
+            result_content = re.sub(r'<(p|div|br)[^>]*>', '\n', result_content, flags=re.IGNORECASE)
+            result_content = re.sub(r'</(p|div)>', '\n', result_content, flags=re.IGNORECASE)
+            
+            # 나머지 HTML 태그 제거
+            result_content = re.sub(r'<[^>]+>', '', result_content)
+            
+            # HTML 엔티티 디코딩
+            result_content = unescape(result_content)
+            
+            # 연속된 줄바꿈 정리 (3개 이상의 줄바꿈을 2개로)
+            result_content = re.sub(r'\n{3,}', '\n\n', result_content)
+            
+            # 앞뒤 공백 제거
+            result_content = result_content.strip()
+            
+            logger.info(f"HTML 테이블 변환 완료: {len(tables)}개 테이블 처리됨")
+            return result_content
+            
+        except Exception as e:
+            logger.error(f"HTML 테이블 변환 오류: {e}")
+            # 오류 시 원본 텍스트 반환
+            return plain_content
+    
+    def parse_html_table_to_text(self, table_html: str) -> str:
+        """개별 HTML 테이블을 읽기 쉬운 텍스트로 파싱"""
+        try:
+            import re
+            from html import unescape
+            
+            # 행 추출
+            row_pattern = r'<tr[^>]*>(.*?)</tr>'
+            rows = re.findall(row_pattern, table_html, re.DOTALL | re.IGNORECASE)
+            
+            if not rows:
+                return ""
+            
+            text_rows = []
+            max_widths = []  # 각 열의 최대 너비
+            
+            # 각 행의 셀 데이터 추출
+            for row_html in rows:
+                cell_pattern = r'<t[dh][^>]*>(.*?)</t[dh]>'
+                cells = re.findall(cell_pattern, row_html, re.DOTALL | re.IGNORECASE)
+                
+                # HTML 태그 제거 및 엔티티 디코딩
+                clean_cells = []
+                for cell in cells:
+                    clean_cell = re.sub(r'<[^>]+>', '', cell)
+                    clean_cell = unescape(clean_cell).strip()
+                    clean_cells.append(clean_cell)
+                
+                text_rows.append(clean_cells)
+                
+                # 각 열의 최대 너비 계산
+                for i, cell in enumerate(clean_cells):
+                    if i >= len(max_widths):
+                        max_widths.append(0)
+                    max_widths[i] = max(max_widths[i], len(cell))
+            
+            if not text_rows:
+                return ""
+            
+            # 테이블 텍스트 생성
+            result_lines = []
+            
+            # 테이블 시작 구분선
+            separator_line = "+" + "+".join("-" * (width + 2) for width in max_widths) + "+"
+            result_lines.append(separator_line)
+            
+            for row_idx, row in enumerate(text_rows):
+                # 셀 데이터 포맷팅 (가운데 정렬)
+                formatted_cells = []
+                for i, cell in enumerate(row):
+                    if i < len(max_widths):
+                        width = max_widths[i]
+                        formatted_cell = f" {cell.center(width)} "
+                    else:
+                        formatted_cell = f" {cell} "
+                    formatted_cells.append(formatted_cell)
+                
+                # 행 생성
+                row_line = "|" + "|".join(formatted_cells) + "|"
+                result_lines.append(row_line)
+                
+                # 헤더 행 다음에 구분선 추가
+                if row_idx == 0:
+                    result_lines.append(separator_line)
+            
+            # 테이블 끝 구분선
+            result_lines.append(separator_line)
+            
+            return "\n".join(result_lines)
+            
+        except Exception as e:
+            logger.error(f"HTML 테이블 파싱 오류: {e}")
+            return ""
 
     def create_publish_card(self) -> ModernCard:
         """발행 카드"""
