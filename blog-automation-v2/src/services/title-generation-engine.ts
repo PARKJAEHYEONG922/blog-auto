@@ -3,16 +3,25 @@ import { LLMClientFactory, LLMMessage } from './llm-client-factory';
 
 export interface TitleGenerationRequest {
   keyword: string;
+  subKeywords?: string[];
   platform: string;
+  platformName: string; // UI에서 한국어 플랫폼명 전달
   contentType: string;
+  contentTypeName: string; // UI에서 한국어 콘텐츠타입명 전달
   tone: string;
   customPrompt?: string;
   blogDescription?: string;
   mode: 'fast' | 'accurate';
 }
 
+export interface TitleWithSearch {
+  title: string;
+  searchQuery: string;
+}
+
 export interface TitleGenerationResult {
   titles: string[];
+  titlesWithSearch: TitleWithSearch[];
   metadata: {
     mode: string;
     sources: string[];
@@ -35,12 +44,13 @@ export class TitleGenerationEngine {
       }
 
       // LLM을 통한 제목 생성
-      const titles = await this.generateTitlesWithLLM(request, trendData);
+      const result = await this.generateTitlesWithLLM(request, trendData);
 
       const processingTime = Date.now() - startTime;
 
       return {
-        titles,
+        titles: result.titles,
+        titlesWithSearch: result.titlesWithSearch,
         metadata: {
           mode: request.mode,
           sources,
@@ -113,7 +123,7 @@ export class TitleGenerationEngine {
   private async generateTitlesWithLLM(
     request: TitleGenerationRequest,
     trendData?: any
-  ): Promise<string[]> {
+  ): Promise<{ titles: string[], titlesWithSearch: TitleWithSearch[] }> {
     try {
       const informationClient = LLMClientFactory.getInformationClient();
 
@@ -128,10 +138,10 @@ export class TitleGenerationEngine {
 
       const response = await informationClient.generateText(messages);
       
-      // 응답에서 제목 목록 추출
-      const titles = this.extractTitles(response.content);
+      // 응답에서 제목과 검색어 추출
+      const result = this.extractTitlesWithSearch(response.content);
       
-      return titles;
+      return result;
     } catch (error) {
       console.error('LLM 제목 생성 실패:', error);
       
@@ -145,21 +155,6 @@ export class TitleGenerationEngine {
   }
 
   private buildSystemPrompt(request: TitleGenerationRequest): string {
-    const platformInfo: { [key: string]: string } = {
-      'naver': '네이버 블로그 (SEO 최적화 필요)',
-      'tistory': '티스토리 (검색엔진 친화적)',
-      'blogspot': '블로그스팟 (글로벌 SEO)',
-      'wordpress': '워드프레스 (다양한 플러그인)'
-    };
-
-    const contentTypeInfo: { [key: string]: string } = {
-      'info': '정보/가이드형',
-      'review': '후기/리뷰형',
-      'compare': '비교/추천형',
-      'howto': '노하우형'
-    };
-
-
     // 컨텐츠 유형별 지침
     const contentGuidelines: { [key: string]: any } = {
       'info': {
@@ -186,12 +181,9 @@ export class TitleGenerationEngine {
 
     const guideline = contentGuidelines[request.contentType] || contentGuidelines['info'];
 
-    return `${platformInfo[request.platform] || request.platform}에 최적화된 '${contentTypeInfo[request.contentType] || request.contentType}' 스타일의 제목 10개를 추천해주세요.
+    return `${request.platformName} 상위 노출에 유리한 '${request.contentTypeName}' 스타일의 제목 10개를 추천해주세요.
 
-**발행 플랫폼**: ${platformInfo[request.platform] || request.platform}
-**콘텐츠 타입**: ${contentTypeInfo[request.contentType] || request.contentType}
-
-**${contentTypeInfo[request.contentType] || request.contentType} 특징**:
+**${request.contentTypeName} 특징**:
 - 접근법: ${guideline.approach}
 - 핵심 키워드: ${guideline.keywords.join(', ')}
 - 중점 영역: ${guideline.focusAreas.join(', ')}
@@ -200,35 +192,60 @@ export class TitleGenerationEngine {
 1. 메인키워드를 자연스럽게 포함
 2. 클릭 유도와 궁금증 자극
 3. 30-60자 내외 권장
-4. ${contentTypeInfo[request.contentType] || request.contentType}의 특성 반영
-5. ${platformInfo[request.platform] || request.platform} SEO 최적화
-6. **이모티콘 절대 사용 금지** (🚫, ✅, 💯 등 모든 이모티콘 금지. 순수 한글/영문 텍스트만 사용)
+4. ${request.contentTypeName}의 특성 반영
+5. ${request.platformName} SEO 최적화
+6. 이모티콘 사용 금지 (텍스트만 사용)
 7. 구체적 년도 표기 금지 (2024, 2025 등 특정 년도 사용 금지. "최신", "현재" 등으로 대체)
 
-제목은 다음 형식으로 응답하세요:
-1. [제목1]
-2. [제목2]
-3. [제목3]
-4. [제목4]
-5. [제목5]
-6. [제목6]
-7. [제목7]
-8. [제목8]
-9. [제목9]
-10. [제목10]`;
+**출력 형식**:
+JSON 형태로 정확히 10개 제목과 각 제목에 맞는 블로그 검색어를 함께 반환해주세요.
+
+각 제목마다 "해당 제목과 유사한 내용의 블로그를 찾기 위한 ${request.platformName} 검색어"를 함께 생성해주세요.
+이 검색어는 다른 블로그를 검색해서 분석하여 참고용 자료로 활용됩니다.
+검색어는 2-4개 단어 조합으로 구체적이고 관련성 높게 만들어주세요.
+
+{
+  "titles_with_search": [
+    {
+      "title": "제목1",
+      "search_query": "관련 블로그 검색어1"
+    },
+    {
+      "title": "제목2", 
+      "search_query": "관련 블로그 검색어2"
+    },
+    ...
+    {
+      "title": "제목10",
+      "search_query": "관련 블로그 검색어10"
+    }
+  ]
+}
+
+각 제목은 ${request.contentTypeName}의 특성을 살리되, 서로 다른 접근 방식으로 다양하게 생성해주세요.`;
   }
 
   private buildUserPrompt(request: TitleGenerationRequest, trendData?: any): string {
-    let prompt = `**메인키워드**: ${request.keyword}`;
+    let prompt = "";
 
-    // 블로그 설명 추가
+    // 1. AI 역할 설정 (가장 먼저)
     if (request.blogDescription) {
-      prompt = `# AI 역할 설정
+      prompt += `# AI 역할 설정
 ${request.blogDescription}
 
-${prompt}`;
+`;
     }
 
+    // 2. 메인키워드 (필수)
+    prompt += `**메인키워드**: ${request.keyword}`;
+
+    // 3. 서브키워드 (있는 경우)
+    if (request.subKeywords && request.subKeywords.length > 0) {
+      prompt += `\n**서브키워드**: ${request.subKeywords.join(', ')}`;
+      prompt += `\n*서브키워드는 메인키워드와 함께 자연스럽게 활용하여 더 구체적인 제목을 만들어주세요.*`;
+    }
+
+    // 4. 추가 요청사항 (있는 경우)
     if (request.customPrompt) {
       prompt += `\n\n**추가 요청사항**: ${request.customPrompt}`;
     }
@@ -256,7 +273,26 @@ ${prompt}`;
     return prompt;
   }
 
-  private extractTitles(content: string): string[] {
+  private extractTitlesWithSearch(content: string): { titles: string[], titlesWithSearch: TitleWithSearch[] } {
+    try {
+      // JSON 형식으로 응답이 올 경우 파싱
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const jsonData = JSON.parse(jsonMatch[0]);
+        if (jsonData.titles_with_search && Array.isArray(jsonData.titles_with_search)) {
+          const titlesWithSearch = jsonData.titles_with_search.slice(0, 10).map((item: any) => ({
+            title: item.title,
+            searchQuery: item.search_query || item.searchQuery || ''
+          }));
+          const titles = titlesWithSearch.map((item: TitleWithSearch) => item.title);
+          return { titles, titlesWithSearch };
+        }
+      }
+    } catch (error) {
+      console.warn('JSON 파싱 실패, 기존 방식으로 처리:', error);
+    }
+
+    // 기존 방식: 번호 목록 형태 처리 (검색어 없이)
     const lines = content.split('\n');
     const titles: string[] = [];
 
@@ -267,7 +303,13 @@ ${prompt}`;
       }
     }
 
-    return titles.slice(0, 10);
+    const finalTitles = titles.slice(0, 10);
+    const titlesWithSearch = finalTitles.map((title: string) => ({
+      title,
+      searchQuery: '' // 기본값으로 빈 검색어
+    }));
+
+    return { titles: finalTitles, titlesWithSearch };
   }
 
 }

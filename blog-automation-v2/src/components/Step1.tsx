@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { WorkflowData } from '../App';
 import Dropdown, { DropdownOption } from './common/Dropdown';
 import SimpleDialog from './SimpleDialog';
+import { TitleWithSearch } from '../services/title-generation-engine';
 
 interface Step1Props {
   data: WorkflowData;
@@ -20,6 +21,7 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
     data.blogDescription || '당신은 네이버 블로그에서 인기 있는 글을 쓰는 블로거입니다. 독자들이 진짜 도움이 되고 재미있게 읽을 수 있는 글을 쓰는 것이 목표입니다.'
   );
   const [generatedTitles, setGeneratedTitles] = useState<string[]>([]);
+  const [titlesWithSearch, setTitlesWithSearch] = useState<TitleWithSearch[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedTitle, setSelectedTitle] = useState(data.selectedTitle || '');
   const [isSavingDefaults, setIsSavingDefaults] = useState(false);
@@ -102,10 +104,17 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
       const { TitleGenerationEngine } = await import('../services/title-generation-engine');
       const engine = new TitleGenerationEngine();
 
+      // 선택된 옵션의 한국어 이름 찾기
+      const platformName = platforms.find(p => p.id === platform)?.name || platform;
+      const contentTypeName = contentTypes.find(c => c.id === contentType)?.name || contentType;
+
       const result = await engine.generateTitles({
         keyword: keyword.trim(),
+        subKeywords: subKeywords.split(',').map(k => k.trim()).filter(k => k),
         platform,
+        platformName,
         contentType,
+        contentTypeName,
         tone,
         customPrompt: customPrompt.trim(),
         blogDescription: blogDescription.trim(),
@@ -113,7 +122,9 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
       });
 
       setGeneratedTitles(result.titles);
+      setTitlesWithSearch(result.titlesWithSearch);
       console.log('제목 생성 메타데이터:', result.metadata);
+      console.log('제목과 검색어:', result.titlesWithSearch);
     } catch (error) {
       console.error('제목 생성 오류:', error);
       setDialog({
@@ -348,7 +359,7 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
                   value={blogDescription}
                   onChange={(e) => setBlogDescription(e.target.value)}
                   rows={3}
-                  placeholder="예: 당신은 네이버 블로그에서 인기 있는 글을 쓰는 블로거입니다. 독자들이 진짜 도움이 되고 재미있게 읽을 수 있는 글을 쓰는 것이 목표입니다. (따로 입력하지 않으면 이 예시가 기본값으로 사용됩니다)"
+                  placeholder="예: 10년간 요리를 해온 주부가 운영하는 블로그, 펫샵을 운영하는 사장이 반려동물 정보를 공유하는 블로그"
                   className="ultra-input resize-none" style={{padding: '10px 16px', fontSize: '14px'}}
                 />
               </div>
@@ -398,7 +409,7 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
               </div>
               <div>
                 <label className="ultra-label" style={{fontSize: '13px', marginBottom: '6px'}}>
-                  보조 키워드 (선택)
+                  서브 키워드 (선택)
                 </label>
                 <input
                   type="text"
@@ -426,7 +437,7 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
                 value={customPrompt}
                 onChange={(e) => setCustomPrompt(e.target.value)}
                 rows={3}
-                placeholder="예: 숫자를 포함한 제목으로 만들어주세요, 질문 형태의 제목을 선호합니다, 감정적인 표현을 사용해주세요"
+                placeholder="예: 숫자를 넣어주세요, 질문 형태로 만들어주세요, 따뜻한 느낌으로 써주세요"
                 className="ultra-input resize-none" style={{padding: '10px 16px', fontSize: '14px'}}
               />
             </div>
@@ -492,9 +503,9 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
                     className="ultra-select" style={{padding: '10px 16px', fontSize: '14px'}}
                   >
                     <option value="">생성된 제목 중 하나를 선택해주세요</option>
-                    {generatedTitles.map((title, index) => (
-                      <option key={index} value={title}>
-                        📝 {title}
+                    {titlesWithSearch.map((item, index) => (
+                      <option key={index} value={item.title} title={item.searchQuery ? `검색어: ${item.searchQuery}` : ''}>
+                        📝 {item.title}
                       </option>
                     ))}
                   </select>
@@ -503,6 +514,14 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
                       <p className="text-emerald-800 text-sm">
                         <span className="font-semibold">선택된 제목:</span> {selectedTitle}
                       </p>
+                      {(() => {
+                        const selectedItem = titlesWithSearch.find(item => item.title === selectedTitle);
+                        return selectedItem?.searchQuery && (
+                          <p className="text-emerald-600 text-xs mt-1">
+                            <span className="font-medium">참고 검색어:</span> {selectedItem.searchQuery}
+                          </p>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
