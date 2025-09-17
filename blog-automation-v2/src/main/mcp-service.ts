@@ -399,6 +399,62 @@ class MCPMainService {
         return null;
       }
     });
+
+    // 네이버 API 설정 저장
+    ipcMain.handle('naverApi:save', async (event, naverApiData) => {
+      try {
+        const settingsDir = path.join(os.homedir(), '.blog-automation-v2');
+        const naverApiFile = path.join(settingsDir, 'naver-api.json');
+        
+        // 디렉토리 생성 (없으면)
+        await fs.mkdir(settingsDir, { recursive: true });
+        
+        // 네이버 API 설정 저장
+        await fs.writeFile(naverApiFile, JSON.stringify(naverApiData, null, 2), 'utf8');
+        
+        console.log('✅ 네이버 API 설정 저장 완료:', naverApiFile);
+        return { success: true };
+      } catch (error) {
+        console.error('❌ 네이버 API 설정 저장 실패:', error);
+        return { success: false, message: error.message };
+      }
+    });
+
+    // 네이버 API 설정 로드
+    ipcMain.handle('naverApi:load', async () => {
+      try {
+        const naverApiFile = path.join(os.homedir(), '.blog-automation-v2', 'naver-api.json');
+        
+        const data = await fs.readFile(naverApiFile, 'utf8');
+        const naverApiData = JSON.parse(data);
+        
+        console.log('✅ 네이버 API 설정 로드 완료');
+        return { success: true, data: naverApiData };
+      } catch (error) {
+        console.log('ℹ️ 네이버 API 설정 파일 없음');
+        return { success: false, message: 'No Naver API settings found' };
+      }
+    });
+
+    // 네이버 API 설정 삭제
+    ipcMain.handle('naverApi:delete', async () => {
+      try {
+        const naverApiFile = path.join(os.homedir(), '.blog-automation-v2', 'naver-api.json');
+        
+        await fs.unlink(naverApiFile);
+        
+        console.log('✅ 네이버 API 설정 삭제 완료');
+        return { success: true };
+      } catch (error) {
+        if (error.code === 'ENOENT') {
+          console.log('ℹ️ 삭제할 네이버 API 설정 파일 없음');
+          return { success: true }; // 파일이 없어도 성공으로 처리
+        }
+        
+        console.error('❌ 네이버 API 설정 삭제 실패:', error);
+        return { success: false, message: error.message };
+      }
+    });
   }
 
   private async disconnect(serverName: string) {

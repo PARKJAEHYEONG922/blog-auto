@@ -28,6 +28,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('defaults:save', defaults),
   loadDefaults: () => 
     ipcRenderer.invoke('defaults:load'),
+    
+  // 네이버 API 설정 저장/로드/삭제
+  saveNaverApiSettings: (naverApiData: any) => 
+    ipcRenderer.invoke('naverApi:save', naverApiData),
+  loadNaverApiSettings: () => 
+    ipcRenderer.invoke('naverApi:load'),
+  deleteNaverApiSettings: () => 
+    ipcRenderer.invoke('naverApi:delete'),
 });
 
 // TypeScript 타입 정의
@@ -47,6 +55,9 @@ declare global {
       loadSettings: () => Promise<any>;
       saveDefaults: (defaults: any) => Promise<{ success: boolean; message?: string }>;
       loadDefaults: () => Promise<any>;
+      saveNaverApiSettings: (naverApiData: any) => Promise<{ success: boolean; message?: string }>;
+      loadNaverApiSettings: () => Promise<{ success: boolean; data?: any; message?: string }>;
+      deleteNaverApiSettings: () => Promise<{ success: boolean; message?: string }>;
     };
   }
 }
