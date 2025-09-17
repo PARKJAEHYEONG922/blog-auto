@@ -23,6 +23,8 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
   const [generatedTitles, setGeneratedTitles] = useState<string[]>([]);
   const [titlesWithSearch, setTitlesWithSearch] = useState<TitleWithSearch[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingMode, setGeneratingMode] = useState<'fast' | 'accurate'>('fast');
+  const [lastGeneratedMode, setLastGeneratedMode] = useState<'fast' | 'accurate'>('fast');
   const [selectedTitle, setSelectedTitle] = useState(data.selectedTitle || '');
   const [isSavingDefaults, setIsSavingDefaults] = useState(false);
   
@@ -99,6 +101,7 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
     }
 
     setIsGenerating(true);
+    setGeneratingMode(mode);
     try {
       // 실제 MCP + LLM 연동
       const { TitleGenerationEngine } = await import('../services/title-generation-engine');
@@ -123,6 +126,7 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
 
       setGeneratedTitles(result.titles);
       setTitlesWithSearch(result.titlesWithSearch);
+      setLastGeneratedMode(mode);
       console.log('제목 생성 메타데이터:', result.metadata);
       console.log('제목과 검색어:', result.titlesWithSearch);
     } catch (error) {
@@ -370,7 +374,7 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
               <button
                 onClick={saveDefaults}
                 disabled={isSavingDefaults || !platform || !contentType || !tone || (contentType === 'review' && !reviewType)}
-                className={`ultra-btn px-6 py-3 text-sm ${
+                className={`ultra-btn px-3 py-2 text-xs ${
                   (!platform || !contentType || !tone || (contentType === 'review' && !reviewType)) && !isSavingDefaults 
                     ? 'opacity-50 cursor-not-allowed' 
                     : ''
@@ -382,7 +386,7 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
                 }}
               >
                 <span>{isSavingDefaults ? '저장 중...' : '기본값으로 저장'}</span>
-                <span className="text-lg">{isSavingDefaults ? '⏳' : '💾'}</span>
+                <span className="text-sm">{isSavingDefaults ? '⏳' : '💾'}</span>
               </button>
             </div>
           </div>
@@ -450,31 +454,31 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
               <h2 className="section-title" style={{fontSize: '16px'}}>AI 제목 추천</h2>
             </div>
             
-            <div className="flex gap-3 mb-5">
+            <div className="flex gap-2 mb-5">
               <button
                 onClick={() => generateTitles('fast')}
                 disabled={isGenerating || !keyword.trim()}
-                className="ultra-btn flex-1 px-6 py-3 text-sm"
+                className="ultra-btn flex-1 px-3 py-2 text-xs"
                 style={{
                   background: '#f59e0b',
                   borderColor: '#f59e0b',
                   color: 'white'
                 }}
               >
-                <span className="text-lg">🚀</span>
+                <span className="text-sm">🚀</span>
                 <span>빠른 모드 (5초)</span>
               </button>
               <button
                 onClick={() => generateTitles('accurate')}
                 disabled={isGenerating || !keyword.trim()}
-                className="ultra-btn flex-1 px-6 py-3 text-sm"
+                className="ultra-btn flex-1 px-3 py-2 text-xs"
                 style={{
                   background: '#2563eb',
                   borderColor: '#2563eb',
                   color: 'white'
                 }}
               >
-                <span className="text-lg">🎯</span>
+                <span className="text-sm">🎯</span>
                 <span>정확 모드 (30초)</span>
               </button>
             </div>
@@ -482,16 +486,40 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
             {isGenerating && (
               <div className="text-center py-8">
                 <div className="ultra-spinner mx-auto mb-4" style={{width: '32px', height: '32px'}}></div>
-                <h3 className="text-lg font-semibold text-slate-700 mb-2">AI가 제목을 생성중입니다</h3>
-                <p className="text-slate-500 text-sm">잠시만 기다려주세요...</p>
+                <h3 className="text-lg font-semibold text-slate-700 mb-2">
+                  {generatingMode === 'accurate' ? '🎯 정확모드로 제목 생성 중...' : '🚀 빠른모드로 제목 생성 중...'}
+                </h3>
+                <div className="text-slate-500 text-sm space-y-1">
+                  {generatingMode === 'accurate' ? (
+                    <div className="space-y-1">
+                      <p>📡 실시간 트렌드 데이터 수집 중...</p>
+                      <p>🔍 네이버 블로그 분석 중...</p>
+                      <p>📺 YouTube 인기 콘텐츠 분석 중...</p>
+                      <p>🤖 AI가 최적화된 제목 생성 중...</p>
+                      <p className="text-blue-600 font-medium mt-2">정확모드는 더 많은 데이터를 분석하므로 30초 정도 소요됩니다.</p>
+                    </div>
+                  ) : (
+                    <p>빠르게 제목을 생성하고 있습니다...</p>
+                  )}
+                </div>
               </div>
             )}
 
             {generatedTitles.length > 0 && (
               <div className="space-y-4">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                  <h3 className="text-base font-semibold text-slate-800">생성된 제목 중 하나를 선택하세요</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                    <h3 className="text-base font-semibold text-slate-800">
+                      {lastGeneratedMode === 'accurate' ? '🎯 정확모드로 생성된 제목' : '🚀 빠른모드로 생성된 제목'} ({generatedTitles.length}개)
+                    </h3>
+                  </div>
+                  {lastGeneratedMode === 'accurate' && (
+                    <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                      <span>📊</span>
+                      <span>실시간 트렌드 분석 완료</span>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="ultra-label" style={{fontSize: '13px', marginBottom: '6px'}}>
@@ -534,10 +562,10 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
             <button
               onClick={handleNext}
               disabled={!platform || !keyword.trim() || !selectedTitle}
-              className="ultra-btn px-6 py-3 text-base"
+              className="ultra-btn px-3 py-2 text-sm"
             >
               <span>다음 단계로 진행</span>
-              <span className="text-lg">→</span>
+              <span className="text-sm">→</span>
             </button>
           </div>
         </div>

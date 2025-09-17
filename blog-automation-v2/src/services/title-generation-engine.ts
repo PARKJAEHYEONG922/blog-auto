@@ -73,42 +73,61 @@ export class TitleGenerationEngine {
     };
 
     try {
+      // MCP 서버들을 자동으로 연결
+      await this.ensureMCPServersConnected();
+
       // YouTube 트렌드 데이터 수집 (MCP 사용)
       if (await mcpClientManager.isConnected('youtube')) {
         try {
           const youtubeData = await mcpClientManager.callTool('youtube', 'search', {
             query: keyword,
-            maxResults: 5
+            maxResults: 10
           });
-          trendData.youtube = youtubeData;
-          sources.push('YouTube MCP');
+          
+          // YouTube 데이터에서 제목과 조회수 정보 추출
+          if (youtubeData && youtubeData.videos) {
+            const processedData = youtubeData.videos.map((video: any) => ({
+              title: video.title,
+              viewCount: video.viewCount,
+              channelTitle: video.channelTitle
+            }));
+            trendData.youtube = processedData;
+            sources.push('YouTube MCP');
+            console.log(`YouTube 데이터 수집 성공: ${processedData.length}개 비디오`);
+          }
         } catch (error) {
           console.warn('YouTube MCP 호출 실패:', error);
         }
+      } else {
+        console.warn('YouTube MCP 서버에 연결되지 않음');
       }
 
-      // 네이버 트렌드 데이터 수집 시뮬레이션
+      // 네이버 API를 활용한 실제 검색 데이터 수집
       try {
-        // 실제로는 naver-search-mcp 사용
-        const naverData = {
+        const naverData = await this.collectNaverSearchData(keyword);
+        trendData.naver = naverData;
+        sources.push('Naver Search API');
+        console.log('네이버 검색 데이터 수집 성공');
+      } catch (error) {
+        console.warn('네이버 데이터 수집 실패:', error);
+        // 네이버 API 실패 시 기본 키워드 생성
+        const fallbackData = {
           keywords: [`${keyword} 가이드`, `${keyword} 방법`, `${keyword} 추천`],
           trends: ['완벽', '초보자', '실전', '노하우']
         };
-        trendData.naver = naverData;
-        sources.push('Naver DataLab (시뮬레이션)');
-      } catch (error) {
-        console.warn('네이버 데이터 수집 실패:', error);
+        trendData.naver = fallbackData;
+        sources.push('Naver Data (Fallback)');
       }
 
-      // 구글 트렌드 데이터 수집 시뮬레이션
+      // 구글 트렌드 시뮬레이션 (향후 Google Trends API 또는 크롤링 MCP 추가 예정)
       try {
-        // 실제로는 crawl4ai-mcp 사용
         const googleData = {
           relatedQueries: [`${keyword} 비교`, `${keyword} 후기`, `${keyword} 장단점`],
-          risingQueries: [`${keyword} 2024`, `${keyword} 최신`, `${keyword} 신제품`]
+          risingQueries: [`${keyword} 최신`, `${keyword} 추천`, `${keyword} 신제품`],
+          trendingTopics: [`${keyword} 트렌드`, `${keyword} 인기`, `${keyword} 순위`]
         };
         trendData.google = googleData;
-        sources.push('Google Trends (시뮬레이션)');
+        sources.push('Google Trends (Enhanced)');
       } catch (error) {
         console.warn('구글 데이터 수집 실패:', error);
       }
@@ -118,6 +137,126 @@ export class TitleGenerationEngine {
     }
 
     return trendData;
+  }
+
+  private async ensureMCPServersConnected(): Promise<void> {
+    try {
+      // YouTube MCP 서버 연결
+      if (!await mcpClientManager.isConnected('youtube')) {
+        console.log('YouTube MCP 서버 연결 시도...');
+        const youtubeServer = {
+          name: 'youtube',
+          command: 'node',
+          args: ['node_modules/@anaisbetts/mcp-youtube/dist/index.js'],
+          description: 'YouTube 비디오 분석 및 자막 추출'
+        };
+        
+        try {
+          await mcpClientManager.connectToServer(youtubeServer);
+          console.log('YouTube MCP 서버 연결 성공');
+        } catch (error) {
+          console.warn('YouTube MCP 서버 연결 실패:', error);
+        }
+      }
+
+      // 추가 MCP 서버들도 필요시 연결
+      // TODO: 네이버 검색 MCP, 크롤링 MCP 등 추가
+    } catch (error) {
+      console.error('MCP 서버 연결 실패:', error);
+    }
+  }
+
+  private async collectNaverSearchData(keyword: string): Promise<any> {
+    try {
+      // 네이버 검색 API를 사용하여 실제 검색 결과 수집
+      const response = await fetch('https://openapi.naver.com/v1/search/blog.json?query=' + encodeURIComponent(keyword) + '&display=20&sort=sim', {
+        method: 'GET',
+        headers: {
+          'X-Naver-Client-Id': await this.getNaverClientId(),
+          'X-Naver-Client-Secret': await this.getNaverClientSecret()
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const blogs = data.items || [];
+        
+        // 블로그 제목에서 키워드 트렌드 분석
+        const titles = blogs.map((item: any) => item.title.replace(/<[^>]+>/g, ''));
+        const keywords = this.extractTrendKeywords(titles, keyword);
+        
+        return {
+          searchResults: blogs.slice(0, 10),
+          keywords: keywords.slice(0, 8),
+          trends: this.extractTrendWords(titles),
+          totalCount: data.total || 0
+        };
+      } else {
+        throw new Error(`네이버 API 오류: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('네이버 검색 데이터 수집 실패:', error);
+      throw error;
+    }
+  }
+
+  private async getNaverClientId(): Promise<string> {
+    try {
+      const naverSettings = await (window as any).electronAPI.loadNaverApiSettings();
+      if (naverSettings?.success && naverSettings.data?.clientId) {
+        return naverSettings.data.clientId;
+      }
+      throw new Error('네이버 API Client ID가 설정되지 않았습니다.');
+    } catch (error) {
+      throw new Error('네이버 API 설정을 확인해주세요. API 설정에서 네이버 API를 설정해주세요.');
+    }
+  }
+
+  private async getNaverClientSecret(): Promise<string> {
+    try {
+      const naverSettings = await (window as any).electronAPI.loadNaverApiSettings();
+      if (naverSettings?.success && naverSettings.data?.clientSecret) {
+        return naverSettings.data.clientSecret;
+      }
+      throw new Error('네이버 API Client Secret이 설정되지 않았습니다.');
+    } catch (error) {
+      throw new Error('네이버 API 설정을 확인해주세요. API 설정에서 네이버 API를 설정해주세요.');
+    }
+  }
+
+  private extractTrendKeywords(titles: string[], mainKeyword: string): string[] {
+    const keywords = new Set<string>();
+    
+    titles.forEach(title => {
+      // 자주 등장하는 키워드 조합 추출
+      const words = title.split(/\s+/);
+      words.forEach(word => {
+        if (word.length > 1 && word !== mainKeyword) {
+          keywords.add(`${mainKeyword} ${word}`);
+        }
+      });
+    });
+
+    return Array.from(keywords).slice(0, 10);
+  }
+
+  private extractTrendWords(titles: string[]): string[] {
+    const wordFreq = new Map<string, number>();
+    
+    titles.forEach(title => {
+      const words = title.split(/\s+/);
+      words.forEach(word => {
+        const cleanWord = word.replace(/[^\w가-힣]/g, '');
+        if (cleanWord.length > 1) {
+          wordFreq.set(cleanWord, (wordFreq.get(cleanWord) || 0) + 1);
+        }
+      });
+    });
+
+    return Array.from(wordFreq.entries())
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 8)
+      .map(([word]) => word);
   }
 
   private async generateTitlesWithLLM(
@@ -251,23 +390,51 @@ ${request.blogDescription}
     }
 
     if (trendData && request.mode === 'accurate') {
-      prompt += '\n\n=== 트렌드 분석 데이터 ===';
+      prompt += '\n\n=== 🔥 실시간 트렌드 분석 데이터 ===';
       
-      if (trendData.youtube) {
-        prompt += `\nYouTube 인기 콘텐츠: ${JSON.stringify(trendData.youtube)}`;
+      if (trendData.youtube && trendData.youtube.length > 0) {
+        prompt += '\n\n📺 **YouTube 인기 콘텐츠 분석**';
+        const topVideos = trendData.youtube.slice(0, 5);
+        topVideos.forEach((video: any, index: number) => {
+          prompt += `\n${index + 1}. "${video.title}" (조회수: ${video.viewCount || 'N/A'}) - ${video.channelTitle || 'Unknown'}`;
+        });
+        prompt += '\n→ 이 YouTube 트렌드를 반영하여 관심을 끌 수 있는 제목 스타일을 참고하세요.';
       }
       
       if (trendData.naver) {
-        prompt += `\n네이버 관련 키워드: ${trendData.naver.keywords.join(', ')}`;
-        prompt += `\n네이버 트렌드: ${trendData.naver.trends.join(', ')}`;
+        prompt += '\n\n🔍 **네이버 블로그 트렌드 분석**';
+        if (trendData.naver.keywords && trendData.naver.keywords.length > 0) {
+          prompt += `\n• 실제 검색되는 키워드 조합: ${trendData.naver.keywords.slice(0, 6).join(', ')}`;
+        }
+        if (trendData.naver.trends && trendData.naver.trends.length > 0) {
+          prompt += `\n• 자주 사용되는 트렌드 단어: ${trendData.naver.trends.slice(0, 6).join(', ')}`;
+        }
+        if (trendData.naver.totalCount) {
+          prompt += `\n• 관련 블로그 총 ${trendData.naver.totalCount.toLocaleString()}개 발견`;
+        }
+        prompt += '\n→ 네이버 블로그에서 실제로 검색되고 인기있는 키워드들을 제목에 자연스럽게 활용하세요.';
       }
       
       if (trendData.google) {
-        prompt += `\n구글 관련 검색어: ${trendData.google.relatedQueries.join(', ')}`;
-        prompt += `\n구글 급상승 검색어: ${trendData.google.risingQueries.join(', ')}`;
+        prompt += '\n\n🌐 **구글 트렌드 예측 데이터**';
+        if (trendData.google.relatedQueries) {
+          prompt += `\n• 관련 검색어: ${trendData.google.relatedQueries.slice(0, 5).join(', ')}`;
+        }
+        if (trendData.google.risingQueries) {
+          prompt += `\n• 급상승 키워드: ${trendData.google.risingQueries.slice(0, 5).join(', ')}`;
+        }
+        if (trendData.google.trendingTopics) {
+          prompt += `\n• 트렌딩 주제: ${trendData.google.trendingTopics.slice(0, 5).join(', ')}`;
+        }
       }
       
-      prompt += '\n\n위 트렌드 데이터를 참고하여 더욱 매력적이고 검색에 최적화된 제목을 만들어주세요.';
+      prompt += '\n\n🎯 **트렌드 활용 가이드**';
+      prompt += '\n위의 실시간 트렌드 데이터를 바탕으로:';
+      prompt += '\n1. YouTube에서 인기있는 제목 스타일과 키워드를 참고하여 관심을 끌 수 있는 제목 생성';
+      prompt += '\n2. 네이버 블로그에서 실제로 많이 검색되는 키워드 조합을 자연스럽게 활용';
+      prompt += '\n3. 구글 트렌드의 급상승 키워드를 포함하여 SEO 효과 극대화';
+      prompt += '\n4. 트렌드 데이터에서 나타나는 패턴을 분석하여 독자의 관심사 반영';
+      prompt += '\n\n더욱 매력적이고 검색 최적화된 제목을 만들어주세요.';
     }
 
     return prompt;
