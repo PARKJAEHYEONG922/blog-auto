@@ -28,9 +28,10 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
   const [selectedTitle, setSelectedTitle] = useState(data.selectedTitle || '');
   const [isSavingDefaults, setIsSavingDefaults] = useState(false);
   const [mcpConnectionStatus, setMcpConnectionStatus] = useState<{
+    naverSearch: boolean;
     youtube: boolean;
     isChecking: boolean;
-  }>({ youtube: false, isChecking: false });
+  }>({ naverSearch: false, youtube: false, isChecking: false });
   
   // 다이얼로그 상태 관리
   const [dialog, setDialog] = useState<{
@@ -80,15 +81,17 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
     setMcpConnectionStatus(prev => ({ ...prev, isChecking: true }));
     try {
       const { mcpClientManager } = await import('../services/mcp-client');
+      const isNaverConnected = await mcpClientManager.isConnected('naver-search');
       const isYouTubeConnected = await mcpClientManager.isConnected('youtube');
       
       setMcpConnectionStatus({
+        naverSearch: isNaverConnected,
         youtube: isYouTubeConnected,
         isChecking: false
       });
     } catch (error) {
       console.log('MCP 연결 상태 확인 실패:', error);
-      setMcpConnectionStatus({ youtube: false, isChecking: false });
+      setMcpConnectionStatus({ naverSearch: false, youtube: false, isChecking: false });
     }
   };
 
@@ -526,7 +529,16 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
                       {mcpConnectionStatus.isChecking ? '확인 중...' : '새로고침'}
                     </button>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1">
+                      <div className={`w-2 h-2 rounded-full ${
+                        mcpConnectionStatus.naverSearch ? 'bg-green-500' : 'bg-gray-400'
+                      }`}></div>
+                      <span className="text-xs text-slate-600 font-medium">네이버</span>
+                      <span className="text-xs text-slate-500">
+                        {mcpConnectionStatus.naverSearch ? '연결됨' : '대기중'}
+                      </span>
+                    </div>
                     <div className="flex items-center gap-1">
                       <div className={`w-2 h-2 rounded-full ${
                         mcpConnectionStatus.youtube ? 'bg-green-500' : 'bg-gray-400'

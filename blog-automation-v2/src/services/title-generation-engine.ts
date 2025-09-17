@@ -102,21 +102,71 @@ export class TitleGenerationEngine {
         console.warn('YouTube MCP 서버에 연결되지 않음');
       }
 
-      // 네이버 API를 활용한 실제 검색 데이터 수집
-      try {
-        const naverData = await this.collectNaverSearchData(keyword);
-        trendData.naver = naverData;
-        sources.push('Naver Search API');
-        console.log('네이버 검색 데이터 수집 성공');
-      } catch (error) {
-        console.warn('네이버 데이터 수집 실패:', error);
-        // 네이버 API 실패 시 기본 키워드 생성
-        const fallbackData = {
-          keywords: [`${keyword} 가이드`, `${keyword} 방법`, `${keyword} 추천`],
-          trends: ['완벽', '초보자', '실전', '노하우']
-        };
-        trendData.naver = fallbackData;
-        sources.push('Naver Data (Fallback)');
+      // 네이버 MCP를 통한 검색 데이터 수집 (우선)
+      if (await mcpClientManager.isConnected('naver-search')) {
+        try {
+          console.log('네이버 MCP를 통한 검색 데이터 수집 시작...');
+          
+          // 네이버 블로그 검색
+          const blogData = await mcpClientManager.callTool('naver-search', 'fetch', {
+            url: `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(keyword)}&display=20&sort=sim`,
+            method: 'GET',
+            headers: {
+              'X-Naver-Client-Id': await this.getNaverClientId(),
+              'X-Naver-Client-Secret': await this.getNaverClientSecret()
+            }
+          });
+
+          // 네이버 뉴스 검색 (추가 트렌드 데이터)
+          const newsData = await mcpClientManager.callTool('naver-search', 'fetch', {
+            url: `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(keyword)}&display=10&sort=sim`,
+            method: 'GET',
+            headers: {
+              'X-Naver-Client-Id': await this.getNaverClientId(),
+              'X-Naver-Client-Secret': await this.getNaverClientSecret()
+            }
+          });
+
+          // MCP 데이터 처리
+          if (blogData && blogData.items) {
+            const processedData = this.processNaverMCPData(blogData, newsData, keyword);
+            trendData.naver = processedData;
+            sources.push('Naver Search MCP');
+            console.log(`네이버 MCP 데이터 수집 성공: 블로그 ${blogData.items.length}개, 뉴스 ${newsData?.items?.length || 0}개`);
+          }
+        } catch (error) {
+          console.warn('네이버 MCP 호출 실패, 직접 API로 대체:', error);
+          // MCP 실패 시 직접 API 호출로 대체
+          try {
+            const naverData = await this.collectNaverSearchData(keyword);
+            trendData.naver = naverData;
+            sources.push('Naver Search API (Fallback)');
+          } catch (fallbackError) {
+            console.warn('네이버 직접 API도 실패:', fallbackError);
+            const fallbackData = {
+              keywords: [`${keyword} 가이드`, `${keyword} 방법`, `${keyword} 추천`],
+              trends: ['완벽', '초보자', '실전', '노하우']
+            };
+            trendData.naver = fallbackData;
+            sources.push('Naver Data (Basic Fallback)');
+          }
+        }
+      } else {
+        // MCP 연결 실패 시 직접 API 호출
+        try {
+          const naverData = await this.collectNaverSearchData(keyword);
+          trendData.naver = naverData;
+          sources.push('Naver Search API (Direct)');
+          console.log('네이버 직접 API 호출 성공');
+        } catch (error) {
+          console.warn('네이버 데이터 수집 실패:', error);
+          const fallbackData = {
+            keywords: [`${keyword} 가이드`, `${keyword} 방법`, `${keyword} 추천`],
+            trends: ['완벽', '초보자', '실전', '노하우']
+          };
+          trendData.naver = fallbackData;
+          sources.push('Naver Data (Fallback)');
+        }
       }
 
       // 구글 트렌드 시뮬레이션 (향후 Google Trends API 또는 크롤링 MCP 추가 예정)
@@ -141,7 +191,35 @@ export class TitleGenerationEngine {
 
   private async ensureMCPServersConnected(): Promise<void> {
     try {
-      // YouTube MCP 서버 연결
+      // 네이버 MCP 서버 연결 (최우선)
+      if (!await mcpClientManager.isConnected('naver-search')) {
+        console.log('네이버 검색 MCP 서버 연결 시도...');
+        
+        try {
+          // 저장된 네이버 API 키 가져오기
+          const clientId = await this.getNaverClientId();
+          const clientSecret = await this.getNaverClientSecret();
+          
+          const naverServer = {
+            name: 'naver-search',
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-fetch'],
+            description: '네이버 검색 API (블로그, 뉴스, 카페)',
+            env: {
+              NAVER_CLIENT_ID: clientId,
+              NAVER_CLIENT_SECRET: clientSecret,
+              MCP_SERVER_NAME: 'naver-search'
+            }
+          };
+          
+          await mcpClientManager.connectToServer(naverServer);
+          console.log('네이버 검색 MCP 서버 연결 성공');
+        } catch (error) {
+          console.warn('네이버 검색 MCP 서버 연결 실패:', error);
+        }
+      }
+
+      // YouTube MCP 서버 연결 (보조)
       if (!await mcpClientManager.isConnected('youtube')) {
         console.log('YouTube MCP 서버 연결 시도...');
         const youtubeServer = {
@@ -158,9 +236,6 @@ export class TitleGenerationEngine {
           console.warn('YouTube MCP 서버 연결 실패:', error);
         }
       }
-
-      // 추가 MCP 서버들도 필요시 연결
-      // TODO: 네이버 검색 MCP, 크롤링 MCP 등 추가
     } catch (error) {
       console.error('MCP 서버 연결 실패:', error);
     }
@@ -257,6 +332,29 @@ export class TitleGenerationEngine {
       .sort(([,a], [,b]) => b - a)
       .slice(0, 8)
       .map(([word]) => word);
+  }
+
+  private processNaverMCPData(blogData: any, newsData: any, keyword: string): any {
+    const blogs = blogData.items || [];
+    const news = newsData?.items || [];
+    
+    // 블로그 제목에서 키워드 트렌드 분석
+    const blogTitles = blogs.map((item: any) => item.title.replace(/<[^>]+>/g, ''));
+    const newsTitles = news.map((item: any) => item.title.replace(/<[^>]+>/g, ''));
+    const allTitles = [...blogTitles, ...newsTitles];
+    
+    const keywords = this.extractTrendKeywords(allTitles, keyword);
+    const trends = this.extractTrendWords(allTitles);
+    
+    return {
+      searchResults: blogs.slice(0, 10),
+      newsResults: news.slice(0, 5),
+      keywords: keywords.slice(0, 8),
+      trends: trends,
+      totalCount: blogData.total || 0,
+      newsCount: newsData?.total || 0,
+      mcpSource: true // MCP에서 온 데이터임을 표시
+    };
   }
 
   private async generateTitlesWithLLM(
@@ -402,7 +500,9 @@ ${request.blogDescription}
       }
       
       if (trendData.naver) {
-        prompt += '\n\n🔍 **네이버 블로그 트렌드 분석**';
+        const mcpIndicator = trendData.naver.mcpSource ? ' (MCP 실시간)' : '';
+        prompt += `\n\n🔍 **네이버 트렌드 분석${mcpIndicator}**`;
+        
         if (trendData.naver.keywords && trendData.naver.keywords.length > 0) {
           prompt += `\n• 실제 검색되는 키워드 조합: ${trendData.naver.keywords.slice(0, 6).join(', ')}`;
         }
@@ -412,7 +512,15 @@ ${request.blogDescription}
         if (trendData.naver.totalCount) {
           prompt += `\n• 관련 블로그 총 ${trendData.naver.totalCount.toLocaleString()}개 발견`;
         }
-        prompt += '\n→ 네이버 블로그에서 실제로 검색되고 인기있는 키워드들을 제목에 자연스럽게 활용하세요.';
+        if (trendData.naver.newsCount && trendData.naver.newsCount > 0) {
+          prompt += `\n• 관련 뉴스 ${trendData.naver.newsCount.toLocaleString()}개 분석`;
+        }
+        
+        if (trendData.naver.mcpSource) {
+          prompt += '\n→ **MCP를 통해 수집된 실시간 데이터**: 네이버 블로그와 뉴스에서 실제로 검색되고 인기있는 최신 키워드들을 제목에 자연스럽게 활용하세요.';
+        } else {
+          prompt += '\n→ 네이버 블로그에서 실제로 검색되고 인기있는 키워드들을 제목에 자연스럽게 활용하세요.';
+        }
       }
       
       if (trendData.google) {

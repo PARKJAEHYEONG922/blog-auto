@@ -104,6 +104,15 @@ export class MCPClientManager {
 // 기본 MCP 서버 설정들
 export const DEFAULT_MCP_SERVERS: MCPServer[] = [
   {
+    name: 'naver-search',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-fetch'],
+    description: '네이버 검색 API (블로그, 뉴스, 카페)',
+    env: {
+      // 환경변수로 네이버 API 키 전달 (런타임에 설정)
+    }
+  },
+  {
     name: 'youtube',
     command: 'node',
     args: ['node_modules/@anaisbetts/mcp-youtube/dist/index.js'],
