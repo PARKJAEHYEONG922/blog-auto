@@ -27,6 +27,10 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
   const [lastGeneratedMode, setLastGeneratedMode] = useState<'fast' | 'accurate'>('fast');
   const [selectedTitle, setSelectedTitle] = useState(data.selectedTitle || '');
   const [isSavingDefaults, setIsSavingDefaults] = useState(false);
+  const [mcpConnectionStatus, setMcpConnectionStatus] = useState<{
+    youtube: boolean;
+    isChecking: boolean;
+  }>({ youtube: false, isChecking: false });
   
   // 다이얼로그 상태 관리
   const [dialog, setDialog] = useState<{
@@ -69,6 +73,25 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
     { id: 'friendly', name: '친근한 존댓말', icon: '🤝', description: '써봤는데 좋더라구요, 도움이 될 것 같아요 (따뜻한 느낌)' }
   ];
 
+  // MCP 연결 상태 확인
+  const checkMcpConnection = async () => {
+    if (mcpConnectionStatus.isChecking) return;
+    
+    setMcpConnectionStatus(prev => ({ ...prev, isChecking: true }));
+    try {
+      const { mcpClientManager } = await import('../services/mcp-client');
+      const isYouTubeConnected = await mcpClientManager.isConnected('youtube');
+      
+      setMcpConnectionStatus({
+        youtube: isYouTubeConnected,
+        isChecking: false
+      });
+    } catch (error) {
+      console.log('MCP 연결 상태 확인 실패:', error);
+      setMcpConnectionStatus({ youtube: false, isChecking: false });
+    }
+  };
+
   // 기본 설정 로드
   useEffect(() => {
     const loadDefaults = async () => {
@@ -87,6 +110,7 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
     };
     
     loadDefaults();
+    checkMcpConnection(); // 컴포넌트 로드 시 MCP 상태 확인
   }, []);
 
   const generateTitles = async (mode: 'fast' | 'accurate') => {
@@ -129,6 +153,11 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
       setLastGeneratedMode(mode);
       console.log('제목 생성 메타데이터:', result.metadata);
       console.log('제목과 검색어:', result.titlesWithSearch);
+      
+      // 정확모드 실행 후 MCP 연결 상태 업데이트
+      if (mode === 'accurate') {
+        checkMcpConnection();
+      }
     } catch (error) {
       console.error('제목 생성 오류:', error);
       setDialog({
@@ -454,33 +483,65 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
               <h2 className="section-title" style={{fontSize: '16px'}}>AI 제목 추천</h2>
             </div>
             
-            <div className="flex gap-2 mb-5">
-              <button
-                onClick={() => generateTitles('fast')}
-                disabled={isGenerating || !keyword.trim()}
-                className="ultra-btn flex-1 px-3 py-2 text-xs"
-                style={{
-                  background: '#f59e0b',
-                  borderColor: '#f59e0b',
-                  color: 'white'
-                }}
-              >
-                <span className="text-sm">🚀</span>
-                <span>빠른 모드 (5초)</span>
-              </button>
-              <button
-                onClick={() => generateTitles('accurate')}
-                disabled={isGenerating || !keyword.trim()}
-                className="ultra-btn flex-1 px-3 py-2 text-xs"
-                style={{
-                  background: '#2563eb',
-                  borderColor: '#2563eb',
-                  color: 'white'
-                }}
-              >
-                <span className="text-sm">🎯</span>
-                <span>정확 모드 (30초)</span>
-              </button>
+            <div className="space-y-3 mb-5">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => generateTitles('fast')}
+                  disabled={isGenerating || !keyword.trim()}
+                  className="ultra-btn flex-1 px-3 py-2 text-xs"
+                  style={{
+                    background: '#f59e0b',
+                    borderColor: '#f59e0b',
+                    color: 'white'
+                  }}
+                >
+                  <span className="text-sm">🚀</span>
+                  <span>빠른 모드 (5초)</span>
+                </button>
+                <button
+                  onClick={() => generateTitles('accurate')}
+                  disabled={isGenerating || !keyword.trim()}
+                  className="ultra-btn flex-1 px-3 py-2 text-xs"
+                  style={{
+                    background: '#2563eb',
+                    borderColor: '#2563eb',
+                    color: 'white'
+                  }}
+                >
+                  <span className="text-sm">🎯</span>
+                  <span>정확 모드 (30초)</span>
+                </button>
+              </div>
+              
+              {/* MCP 연결 상태 표시 */}
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-slate-700">🔗 MCP 연결 상태</span>
+                    <button
+                      onClick={checkMcpConnection}
+                      disabled={mcpConnectionStatus.isChecking}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      {mcpConnectionStatus.isChecking ? '확인 중...' : '새로고침'}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      <div className={`w-2 h-2 rounded-full ${
+                        mcpConnectionStatus.youtube ? 'bg-green-500' : 'bg-gray-400'
+                      }`}></div>
+                      <span className="text-xs text-slate-600">YouTube</span>
+                      <span className="text-xs text-slate-500">
+                        {mcpConnectionStatus.youtube ? '연결됨' : '대기중'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  정확모드는 자동으로 MCP 서버에 연결하여 실시간 트렌드 데이터를 분석합니다.
+                </div>
+              </div>
             </div>
 
             {isGenerating && (
