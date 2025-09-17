@@ -127,12 +127,32 @@ export class TitleGenerationEngine {
             }
           });
 
+          // 네이버 쇼핑 검색 (상품 트렌드)
+          const shopData = await mcpClientManager.callTool('naver-search', 'fetch', {
+            url: `https://openapi.naver.com/v1/search/shop.json?query=${encodeURIComponent(keyword)}&display=15&sort=sim`,
+            method: 'GET',
+            headers: {
+              'X-Naver-Client-Id': await this.getNaverClientId(),
+              'X-Naver-Client-Secret': await this.getNaverClientSecret()
+            }
+          });
+
+          // 네이버 카페 검색 (커뮤니티 트렌드)
+          const cafeData = await mcpClientManager.callTool('naver-search', 'fetch', {
+            url: `https://openapi.naver.com/v1/search/cafearticle.json?query=${encodeURIComponent(keyword)}&display=10&sort=sim`,
+            method: 'GET',
+            headers: {
+              'X-Naver-Client-Id': await this.getNaverClientId(),
+              'X-Naver-Client-Secret': await this.getNaverClientSecret()
+            }
+          });
+
           // MCP 데이터 처리
           if (blogData && blogData.items) {
-            const processedData = this.processNaverMCPData(blogData, newsData, keyword);
+            const processedData = this.processNaverMCPData(blogData, newsData, shopData, cafeData, keyword);
             trendData.naver = processedData;
             sources.push('Naver Search MCP');
-            console.log(`네이버 MCP 데이터 수집 성공: 블로그 ${blogData.items.length}개, 뉴스 ${newsData?.items?.length || 0}개`);
+            console.log(`네이버 MCP 데이터 수집 성공: 블로그 ${blogData.items.length}개, 뉴스 ${newsData?.items?.length || 0}개, 쇼핑 ${shopData?.items?.length || 0}개, 카페 ${cafeData?.items?.length || 0}개`);
           }
         } catch (error) {
           console.warn('네이버 MCP 호출 실패, 직접 API로 대체:', error);
@@ -243,32 +263,71 @@ export class TitleGenerationEngine {
 
   private async collectNaverSearchData(keyword: string): Promise<any> {
     try {
-      // 네이버 검색 API를 사용하여 실제 검색 결과 수집
-      const response = await fetch('https://openapi.naver.com/v1/search/blog.json?query=' + encodeURIComponent(keyword) + '&display=20&sort=sim', {
-        method: 'GET',
-        headers: {
-          'X-Naver-Client-Id': await this.getNaverClientId(),
-          'X-Naver-Client-Secret': await this.getNaverClientSecret()
-        }
-      });
+      const headers = {
+        'X-Naver-Client-Id': await this.getNaverClientId(),
+        'X-Naver-Client-Secret': await this.getNaverClientSecret()
+      };
 
-      if (response.ok) {
-        const data = await response.json();
-        const blogs = data.items || [];
-        
-        // 블로그 제목에서 키워드 트렌드 분석
-        const titles = blogs.map((item: any) => item.title.replace(/<[^>]+>/g, ''));
-        const keywords = this.extractTrendKeywords(titles, keyword);
-        
-        return {
-          searchResults: blogs.slice(0, 10),
-          keywords: keywords.slice(0, 8),
-          trends: this.extractTrendWords(titles),
-          totalCount: data.total || 0
-        };
-      } else {
-        throw new Error(`네이버 API 오류: ${response.status}`);
+      // 여러 검색 API 병렬 호출
+      const [blogResponse, shopResponse, cafeResponse] = await Promise.allSettled([
+        fetch(`https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(keyword)}&display=20&sort=sim`, {
+          method: 'GET',
+          headers
+        }),
+        fetch(`https://openapi.naver.com/v1/search/shop.json?query=${encodeURIComponent(keyword)}&display=15&sort=sim`, {
+          method: 'GET',
+          headers
+        }),
+        fetch(`https://openapi.naver.com/v1/search/cafearticle.json?query=${encodeURIComponent(keyword)}&display=10&sort=sim`, {
+          method: 'GET',
+          headers
+        })
+      ]);
+
+      const results: any = {};
+      
+      // 블로그 데이터 처리
+      if (blogResponse.status === 'fulfilled' && blogResponse.value.ok) {
+        const blogData = await blogResponse.value.json();
+        results.blogs = blogData.items || [];
+        results.totalCount = blogData.total || 0;
       }
+
+      // 쇼핑 데이터 처리
+      if (shopResponse.status === 'fulfilled' && shopResponse.value.ok) {
+        const shopData = await shopResponse.value.json();
+        results.shops = shopData.items || [];
+        results.shopCount = shopData.total || 0;
+      }
+
+      // 카페 데이터 처리
+      if (cafeResponse.status === 'fulfilled' && cafeResponse.value.ok) {
+        const cafeData = await cafeResponse.value.json();
+        results.cafes = cafeData.items || [];
+        results.cafeCount = cafeData.total || 0;
+      }
+
+      // 통합 제목 분석
+      const allTitles = [
+        ...(results.blogs?.map((item: any) => item.title.replace(/<[^>]+>/g, '')) || []),
+        ...(results.shops?.map((item: any) => item.title.replace(/<[^>]+>/g, '')) || []),
+        ...(results.cafes?.map((item: any) => item.title.replace(/<[^>]+>/g, '')) || [])
+      ];
+      
+      const keywords = this.extractTrendKeywords(allTitles, keyword);
+      const trends = this.extractTrendWords(allTitles);
+
+      return {
+        searchResults: results.blogs?.slice(0, 8) || [],
+        shopResults: results.shops?.slice(0, 6) || [],
+        cafeResults: results.cafes?.slice(0, 4) || [],
+        keywords: keywords.slice(0, 8),
+        trends: trends,
+        totalCount: results.totalCount || 0,
+        shopCount: results.shopCount || 0,
+        cafeCount: results.cafeCount || 0,
+        mcpSource: false // 직접 API 호출임을 표시
+      };
     } catch (error) {
       console.error('네이버 검색 데이터 수집 실패:', error);
       throw error;
@@ -334,25 +393,45 @@ export class TitleGenerationEngine {
       .map(([word]) => word);
   }
 
-  private processNaverMCPData(blogData: any, newsData: any, keyword: string): any {
+  private processNaverMCPData(blogData: any, newsData: any, shopData: any, cafeData: any, keyword: string): any {
     const blogs = blogData.items || [];
     const news = newsData?.items || [];
+    const shops = shopData?.items || [];
+    const cafes = cafeData?.items || [];
     
-    // 블로그 제목에서 키워드 트렌드 분석
+    // 모든 제목에서 키워드 트렌드 분석
     const blogTitles = blogs.map((item: any) => item.title.replace(/<[^>]+>/g, ''));
     const newsTitles = news.map((item: any) => item.title.replace(/<[^>]+>/g, ''));
-    const allTitles = [...blogTitles, ...newsTitles];
+    const shopTitles = shops.map((item: any) => item.title.replace(/<[^>]+>/g, ''));
+    const cafeTitles = cafes.map((item: any) => item.title.replace(/<[^>]+>/g, ''));
+    
+    const allTitles = [...blogTitles, ...newsTitles, ...shopTitles, ...cafeTitles];
     
     const keywords = this.extractTrendKeywords(allTitles, keyword);
     const trends = this.extractTrendWords(allTitles);
     
+    // 쇼핑 데이터에서 가격 트렌드 분석
+    const priceRanges = shops
+      .filter((item: any) => item.lprice && item.hprice)
+      .map((item: any) => ({
+        title: item.title.replace(/<[^>]+>/g, ''),
+        lprice: parseInt(item.lprice),
+        hprice: parseInt(item.hprice)
+      }))
+      .slice(0, 5);
+    
     return {
-      searchResults: blogs.slice(0, 10),
-      newsResults: news.slice(0, 5),
+      searchResults: blogs.slice(0, 8),
+      newsResults: news.slice(0, 4),
+      shopResults: shops.slice(0, 6),
+      cafeResults: cafes.slice(0, 4),
       keywords: keywords.slice(0, 8),
       trends: trends,
+      priceRanges: priceRanges,
       totalCount: blogData.total || 0,
       newsCount: newsData?.total || 0,
+      shopCount: shopData?.total || 0,
+      cafeCount: cafeData?.total || 0,
       mcpSource: true // MCP에서 온 데이터임을 표시
     };
   }
@@ -501,25 +580,38 @@ ${request.blogDescription}
       
       if (trendData.naver) {
         const mcpIndicator = trendData.naver.mcpSource ? ' (MCP 실시간)' : '';
-        prompt += `\n\n🔍 **네이버 트렌드 분석${mcpIndicator}**`;
+        prompt += `\n\n🔍 **네이버 통합 트렌드 분석${mcpIndicator}**`;
+        
+        // 기본 통계
+        const stats = [];
+        if (trendData.naver.totalCount) stats.push(`블로그 ${trendData.naver.totalCount.toLocaleString()}개`);
+        if (trendData.naver.newsCount) stats.push(`뉴스 ${trendData.naver.newsCount.toLocaleString()}개`);
+        if (trendData.naver.shopCount) stats.push(`쇼핑 ${trendData.naver.shopCount.toLocaleString()}개`);
+        if (trendData.naver.cafeCount) stats.push(`카페 ${trendData.naver.cafeCount.toLocaleString()}개`);
+        
+        if (stats.length > 0) {
+          prompt += `\n• **데이터 규모**: ${stats.join(', ')} 분석 완료`;
+        }
         
         if (trendData.naver.keywords && trendData.naver.keywords.length > 0) {
-          prompt += `\n• 실제 검색되는 키워드 조합: ${trendData.naver.keywords.slice(0, 6).join(', ')}`;
+          prompt += `\n• **인기 키워드 조합**: ${trendData.naver.keywords.slice(0, 6).join(', ')}`;
         }
         if (trendData.naver.trends && trendData.naver.trends.length > 0) {
-          prompt += `\n• 자주 사용되는 트렌드 단어: ${trendData.naver.trends.slice(0, 6).join(', ')}`;
+          prompt += `\n• **트렌드 단어**: ${trendData.naver.trends.slice(0, 6).join(', ')}`;
         }
-        if (trendData.naver.totalCount) {
-          prompt += `\n• 관련 블로그 총 ${trendData.naver.totalCount.toLocaleString()}개 발견`;
-        }
-        if (trendData.naver.newsCount && trendData.naver.newsCount > 0) {
-          prompt += `\n• 관련 뉴스 ${trendData.naver.newsCount.toLocaleString()}개 분석`;
+        
+        // 쇼핑 트렌드 (가격대 정보)
+        if (trendData.naver.priceRanges && trendData.naver.priceRanges.length > 0) {
+          const avgPrice = trendData.naver.priceRanges.reduce((sum: number, item: any) => 
+            sum + (item.lprice + item.hprice) / 2, 0) / trendData.naver.priceRanges.length;
+          prompt += `\n• **쇼핑 트렌드**: 평균 가격대 ${Math.round(avgPrice).toLocaleString()}원, 상품 ${trendData.naver.priceRanges.length}개 분석`;
         }
         
         if (trendData.naver.mcpSource) {
-          prompt += '\n→ **MCP를 통해 수집된 실시간 데이터**: 네이버 블로그와 뉴스에서 실제로 검색되고 인기있는 최신 키워드들을 제목에 자연스럽게 활용하세요.';
+          prompt += '\n→ **MCP 실시간 데이터**: 네이버의 블로그, 뉴스, 쇼핑, 카페에서 실제로 검색되고 인기있는 최신 키워드들을 제목에 자연스럽게 활용하세요.';
+          prompt += '\n→ 특히 쇼핑 트렌드와 커뮤니티(카페) 관심사를 반영한 제목으로 더 높은 관심도를 유도하세요.';
         } else {
-          prompt += '\n→ 네이버 블로그에서 실제로 검색되고 인기있는 키워드들을 제목에 자연스럽게 활용하세요.';
+          prompt += '\n→ 네이버에서 실제로 검색되고 인기있는 키워드들을 제목에 자연스럽게 활용하세요.';
         }
       }
       
