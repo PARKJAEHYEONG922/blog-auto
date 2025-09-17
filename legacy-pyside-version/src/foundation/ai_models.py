@@ -48,7 +48,7 @@ class AIModelRegistry:
     """모든 AI 모델 중앙 관리"""
 
     _models: Dict[str, AIModel] = {
-        # Anthropic Claude Models (2025 최신)
+        # Anthropic Claude Models (최신)
         "claude-sonnet-4": AIModel(
             id="claude-sonnet-4-20250514",
             display_name="Claude Sonnet 4 (유료, 최신 고품질)",
@@ -79,16 +79,16 @@ class AIModelRegistry:
             max_tokens=8192,
             context_window=200000,
             tier="basic",
-            is_test_model=True  # API 테스트용으로 사용 (가장 저렴)
+            is_test_model=True
         ),
 
-        # OpenAI Models (2025 최신 - GPT-5 시리즈 포함)
+        # OpenAI Models (GPT-5 시리즈)
         "gpt-5": AIModel(
             id="gpt-5",
             display_name="GPT-5 (유료, 최고 성능)",
             provider=AIProvider.OPENAI,
             model_type=AIModelType.MULTIMODAL,
-            description="OpenAI 최신 GPT-5 모델. 추론 능력과 효율성이 크게 향상됨. reasoning_effort/verbosity 지원",
+            description="OpenAI 최신 GPT-5 모델. 추론 능력과 효율성이 크게 향상됨",
             max_tokens=10000,
             context_window=200000,
             tier="enterprise",
@@ -99,7 +99,7 @@ class AIModelRegistry:
             display_name="GPT-5 Mini (유료, 균형)",
             provider=AIProvider.OPENAI,
             model_type=AIModelType.MULTIMODAL,
-            description="GPT-5 소형 버전. 뛰어난 성능과 효율성의 균형. reasoning_effort/verbosity 지원",
+            description="GPT-5 소형 버전. 뛰어난 성능과 효율성의 균형",
             max_tokens=8000,
             context_window=200000,
             tier="premium"
@@ -109,20 +109,20 @@ class AIModelRegistry:
             display_name="GPT-5 Nano (유료, 고효율)",
             provider=AIProvider.OPENAI,
             model_type=AIModelType.MULTIMODAL,
-            description="GPT-5 초소형 버전. 빠르고 경제적. reasoning_effort/verbosity 지원",
+            description="GPT-5 초소형 버전. 빠르고 경제적",
             max_tokens=6000,
             context_window=128000,
             tier="basic",
-            is_test_model=True  # API 테스트용으로 사용 (가장 경제적)
+            is_test_model=True
         ),
 
-        # Google Gemini Models (2025 최신)
+        # Google Gemini Models (최신)
         "gemini-2-5-flash": AIModel(
             id="gemini-2.5-flash",
             display_name="Gemini 2.5 Flash (무료+유료, 최고성능)",
             provider=AIProvider.GOOGLE,
             model_type=AIModelType.MULTIMODAL,
-            description="최신 Gemini 2.5 Flash 모델 - 사고 과정 지원. 무료로 시작, 한도 초과시 유료",
+            description="최신 Gemini 2.5 Flash 모델 - 사고 과정 지원",
             max_tokens=8192,
             context_window=1000000,
             tier="premium",
@@ -133,33 +133,33 @@ class AIModelRegistry:
             display_name="Gemini 2.0 Flash (무료+유료, 경제적)",
             provider=AIProvider.GOOGLE,
             model_type=AIModelType.MULTIMODAL,
-            description="Gemini 2.0 Flash 모델 - 빠르고 경제적. 무료로 시작, 유료시에도 더 저렴",
+            description="Gemini 2.0 Flash 모델 - 빠르고 경제적",
             max_tokens=8192,
             context_window=1000000,
             tier="basic",
-            is_test_model=True  # API 테스트용으로 사용 (가장 경제적)
+            is_test_model=True
         ),
 
-        # OpenAI Image Models (2025 최신)
+        # OpenAI Image Models
         "gpt-image-1": AIModel(
             id="gpt-image-1",
             display_name="GPT Image 1 (유료, 최고품질)",
             provider=AIProvider.OPENAI,
             model_type=AIModelType.IMAGE,
-            description="최신 GPT Image 1 모델 - DALL-E 3 대체, 향상된 명령 이해, 텍스트 렌더링, 상세 편집",
-            max_tokens=0,  # 이미지 모델은 토큰 개념 없음
+            description="최신 GPT Image 1 모델 - 향상된 명령 이해, 텍스트 렌더링",
+            max_tokens=0,
             context_window=0,
             tier="enterprise",
             is_default=True
         ),
 
-        # Google Image Models (2025 최신)
+        # Google Image Models
         "gemini-2-5-flash-image": AIModel(
             id="gemini-2.5-flash-image-preview",
             display_name="Gemini 2.5 Flash Image (유료, 최고품질)",
             provider=AIProvider.GOOGLE,
             model_type=AIModelType.IMAGE,
-            description="최신 Gemini 2.5 Flash Image 모델 - 대화형 이미지 생성 및 편집, SynthID 워터마크 포함",
+            description="최신 Gemini 2.5 Flash Image 모델 - 대화형 이미지 생성 및 편집",
             max_tokens=0,
             context_window=0,
             tier="enterprise",
