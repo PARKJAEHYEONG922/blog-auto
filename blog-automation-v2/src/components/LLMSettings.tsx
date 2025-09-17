@@ -21,15 +21,37 @@ interface ProviderApiKeys {
   claude: string;
   openai: string;
   gemini: string;
+  naver: string; // 네이버 검색 API 키 추가
+}
+
+interface NaverApiKeys {
+  clientId: string;
+  clientSecret: string;
 }
 
 const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
+  // 탭 상태 관리
+  const [activeMainTab, setActiveMainTab] = useState<'llm' | 'naver'>('llm');
+  
   // 제공자별 API 키 저장소
   const [providerApiKeys, setProviderApiKeys] = useState<ProviderApiKeys>({
     claude: '',
     openai: '',
-    gemini: ''
+    gemini: '',
+    naver: ''
   });
+  
+  const [naverApiKeys, setNaverApiKeys] = useState<NaverApiKeys>({
+    clientId: '',
+    clientSecret: ''
+  });
+  
+  // 네이버 API 테스트 상태
+  const [naverTestingStatus, setNaverTestingStatus] = useState<{
+    testing: boolean;
+    success: boolean;
+    message: string;
+  }>({ testing: false, success: false, message: '' });
 
   // LLM 설정 (UI에서 편집 중인 설정)
   const [settings, setSettings] = useState<LLMSettings>({
@@ -68,11 +90,32 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
         const savedData = await (window as any).electronAPI.loadSettings();
         const loadedSettings = savedData.settings || savedData;
         
+        // 네이버 API 설정 로드
+        try {
+          const naverSettings = await (window as any).electronAPI.loadNaverApiSettings();
+          if (naverSettings && naverSettings.success && naverSettings.data) {
+            setNaverApiKeys({
+              clientId: naverSettings.data.clientId || '',
+              clientSecret: naverSettings.data.clientSecret || ''
+            });
+            if (naverSettings.data.isValid) {
+              setNaverTestingStatus({
+                testing: false,
+                success: true,
+                message: '✅ 저장된 네이버 API 설정이 로드되었습니다.'
+              });
+            }
+          }
+        } catch (error) {
+          console.log('네이버 API 설정 로드 실패:', error);
+        }
+        
         // 제공자별 API 키 추출
         const extractedKeys: ProviderApiKeys = {
           claude: '',
           openai: '',
-          gemini: ''
+          gemini: '',
+          naver: ''
         };
         
         // 모든 탭에서 API 키 수집
@@ -426,6 +469,134 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
     }
   };
 
+  // 네이버 API 테스트 및 적용 함수
+  const testAndApplyNaverApi = async () => {
+    const { clientId, clientSecret } = naverApiKeys;
+    
+    if (!clientId.trim() || !clientSecret.trim()) {
+      setNaverTestingStatus({
+        testing: false,
+        success: false,
+        message: '❌ Client ID와 Client Secret을 모두 입력해주세요.'
+      });
+      return;
+    }
+
+    setNaverTestingStatus({ testing: true, success: false, message: '🔄 네이버 API 연결을 테스트 중입니다...' });
+    
+    try {
+      // 네이버 블로그 검색 API로 테스트
+      const response = await fetch('https://openapi.naver.com/v1/search/blog.json?query=테스트&display=1', {
+        method: 'GET',
+        headers: {
+          'X-Naver-Client-Id': clientId,
+          'X-Naver-Client-Secret': clientSecret
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setNaverTestingStatus({
+          testing: false,
+          success: true,
+          message: '✅ 네이버 API 연결에 성공했습니다!'
+        });
+        
+        // 테스트 성공시 자동으로 저장
+        await saveNaverApiToStorage();
+      } else {
+        const errorText = await response.text();
+        setNaverTestingStatus({
+          testing: false,
+          success: false,
+          message: `❌ API 연결 실패: ${response.status} - ${errorText}`
+        });
+      }
+    } catch (error: any) {
+      setNaverTestingStatus({
+        testing: false,
+        success: false,
+        message: `❌ 네트워크 오류: ${error.message}`
+      });
+    }
+  };
+
+  // 네이버 API 설정 저장 함수 (내부용)
+  const saveNaverApiToStorage = async () => {
+    const { clientId, clientSecret } = naverApiKeys;
+    
+    try {
+      // 네이버 API 설정 저장
+      const result = await (window as any).electronAPI.saveNaverApiSettings({
+        clientId: clientId.trim(),
+        clientSecret: clientSecret.trim(),
+        isValid: naverTestingStatus.success
+      });
+
+      if (result.success) {
+        setNaverTestingStatus(prev => ({
+          ...prev,
+          message: '✅ 네이버 API 연결 및 저장에 성공했습니다!'
+        }));
+      } else {
+        setNaverTestingStatus({
+          testing: false,
+          success: false,
+          message: `❌ 저장 실패: ${result.message}`
+        });
+      }
+    } catch (error: any) {
+      setNaverTestingStatus({
+        testing: false,
+        success: false,
+        message: `❌ 저장 오류: ${error.message}`
+      });
+    }
+  };
+
+  // 네이버 API 설정 삭제 함수
+  const deleteNaverApi = async () => {
+    setDialog({
+      isOpen: true,
+      type: 'confirm',
+      title: '네이버 API 설정 삭제',
+      message: '네이버 API 설정을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.',
+      onConfirm: async () => {
+        try {
+          // API 키 삭제
+          const result = await (window as any).electronAPI.deleteNaverApiSettings();
+          
+          if (result.success) {
+            // UI 상태 초기화
+            setNaverApiKeys({ clientId: '', clientSecret: '' });
+            setNaverTestingStatus({ testing: false, success: false, message: '' });
+            
+            setDialog({
+              isOpen: true,
+              type: 'success',
+              title: '삭제 완료',
+              message: '네이버 API 설정이 성공적으로 삭제되었습니다.'
+            });
+          } else {
+            setDialog({
+              isOpen: true,
+              type: 'error',
+              title: '삭제 실패',
+              message: `API 설정 삭제에 실패했습니다:\n${result.message}`
+            });
+          }
+        } catch (error: any) {
+          setDialog({
+            isOpen: true,
+            type: 'error',
+            title: '삭제 오류',
+            message: `API 설정 삭제 중 오류가 발생했습니다:\n${error.message}`
+          });
+        }
+      }
+    });
+  };
+
   const saveSettings = async () => {
     try {
       console.log('💾 설정 저장 시도:', settings);
@@ -479,12 +650,82 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
             <div className="section-icon blue" style={{width: '40px', height: '40px', fontSize: '20px'}}>⚙️</div>
-            <h2 className="text-2xl font-bold text-slate-900">LLM 설정</h2>
+            <h2 className="text-2xl font-bold text-slate-900">API 설정</h2>
           </div>
         </div>
 
-              {/* 탭 네비게이션 */}
-              <div className="flex gap-3 mb-8">
+        {/* 메인 탭 네비게이션 */}
+        <div className="flex gap-3 mb-8">
+          <button
+            onClick={() => setActiveMainTab('llm')}
+            className={`flex-1 section-card cursor-pointer transition-all duration-200 ${
+              activeMainTab === 'llm'
+                ? 'ring-2 ring-blue-500 ring-offset-2 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200'
+                : 'hover:shadow-lg hover:-translate-y-0.5'
+            }`}
+            style={{
+              padding: '16px 20px',
+              marginBottom: '0',
+              background: activeMainTab === 'llm' 
+                ? 'linear-gradient(135deg, #eff6ff 0%, #eef2ff 100%)' 
+                : 'white'
+            }}
+          >
+            <div className="flex items-center justify-center gap-3">
+              <div className="text-2xl">🤖</div>
+              <div className="text-center">
+                <div className={`font-semibold text-sm ${
+                  activeMainTab === 'llm' ? 'text-blue-900' : 'text-slate-900'
+                }`}>
+                  LLM 설정
+                </div>
+                <div className={`text-xs mt-1 ${
+                  activeMainTab === 'llm' ? 'text-blue-600' : 'text-slate-500'
+                }`}>
+                  AI 모델 API 키 관리
+                </div>
+              </div>
+            </div>
+          </button>
+          
+          <button
+            onClick={() => setActiveMainTab('naver')}
+            className={`flex-1 section-card cursor-pointer transition-all duration-200 ${
+              activeMainTab === 'naver'
+                ? 'ring-2 ring-green-500 ring-offset-2 bg-gradient-to-br from-green-50 to-emerald-50 border-green-200'
+                : 'hover:shadow-lg hover:-translate-y-0.5'
+            }`}
+            style={{
+              padding: '16px 20px',
+              marginBottom: '0',
+              background: activeMainTab === 'naver' 
+                ? 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)' 
+                : 'white'
+            }}
+          >
+            <div className="flex items-center justify-center gap-3">
+              <div className="text-2xl">🔍</div>
+              <div className="text-center">
+                <div className={`font-semibold text-sm ${
+                  activeMainTab === 'naver' ? 'text-green-900' : 'text-slate-900'
+                }`}>
+                  네이버 API 설정
+                </div>
+                <div className={`text-xs mt-1 ${
+                  activeMainTab === 'naver' ? 'text-green-600' : 'text-slate-500'
+                }`}>
+                  네이버 검색 API 키 관리
+                </div>
+              </div>
+            </div>
+          </button>
+        </div>
+
+        {/* LLM 설정 탭 */}
+        {activeMainTab === 'llm' && (
+          <div>
+            {/* 탭 네비게이션 */}
+            <div className="flex gap-3 mb-8">
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
@@ -525,9 +766,9 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
 
               {/* 설정 내용 */}
               <div className="section-card" style={{padding: '20px', marginBottom: '24px'}}>
-                <div className="space-y-6">
+                <div>
                   {/* 1단계: 제공자 선택 */}
-                  <div>
+                  <div className="mb-6">
                     <label className="ultra-label" style={{fontSize: '13px', marginBottom: '8px'}}>
                       1단계: AI 제공자 선택
                     </label>
@@ -558,7 +799,7 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
 
                   {/* 2단계: 모델 선택 */}
                   {settings[activeTab].provider && (
-                    <div>
+                    <div className="mb-6">
                       <label className="ultra-label" style={{fontSize: '13px', marginBottom: '8px'}}>
                         2단계: 모델 선택
                       </label>
@@ -585,81 +826,49 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
 
                   {/* 3단계: API 키 입력 */}
                   {settings[activeTab].provider && (
-                    <div>
+                    <div className="mb-6">
                       <label className="ultra-label" style={{fontSize: '13px', marginBottom: '8px'}}>
                         3단계: API 키 입력
                       </label>
-                      <div className="flex gap-3">
+                      <div className="mb-4">
                         <input
                           type="password"
                           value={settings[activeTab].apiKey}
                           onChange={(e) => updateSetting(activeTab, 'apiKey', e.target.value)}
                           placeholder={`${settings[activeTab].provider.toUpperCase()} API 키를 입력하세요`}
-                          className="ultra-input flex-1" style={{padding: '12px 16px', fontSize: '14px'}}
+                          className="ultra-input w-full" style={{padding: '12px 16px', fontSize: '14px'}}
                         />
+                      </div>
+
+                      {/* 테스트 및 적용, 삭제 버튼 */}
+                      <div className="flex justify-end !gap-2 !mt-4 !mb-4">
+                        <button
+                          onClick={() => deleteApiKey(activeTab)}
+                          disabled={testingStatus[activeTab]?.testing || !settings[activeTab].apiKey}
+                          className="ultra-btn px-4 py-2 text-xs"
+                          style={{
+                            background: '#64748b',
+                            borderColor: '#64748b',
+                            color: 'white'
+                          }}
+                        >
+                          <span className="text-sm">🗑️</span>
+                          <span>삭제</span>
+                        </button>
+                        
                         <button
                           onClick={() => testApiKey(activeTab)}
                           disabled={!settings[activeTab].apiKey || testingStatus[activeTab]?.testing || testingStatus[activeTab]?.success}
-                          className={`ultra-btn ${
-                            !settings[activeTab].apiKey || testingStatus[activeTab]?.testing || testingStatus[activeTab]?.success
-                              ? 'opacity-50 cursor-not-allowed'
-                              : ''
-                          } px-6 py-3 text-sm whitespace-nowrap`}
+                          className="ultra-btn px-4 py-2 text-xs"
+                          style={{
+                            background: testingStatus[activeTab]?.success ? '#10b981' : '#10b981',
+                            borderColor: testingStatus[activeTab]?.success ? '#10b981' : '#10b981',
+                            color: 'white'
+                          }}
                         >
+                          <span className="text-sm">{testingStatus[activeTab]?.testing ? '🔄' : testingStatus[activeTab]?.success ? '✅' : '🧪'}</span>
                           <span>{testingStatus[activeTab]?.testing ? '테스트 중...' : testingStatus[activeTab]?.success ? '적용 완료' : '테스트 및 적용'}</span>
-                          <span className="text-lg">{testingStatus[activeTab]?.testing ? '🔄' : testingStatus[activeTab]?.success ? '✅' : '🔧'}</span>
                         </button>
-                        {/* API 키 삭제 버튼 */}
-                        <button
-                            onClick={() => deleteApiKey(activeTab)}
-                            disabled={testingStatus[activeTab]?.testing || !settings[activeTab].apiKey}
-                            className={`text-sm whitespace-nowrap ${
-                              testingStatus[activeTab]?.testing || !settings[activeTab].apiKey
-                                ? 'opacity-50 cursor-not-allowed'
-                                : ''
-                            }`}
-                            style={{
-                              background: (testingStatus[activeTab]?.testing || !settings[activeTab].apiKey) ? '#f1f5f9' : '#ef4444',
-                              color: (testingStatus[activeTab]?.testing || !settings[activeTab].apiKey) ? '#94a3b8' : 'white',
-                              border: (testingStatus[activeTab]?.testing || !settings[activeTab].apiKey) ? '2px solid #e2e8f0' : 'none',
-                              borderRadius: '16px',
-                              padding: '12px 16px',
-                              fontFamily: 'Poppins, sans-serif',
-                              fontWeight: '600',
-                              cursor: (testingStatus[activeTab]?.testing || !settings[activeTab].apiKey) ? 'not-allowed' : 'pointer',
-                              transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)',
-                              outline: 'none',
-                              boxShadow: (testingStatus[activeTab]?.testing || !settings[activeTab].apiKey)
-                                ? '0 0 0 1px rgba(0, 0, 0, 0.03), 0 1px 3px rgba(0, 0, 0, 0.06)'
-                                : '0 0 0 1px rgba(239, 68, 68, 0.1), 0 2px 4px rgba(239, 68, 68, 0.2)',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              minWidth: '80px',
-                              justifyContent: 'center'
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!testingStatus[activeTab]?.testing && settings[activeTab].apiKey) {
-                                const target = e.target as HTMLElement;
-                                target.style.background = '#dc2626';
-                                target.style.color = 'white';
-                                target.style.transform = 'translateY(-1px)';
-                                target.style.boxShadow = '0 0 0 1px rgba(220, 38, 38, 0.1), 0 4px 12px rgba(220, 38, 38, 0.25)';
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (!testingStatus[activeTab]?.testing && settings[activeTab].apiKey) {
-                                const target = e.target as HTMLElement;
-                                target.style.background = '#ef4444';
-                                target.style.color = 'white';
-                                target.style.transform = 'translateY(0)';
-                                target.style.boxShadow = '0 0 0 1px rgba(239, 68, 68, 0.1), 0 2px 4px rgba(239, 68, 68, 0.2)';
-                              }
-                            }}
-                          >
-                            <span>삭제</span>
-                            <span className="text-lg">🗑️</span>
-                          </button>
                       </div>
                       
                       <p className="text-xs text-slate-500 mt-2">
@@ -711,31 +920,204 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
                 </div>
               </div>
 
-        {/* 버튼들 */}
-        <div className="flex justify-end gap-3 pt-4">
-          <button
-            onClick={onClose}
-            className="ultra-btn px-8 py-3 text-base"
-            style={{
-              background: '#64748b',
-              borderColor: '#64748b'
-            }}
-          >
-            <span>닫기</span>
-            <span className="text-lg">✕</span>
-          </button>
-          <button
-            onClick={saveSettings}
-            className="ultra-btn px-8 py-3 text-base"
-            style={{
-              background: '#10b981',
-              borderColor: '#10b981'
-            }}
-          >
-            <span>저장</span>
-            <span className="text-lg">✓</span>
-          </button>
-        </div>
+            {/* 버튼들 */}
+            <div className="flex justify-end gap-2 pt-4">
+              <button
+                onClick={onClose}
+                className="ultra-btn px-4 py-2 text-sm"
+                style={{
+                  background: '#64748b',
+                  borderColor: '#64748b'
+                }}
+              >
+                <span>닫기</span>
+                <span className="text-sm">✕</span>
+              </button>
+              <button
+                onClick={saveSettings}
+                className="ultra-btn px-4 py-2 text-sm"
+                style={{
+                  background: '#10b981',
+                  borderColor: '#10b981'
+                }}
+              >
+                <span>저장</span>
+                <span className="text-sm">✓</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 네이버 API 설정 탭 */}
+        {activeMainTab === 'naver' && (
+          <div>
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-slate-800 mb-2">🔍 네이버 검색 API</h3>
+              <p className="text-slate-600 text-sm">네이버 개발자센터에서 발급받은 API 키를 입력해주세요.</p>
+            </div>
+
+            <div className="section-card" style={{padding: '20px', marginBottom: '24px'}}>
+              <div>
+                {/* Client ID */}
+                <div className="mb-4">
+                  <label className="ultra-label" style={{fontSize: '13px', marginBottom: '8px'}}>
+                    Client ID <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={naverApiKeys.clientId}
+                    onChange={(e) => {
+                      setNaverApiKeys(prev => ({ ...prev, clientId: e.target.value }));
+                      // 변경시 테스트 상태 초기화
+                      setNaverTestingStatus({ testing: false, success: false, message: '' });
+                    }}
+                    placeholder="네이버 개발자센터에서 발급받은 Client ID를 입력하세요"
+                    className="ultra-input w-full" style={{padding: '12px 16px', fontSize: '14px'}}
+                  />
+                </div>
+
+                {/* Client Secret */}
+                <div className="mb-4">
+                  <label className="ultra-label" style={{fontSize: '13px', marginBottom: '8px'}}>
+                    Client Secret <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={naverApiKeys.clientSecret}
+                    onChange={(e) => {
+                      setNaverApiKeys(prev => ({ ...prev, clientSecret: e.target.value }));
+                      // 변경시 테스트 상태 초기화
+                      setNaverTestingStatus({ testing: false, success: false, message: '' });
+                    }}
+                    placeholder="네이버 개발자센터에서 발급받은 Client Secret을 입력하세요"
+                    className="ultra-input w-full" style={{padding: '12px 16px', fontSize: '14px'}}
+                  />
+                </div>
+
+                {/* 테스트 및 적용, 삭제 버튼 */}
+                <div className="flex justify-end !gap-2 !mt-4 !mb-4">
+                  <button
+                    onClick={deleteNaverApi}
+                    disabled={naverTestingStatus.testing}
+                    className="ultra-btn px-4 py-2 text-xs"
+                    style={{
+                      background: '#64748b',
+                      borderColor: '#64748b',
+                      color: 'white'
+                    }}
+                  >
+                    <span className="text-sm">🗑️</span>
+                    <span>삭제</span>
+                  </button>
+                  
+                  <button
+                    onClick={testAndApplyNaverApi}
+                    disabled={naverTestingStatus.testing || !naverApiKeys.clientId.trim() || !naverApiKeys.clientSecret.trim()}
+                    className="ultra-btn px-4 py-2 text-xs"
+                    style={{
+                      background: '#10b981',
+                      borderColor: '#10b981',
+                      color: 'white'
+                    }}
+                  >
+                    <span className="text-sm">{naverTestingStatus.testing ? '🔄' : '🧪'}</span>
+                    <span>{naverTestingStatus.testing ? '테스트 중...' : '테스트 및 적용'}</span>
+                  </button>
+                </div>
+
+                {/* 테스트 결과 */}
+                {naverTestingStatus.message && (
+                  <div className={`p-4 rounded-lg ${
+                    naverTestingStatus.success 
+                      ? 'bg-green-50 border border-green-200' 
+                      : naverTestingStatus.testing
+                      ? 'bg-blue-50 border border-blue-200'
+                      : 'bg-red-50 border border-red-200'
+                  }`}>
+                    <p className={`text-sm font-medium ${
+                      naverTestingStatus.success 
+                        ? 'text-green-800' 
+                        : naverTestingStatus.testing
+                        ? 'text-blue-800'
+                        : 'text-red-800'
+                    }`}>
+                      {naverTestingStatus.message}
+                    </p>
+                  </div>
+                )}
+
+                {/* 현재 설정 상태 */}
+                {naverTestingStatus.success && (
+                  <div className="p-4 bg-slate-50 rounded-xl">
+                    <h4 className="font-semibold text-sm text-slate-900 mb-3">현재 적용된 네이버 API 설정</h4>
+                    <div className="grid grid-cols-3 gap-4 text-xs">
+                      <div>
+                        <span className="text-slate-600 block mb-1">Client ID</span>
+                        <span className="font-semibold">{naverApiKeys.clientId ? '설정됨' : '미설정'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-600 block mb-1">Client Secret</span>
+                        <span className="font-semibold">{naverApiKeys.clientSecret ? '설정됨' : '미설정'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-600 block mb-1">연결 상태</span>
+                        <div className="flex items-center gap-1 font-semibold text-green-600">
+                          ✅ 연결됨
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* API 키 발급 가이드 */}
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h4 className="font-semibold text-green-800 mb-2">📝 API 키 발급 방법</h4>
+                  <ol className="text-sm text-green-700 space-y-1">
+                    <li>1. <a href="https://developers.naver.com" target="_blank" className="underline">네이버 개발자센터</a> 접속</li>
+                    <li>2. 애플리케이션 등록 → 검색 API 선택</li>
+                    <li>3. Client ID와 Client Secret을 복사해서 위에 입력</li>
+                    <li>4. "테스트 및 적용" 버튼 클릭</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            {/* 버튼들 */}
+            <div className="flex justify-end gap-2 pt-4">
+              <button
+                onClick={onClose}
+                className="ultra-btn px-4 py-2 text-sm"
+                style={{
+                  background: '#64748b',
+                  borderColor: '#64748b'
+                }}
+              >
+                <span>닫기</span>
+                <span className="text-sm">✕</span>
+              </button>
+              <button
+                onClick={async () => {
+                  // 네이버 API 설정 저장 (별도 로직 필요시)
+                  setDialog({
+                    isOpen: true,
+                    type: 'success',
+                    title: '저장 완료',
+                    message: '네이버 API 설정이 저장되었습니다.',
+                    onConfirm: () => onClose()
+                  });
+                }}
+                className="ultra-btn px-4 py-2 text-sm"
+                style={{
+                  background: '#10b981',
+                  borderColor: '#10b981'
+                }}
+              >
+                <span>저장</span>
+                <span className="text-sm">✓</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 다이얼로그 */}

@@ -179,26 +179,28 @@ html, body, #root {
     0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
-/* 슈퍼 모던 버튼 */
+/* 슈퍼 모던 버튼 - 베이스 스타일만 */
 .ultra-btn {
-  background: #2563eb;
-  color: white;
   border: none;
-  border-radius: 16px;
-  padding: 16px 32px;
+  border-radius: 0.75rem; /* 12px */
   font-family: 'Poppins', sans-serif;
   font-weight: 600;
-  font-size: 16px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  
+  /* 기본값 - Tailwind로 오버라이드 가능 */
+  background: #2563eb;
+  color: white;
+  padding: 0.5rem 1rem; /* 8px 16px */
+  font-size: 0.875rem; /* 14px */
+  gap: 0.375rem; /* 6px */
   box-shadow: 
     0 0 0 1px rgba(37, 99, 235, 0.1),
     0 2px 4px rgba(37, 99, 235, 0.2);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  position: relative;
-  overflow: hidden;
 }
 
 .ultra-btn:hover:not(:disabled) {
