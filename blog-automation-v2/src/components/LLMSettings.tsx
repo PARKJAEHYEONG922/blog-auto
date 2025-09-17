@@ -502,8 +502,8 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
           message: '✅ 네이버 API 연결에 성공했습니다!'
         });
         
-        // 테스트 성공시 자동으로 저장
-        await saveNaverApiToStorage();
+        // 테스트 성공시 자동으로 저장 (success: true로 명시적으로 전달)
+        await saveNaverApiToStorageWithStatus(true);
       } else {
         const errorText = await response.text();
         setNaverTestingStatus({
@@ -521,8 +521,8 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
     }
   };
 
-  // 네이버 API 설정 저장 함수 (내부용)
-  const saveNaverApiToStorage = async () => {
+  // 네이버 API 설정 저장 함수 (성공 상태를 명시적으로 전달)
+  const saveNaverApiToStorageWithStatus = async (isValid: boolean) => {
     const { clientId, clientSecret } = naverApiKeys;
     
     try {
@@ -530,7 +530,7 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
       const result = await (window as any).electronAPI.saveNaverApiSettings({
         clientId: clientId.trim(),
         clientSecret: clientSecret.trim(),
-        isValid: naverTestingStatus.success
+        isValid: isValid
       });
 
       if (result.success) {
@@ -552,6 +552,11 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
         message: `❌ 저장 오류: ${error.message}`
       });
     }
+  };
+
+  // 네이버 API 설정 저장 함수 (내부용 - 기존 호환성)
+  const saveNaverApiToStorage = async () => {
+    await saveNaverApiToStorageWithStatus(naverTestingStatus.success);
   };
 
   // 네이버 API 설정 삭제 함수
