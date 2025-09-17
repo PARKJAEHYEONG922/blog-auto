@@ -7,6 +7,7 @@ export interface TitleGenerationRequest {
   contentType: string;
   tone: string;
   customPrompt?: string;
+  blogDescription?: string;
   mode: 'fast' | 'accurate';
 }
 
@@ -113,18 +114,18 @@ export class TitleGenerationEngine {
     request: TitleGenerationRequest,
     trendData?: any
   ): Promise<string[]> {
-    const informationClient = LLMClientFactory.getInformationClient();
-
-    // 프롬프트 구성
-    const systemPrompt = this.buildSystemPrompt(request);
-    const userPrompt = this.buildUserPrompt(request, trendData);
-
-    const messages: LLMMessage[] = [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ];
-
     try {
+      const informationClient = LLMClientFactory.getInformationClient();
+
+      // 프롬프트 구성
+      const systemPrompt = this.buildSystemPrompt(request);
+      const userPrompt = this.buildUserPrompt(request, trendData);
+
+      const messages: LLMMessage[] = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ];
+
       const response = await informationClient.generateText(messages);
       
       // 응답에서 제목 목록 추출
@@ -133,8 +134,13 @@ export class TitleGenerationEngine {
       return titles;
     } catch (error) {
       console.error('LLM 제목 생성 실패:', error);
-      // 폴백: 기본 제목들 반환
-      return this.generateFallbackTitles(request.keyword);
+      
+      // 정보처리 LLM이 설정되지 않은 경우의 구체적인 오류 메시지
+      if (error.message === 'Information LLM client not configured') {
+        throw new Error('정보처리 AI가 설정되지 않았습니다. API 설정에서 정보처리 LLM을 설정해주세요.');
+      }
+      
+      throw error;
     }
   }
 
@@ -147,44 +153,84 @@ export class TitleGenerationEngine {
     };
 
     const contentTypeInfo: { [key: string]: string } = {
-      'info': '정보 제공형 콘텐츠',
-      'review': '후기 및 리뷰형 콘텐츠',
-      'compare': '비교 분석형 콘텐츠',
-      'howto': '노하우 및 가이드형 콘텐츠'
+      'info': '정보/가이드형',
+      'review': '후기/리뷰형',
+      'compare': '비교/추천형',
+      'howto': '노하우형'
     };
 
-    const toneInfo: { [key: string]: string } = {
-      'formal': '정중하고 전문적인 존댓말',
-      'casual': '친근하고 편안한 반말',
-      'friendly': '따뜻하면서도 예의바른 존댓말'
+
+    // 컨텐츠 유형별 지침
+    const contentGuidelines: { [key: string]: any } = {
+      'info': {
+        approach: '정확하고 풍부한 정보를 체계적으로 제공하여 검색자의 궁금증 완전 해결',
+        keywords: ['완벽 정리', '총정리', '핵심 포인트', '단계별 가이드', '정확한 정보'],
+        focusAreas: ['체계적 구조와 소제목', '실용적 가이드 제공', '구체적 실행 방법']
+      },
+      'review': {
+        approach: '개인 경험과 솔직한 후기를 중심으로 \'유일무이한 콘텐츠\' 작성',
+        keywords: ['직접 써봤어요', '솔직 후기', '개인적으로', '실제로 사용해보니', '추천하는 이유'],
+        focusAreas: ['개인 경험과 솔직한 후기', '장단점 균형 제시', '구체적 사용 데이터']
+      },
+      'compare': {
+        approach: '체계적 비교분석으로 독자의 선택 고민을 완전히 해결',
+        keywords: ['VS 비교', 'Best 5', '장단점', '상황별 추천', '가성비'],
+        focusAreas: ['객관적 비교 기준', '상황별 맞춤 추천', '명확한 선택 가이드']
+      },
+      'howto': {
+        approach: '실용적 방법론과 단계별 가이드 제공',
+        keywords: ['노하우', '방법', '가이드', '팁', '실전'],
+        focusAreas: ['단계별 실행 방법', '실용적 팁 제공', '구체적 예시']
+      }
     };
 
-    return `당신은 블로그 제목 생성 전문가입니다.
+    const guideline = contentGuidelines[request.contentType] || contentGuidelines['info'];
 
-플랫폼: ${platformInfo[request.platform] || request.platform}
-콘텐츠 타입: ${contentTypeInfo[request.contentType] || request.contentType}
-말투: ${toneInfo[request.tone] || request.tone}
+    return `${platformInfo[request.platform] || request.platform}에 최적화된 '${contentTypeInfo[request.contentType] || request.contentType}' 스타일의 제목 10개를 추천해주세요.
 
-다음 규칙을 따라 제목을 생성하세요:
-1. 30-40자 내외의 길이
-2. 클릭률을 높이는 매력적인 키워드 포함
-3. SEO에 최적화된 구조
-4. 해당 플랫폼의 특성에 맞는 스타일
-5. 정확히 5개의 제목을 생성
+**발행 플랫폼**: ${platformInfo[request.platform] || request.platform}
+**콘텐츠 타입**: ${contentTypeInfo[request.contentType] || request.contentType}
+
+**${contentTypeInfo[request.contentType] || request.contentType} 특징**:
+- 접근법: ${guideline.approach}
+- 핵심 키워드: ${guideline.keywords.join(', ')}
+- 중점 영역: ${guideline.focusAreas.join(', ')}
+
+**제목 생성 규칙**:
+1. 메인키워드를 자연스럽게 포함
+2. 클릭 유도와 궁금증 자극
+3. 30-60자 내외 권장
+4. ${contentTypeInfo[request.contentType] || request.contentType}의 특성 반영
+5. ${platformInfo[request.platform] || request.platform} SEO 최적화
+6. **이모티콘 절대 사용 금지** (🚫, ✅, 💯 등 모든 이모티콘 금지. 순수 한글/영문 텍스트만 사용)
+7. 구체적 년도 표기 금지 (2024, 2025 등 특정 년도 사용 금지. "최신", "현재" 등으로 대체)
 
 제목은 다음 형식으로 응답하세요:
 1. [제목1]
 2. [제목2]
 3. [제목3]
 4. [제목4]
-5. [제목5]`;
+5. [제목5]
+6. [제목6]
+7. [제목7]
+8. [제목8]
+9. [제목9]
+10. [제목10]`;
   }
 
   private buildUserPrompt(request: TitleGenerationRequest, trendData?: any): string {
-    let prompt = `키워드: "${request.keyword}"에 대한 ${request.contentType} 블로그 제목을 생성해주세요.`;
+    let prompt = `**메인키워드**: ${request.keyword}`;
+
+    // 블로그 설명 추가
+    if (request.blogDescription) {
+      prompt = `# AI 역할 설정
+${request.blogDescription}
+
+${prompt}`;
+    }
 
     if (request.customPrompt) {
-      prompt += `\n\n추가 요청사항: ${request.customPrompt}`;
+      prompt += `\n\n**추가 요청사항**: ${request.customPrompt}`;
     }
 
     if (trendData && request.mode === 'accurate') {
@@ -221,21 +267,7 @@ export class TitleGenerationEngine {
       }
     }
 
-    // 5개가 안 되면 기본 제목으로 채우기
-    while (titles.length < 5) {
-      titles.push(`기본 제목 ${titles.length + 1}`);
-    }
-
-    return titles.slice(0, 5);
+    return titles.slice(0, 10);
   }
 
-  private generateFallbackTitles(keyword: string): string[] {
-    return [
-      `${keyword} 완벽 가이드 - 초보자도 쉽게 따라하는 방법`,
-      `${keyword} 추천 TOP 10 - 2024년 최신 트렌드`,
-      `${keyword} 후기 솔직 리뷰 - 장단점 총정리`,
-      `${keyword} 비교 분석 - 어떤 것을 선택해야 할까?`,
-      `${keyword} 노하우 공유 - 전문가의 실전 팁`
-    ];
-  }
 }

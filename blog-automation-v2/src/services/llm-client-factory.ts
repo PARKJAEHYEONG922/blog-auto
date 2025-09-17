@@ -32,49 +32,112 @@ export abstract class BaseLLMClient {
 
 export class OpenAIClient extends BaseLLMClient {
   async generateText(messages: LLMMessage[]): Promise<LLMResponse> {
-    // OpenAI API 호출 시뮬레이션
-    
-    // 실제로는 OpenAI SDK 사용
-    const mockResponse = {
-      content: `[${this.config.model}] 생성된 응답입니다.`,
-      usage: {
-        promptTokens: 100,
-        completionTokens: 200,
-        totalTokens: 300
-      }
-    };
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.config.apiKey}`
+        },
+        body: JSON.stringify({
+          model: this.config.model,
+          messages: messages.map(msg => ({
+            role: msg.role,
+            content: msg.content
+          })),
+          temperature: 0.7,
+          max_tokens: 2000
+        })
+      });
 
-    return new Promise(resolve => {
-      setTimeout(() => resolve(mockResponse), 1000);
-    });
+      if (!response.ok) {
+        throw new Error(`OpenAI API 오류: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      return {
+        content: data.choices[0]?.message?.content || '',
+        usage: {
+          promptTokens: data.usage?.prompt_tokens || 0,
+          completionTokens: data.usage?.completion_tokens || 0,
+          totalTokens: data.usage?.total_tokens || 0
+        }
+      };
+    } catch (error) {
+      console.error('OpenAI API 호출 실패:', error);
+      throw error;
+    }
   }
 
   async generateImage(prompt: string): Promise<string> {
-    
-    // 실제로는 OpenAI DALL-E API 호출
-    return new Promise(resolve => {
-      setTimeout(() => {
-        resolve(`https://via.placeholder.com/512x512?text=${encodeURIComponent(prompt)}`);
-      }, 2000);
-    });
+    try {
+      const response = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.config.apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'dall-e-3',
+          prompt: prompt,
+          n: 1,
+          size: '1024x1024'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenAI Image API 오류: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.data[0]?.url || '';
+    } catch (error) {
+      console.error('OpenAI Image API 호출 실패:', error);
+      throw error;
+    }
   }
 }
 
 export class ClaudeClient extends BaseLLMClient {
   async generateText(messages: LLMMessage[]): Promise<LLMResponse> {
-    
-    const mockResponse = {
-      content: `[${this.config.model}] Claude가 생성한 고품질 응답입니다.`,
-      usage: {
-        promptTokens: 120,
-        completionTokens: 250,
-        totalTokens: 370
-      }
-    };
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.config.apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: this.config.model,
+          max_tokens: 6000,
+          temperature: 0.7,
+          messages: messages.map(msg => ({
+            role: msg.role === 'system' ? 'user' : msg.role,
+            content: msg.role === 'system' ? `System: ${msg.content}` : msg.content
+          }))
+        })
+      });
 
-    return new Promise(resolve => {
-      setTimeout(() => resolve(mockResponse), 1500);
-    });
+      if (!response.ok) {
+        throw new Error(`Claude API 오류: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      return {
+        content: data.content[0]?.text || '',
+        usage: {
+          promptTokens: data.usage?.input_tokens || 0,
+          completionTokens: data.usage?.output_tokens || 0,
+          totalTokens: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0)
+        }
+      };
+    } catch (error) {
+      console.error('Claude API 호출 실패:', error);
+      throw error;
+    }
   }
 
   async generateImage(prompt: string): Promise<string> {
@@ -84,28 +147,60 @@ export class ClaudeClient extends BaseLLMClient {
 
 export class GeminiClient extends BaseLLMClient {
   async generateText(messages: LLMMessage[]): Promise<LLMResponse> {
-    
-    const mockResponse = {
-      content: `[${this.config.model}] Gemini가 생성한 빠른 응답입니다.`,
-      usage: {
-        promptTokens: 80,
-        completionTokens: 180,
-        totalTokens: 260
+    try {
+      // 메시지를 Gemini 형식으로 변환
+      let textContent = '';
+      for (const message of messages) {
+        if (message.role === 'system') {
+          textContent += `System: ${message.content}\n\n`;
+        } else if (message.role === 'user') {
+          textContent += `User: ${message.content}`;
+        }
       }
-    };
 
-    return new Promise(resolve => {
-      setTimeout(() => resolve(mockResponse), 800);
-    });
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${this.config.model}:generateContent?key=${this.config.apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: textContent
+              }]
+            }],
+            generationConfig: {
+              maxOutputTokens: 8000,
+              temperature: 0.7
+            }
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Gemini API 오류: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      return {
+        content: data.candidates[0]?.content?.parts[0]?.text || '',
+        usage: {
+          promptTokens: data.usageMetadata?.promptTokenCount || 0,
+          completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
+          totalTokens: data.usageMetadata?.totalTokenCount || 0
+        }
+      };
+    } catch (error) {
+      console.error('Gemini API 호출 실패:', error);
+      throw error;
+    }
   }
 
   async generateImage(prompt: string): Promise<string> {
-    
-    return new Promise(resolve => {
-      setTimeout(() => {
-        resolve(`https://via.placeholder.com/512x512?text=Gemini+${encodeURIComponent(prompt)}`);
-      }, 1500);
-    });
+    throw new Error('Gemini는 현재 이미지 생성을 지원하지 않습니다.');
   }
 }
 
@@ -161,13 +256,59 @@ export class LLMClientFactory {
   }
 
   // 기본 설정 로드
-  static loadDefaultSettings(): void {
+  static async loadDefaultSettings(): Promise<void> {
+    try {
+      // Electron API가 있는지 확인
+      if (!(window as any).electronAPI || typeof (window as any).electronAPI.loadSettings !== 'function') {
+        console.warn('Electron API를 사용할 수 없어 기본값을 사용합니다.');
+        this.loadDefaultSettingsFromLocalStorage();
+        return;
+      }
+
+      // Electron API를 통해 설정 로드
+      const savedData = await (window as any).electronAPI.loadSettings();
+      console.log('저장된 LLM 설정:', savedData);
+      
+      if (savedData && savedData.settings) {
+        const settings = savedData.settings;
+        const testingStatus = savedData.testingStatus || {};
+        console.log('파싱된 설정:', settings);
+        console.log('테스트 상태:', testingStatus);
+        
+        // 테스트가 성공한 설정만 적용
+        if (settings.information?.apiKey && testingStatus.information?.success) {
+          console.log('정보요약 AI 설정 로드:', settings.information);
+          this.setInformationClient(settings.information);
+        }
+        if (settings.writing?.apiKey && testingStatus.writing?.success) {
+          console.log('글쓰기 AI 설정 로드:', settings.writing);
+          this.setWritingClient(settings.writing);
+        }
+        if (settings.image?.apiKey && testingStatus.image?.success) {
+          console.log('이미지 AI 설정 로드:', settings.image);
+          this.setImageClient(settings.image);
+        }
+      } else {
+        console.log('저장된 설정이 없어 기본값을 사용합니다.');
+        this.loadDefaultValues();
+      }
+    } catch (error) {
+      console.error('LLM 설정 로드 실패:', error);
+      this.loadDefaultValues();
+    }
+  }
+
+  // localStorage에서 설정 로드 (웹 환경용 백업)
+  private static loadDefaultSettingsFromLocalStorage(): void {
     try {
       const savedSettings = localStorage.getItem('llm-settings');
+      console.log('localStorage에서 LLM 설정 로드:', savedSettings);
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
+        console.log('파싱된 설정:', settings);
         
         if (settings.information?.apiKey) {
+          console.log('정보요약 AI 설정 로드:', settings.information);
           this.setInformationClient(settings.information);
         }
         if (settings.writing?.apiKey) {
@@ -177,25 +318,35 @@ export class LLMClientFactory {
           this.setImageClient(settings.image);
         }
       } else {
-        // 기본값 설정 (무료 조합)
-        this.setInformationClient({
-          provider: 'gemini',
-          model: 'gemini-2.0-flash',
-          apiKey: 'demo' // 실제로는 사용자가 입력
-        });
-        this.setWritingClient({
-          provider: 'gemini',
-          model: 'gemini-2.5-flash-free',
-          apiKey: 'demo'
-        });
-        this.setImageClient({
-          provider: 'gemini',
-          model: 'gemini-2.5-flash-image',
-          apiKey: 'demo'
-        });
+        this.loadDefaultValues();
       }
     } catch (error) {
-      console.error('LLM 설정 로드 실패:', error);
+      console.error('localStorage LLM 설정 로드 실패:', error);
+      this.loadDefaultValues();
     }
+  }
+
+  // 기본값 설정
+  private static loadDefaultValues(): void {
+    console.log('기본값 설정을 로드합니다.');
+    // 기본값은 설정하지 않음 - 사용자가 직접 설정해야 함
+    // 필요시 아래 주석을 해제하여 기본값 설정 가능
+    /*
+    this.setInformationClient({
+      provider: 'gemini',
+      model: 'gemini-2.0-flash',
+      apiKey: 'demo'
+    });
+    this.setWritingClient({
+      provider: 'gemini',
+      model: 'gemini-2.5-flash',
+      apiKey: 'demo'
+    });
+    this.setImageClient({
+      provider: 'gemini',
+      model: 'gemini-2.5-flash-image',
+      apiKey: 'demo'
+    });
+    */
   }
 }

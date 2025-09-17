@@ -46,7 +46,15 @@ const App: React.FC = () => {
   // 앱 초기화
   useEffect(() => {
     // LLM 설정 로드
-    LLMClientFactory.loadDefaultSettings();
+    const loadSettings = async () => {
+      try {
+        await LLMClientFactory.loadDefaultSettings();
+        console.log('LLM 설정 로드 완료');
+      } catch (error) {
+        console.error('LLM 설정 로드 중 오류:', error);
+      }
+    };
+    loadSettings();
   }, []);
 
   const updateWorkflowData = (updates: Partial<WorkflowData>) => {
@@ -204,7 +212,7 @@ const App: React.FC = () => {
                   }}
                 >
                   <span>⚙️</span>
-                  <span>설정</span>
+                  <span>API 설정</span>
                 </button>
               </div>
             </div>

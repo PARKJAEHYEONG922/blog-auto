@@ -18,23 +18,23 @@ interface LLMSettings {
 }
 
 interface ProviderApiKeys {
-  anthropic: string;
+  claude: string;
   openai: string;
-  google: string;
+  gemini: string;
 }
 
 const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
   // 제공자별 API 키 저장소
   const [providerApiKeys, setProviderApiKeys] = useState<ProviderApiKeys>({
-    anthropic: '',
+    claude: '',
     openai: '',
-    google: ''
+    gemini: ''
   });
 
   // LLM 설정 (UI에서 편집 중인 설정)
   const [settings, setSettings] = useState<LLMSettings>({
-    information: { provider: 'google', model: 'gemini-2.0-flash', apiKey: '' },
-    writing: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: '' },
+    information: { provider: 'gemini', model: 'gemini-2.0-flash', apiKey: '' },
+    writing: { provider: 'claude', model: 'claude-sonnet-4-20250514', apiKey: '' },
     image: { provider: 'openai', model: 'gpt-image-1', apiKey: '' }
   });
 
@@ -70,9 +70,9 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
         
         // 제공자별 API 키 추출
         const extractedKeys: ProviderApiKeys = {
-          anthropic: '',
+          claude: '',
           openai: '',
-          google: ''
+          gemini: ''
         };
         
         // 모든 탭에서 API 키 수집
@@ -134,13 +134,13 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
   }>({});
 
   const providers = [
-    { id: 'anthropic', name: 'Anthropic', icon: '🟠', color: 'orange' },
+    { id: 'claude', name: 'Claude', icon: '🟠', color: 'orange' },
     { id: 'openai', name: 'OpenAI', icon: '🔵', color: 'blue' },
-    { id: 'google', name: 'Google', icon: '🟢', color: 'green' }
+    { id: 'gemini', name: 'Gemini', icon: '🟢', color: 'green' }
   ];
 
   const modelsByProvider = {
-    anthropic: {
+    claude: {
       text: [
         { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', description: '최신 고품질 모델', tier: 'premium' },
         { id: 'claude-opus-4-1-20250805', name: 'Claude Opus 4.1', description: '최고품질 모델', tier: 'premium' },
@@ -157,7 +157,7 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
         { id: 'gpt-image-1', name: 'GPT Image 1', description: '최고품질 이미지 생성', tier: 'enterprise' }
       ]
     },
-    google: {
+    gemini: {
       text: [
         { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: '최고성능 모델', tier: 'premium' },
         { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', description: '경제적 모델', tier: 'basic' }
@@ -543,7 +543,7 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
                       {providers
                         .filter(provider => {
                           // 이미지 탭에서는 Claude 제외 (이미지 생성 불가)
-                          if (activeTab === 'image' && provider.id === 'anthropic') {
+                          if (activeTab === 'image' && provider.id === 'claude') {
                             return false;
                           }
                           return true;

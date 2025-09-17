@@ -87,7 +87,12 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
 
   const generateTitles = async (mode: 'fast' | 'accurate') => {
     if (!keyword.trim()) {
-      alert('키워드를 입력해주세요.');
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '키워드 필요',
+        message: '키워드를 입력해주세요.'
+      });
       return;
     }
 
@@ -103,6 +108,7 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
         contentType,
         tone,
         customPrompt: customPrompt.trim(),
+        blogDescription: blogDescription.trim(),
         mode
       });
 
@@ -110,17 +116,12 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
       console.log('제목 생성 메타데이터:', result.metadata);
     } catch (error) {
       console.error('제목 생성 오류:', error);
-      
-      // 폴백: 기본 제목들
-      const fallbackTitles = [
-        `${keyword} 완벽 가이드 - 초보자도 쉽게 따라하는 방법`,
-        `${keyword} 추천 TOP 10 - 2024년 최신 트렌드`,
-        `${keyword} 후기 솔직 리뷰 - 장단점 총정리`,
-        `${keyword} 비교 분석 - 어떤 것을 선택해야 할까?`,
-        `${keyword} 노하우 공유 - 전문가의 실전 팁`
-      ];
-      setGeneratedTitles(fallbackTitles);
-      alert('제목 생성 중 오류가 발생하여 기본 제목을 표시합니다.');
+      setDialog({
+        isOpen: true,
+        type: 'error',
+        title: '제목 생성 오류',
+        message: `제목 생성 중 오류가 발생했습니다:\n${error.message || error}`
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -216,7 +217,12 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
 
   const handleNext = () => {
     if (!platform || !keyword.trim() || !selectedTitle) {
-      alert('필수 항목을 모두 입력해주세요.');
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '필수 항목 누락',
+        message: '발행 플랫폼, 메인 키워드, 선택된 제목을 모두 입력해주세요.'
+      });
       return;
     }
 
@@ -476,41 +482,29 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
                   <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
                   <h3 className="text-base font-semibold text-slate-800">생성된 제목 중 하나를 선택하세요</h3>
                 </div>
-                <div className="space-y-3">
-                  {generatedTitles.map((title, index) => (
-                    <div
-                      key={index}
-                      onClick={() => setSelectedTitle(title)}
-                      className={`title-selection-card ${
-                        selectedTitle === title ? 'selected' : ''
-                      }`}
-                      style={{padding: '16px'}}
-                    >
-                      <div className="flex items-start gap-4">
-                        <div className={`radio-dot mt-1 ${
-                          selectedTitle === title ? 'selected' : ''
-                        }`} style={{width: '16px', height: '16px'}}>
-                        </div>
-                        <div className="flex-1">
-                          <div className={`text-base font-semibold leading-relaxed mb-2 ${
-                            selectedTitle === title ? 'text-blue-900' : 'text-slate-900'
-                          }`}>
-                            {title}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="px-2 py-0.5 bg-slate-100 rounded-full">
-                              <span className="text-xs font-medium text-slate-700">
-                                제목 {index + 1}
-                              </span>
-                            </div>
-                            <div className="text-xs text-slate-500 font-medium">
-                              AI 추천
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                <div>
+                  <label className="ultra-label" style={{fontSize: '13px', marginBottom: '6px'}}>
+                    제목 선택 <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={selectedTitle}
+                    onChange={(e) => setSelectedTitle(e.target.value)}
+                    className="ultra-select" style={{padding: '10px 16px', fontSize: '14px'}}
+                  >
+                    <option value="">생성된 제목 중 하나를 선택해주세요</option>
+                    {generatedTitles.map((title, index) => (
+                      <option key={index} value={title}>
+                        📝 {title}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedTitle && (
+                    <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200">
+                      <p className="text-emerald-800 text-sm">
+                        <span className="font-semibold">선택된 제목:</span> {selectedTitle}
+                      </p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             )}

@@ -153,10 +153,10 @@ class MCPMainService {
       try {
         let response;
         
-        if (provider === 'google') {
-          // Google Gemini: 모델 목록 조회 (무료)
+        if (provider === 'gemini') {
+          // Gemini: 모델 목록 조회 (무료) - 레거시 방식 유지
           const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-          console.log(`🌐 Google API 호출: ${url.replace(apiKey, '***')}`);
+          console.log(`🌐 Gemini API 호출: ${url.replace(apiKey, '***')}`);
           
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -185,74 +185,28 @@ class MCPMainService {
           });
           clearTimeout(timeoutId);
           
-        } else if (provider === 'anthropic') {
-          // Claude: usage 조회 시도 (무료)
-          console.log(`🌐 Claude API 호출: https://api.anthropic.com/v1/usage`);
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
-            
-            response = await fetch('https://api.anthropic.com/v1/usage', {
-              method: 'GET',
-              headers: {
-                'x-api-key': apiKey,
-                'anthropic-version': '2023-06-01',
-                'content-type': 'application/json'
-              },
-              signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            
-            // 401이면 API 키 오류
-            if (response.status === 401) {
-              return { success: false, message: 'API 키가 유효하지 않습니다.' };
-            }
-            
-            // 404나 다른 오류면 메시지 API로 재시도
-            if (response.status !== 200) {
-              console.log('Usage API 실패, 메시지 API로 재시도...');
-              
-              const retryController = new AbortController();
-              const retryTimeoutId = setTimeout(() => retryController.abort(), 15000);
-              
-              response = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST',
-                headers: {
-                  'x-api-key': apiKey,
-                  'anthropic-version': '2023-06-01',
-                  'content-type': 'application/json'
-                },
-                body: JSON.stringify({
-                  model: 'claude-3-5-haiku-20241022',
-                  max_tokens: 1,
-                  messages: [{ role: 'user', content: 'Hi' }]
-                }),
-                signal: retryController.signal
-              });
-              clearTimeout(retryTimeoutId);
-            }
-          } catch (networkError) {
-            console.log('네트워크 오류, 메시지 API로 재시도...');
-            
-            const fallbackController = new AbortController();
-            const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 15000);
-            
-            response = await fetch('https://api.anthropic.com/v1/messages', {
-              method: 'POST',
-              headers: {
-                'x-api-key': apiKey,
-                'anthropic-version': '2023-06-01',
-                'content-type': 'application/json'
-              },
-              body: JSON.stringify({
-                model: 'claude-3-5-haiku-20241022',
-                max_tokens: 1,
-                messages: [{ role: 'user', content: 'Hi' }]
-              }),
-              signal: fallbackController.signal
-            });
-            clearTimeout(fallbackTimeoutId);
-          }
+        } else if (provider === 'claude') {
+          // Claude: 간단한 메시지 테스트
+          console.log(`🌐 Claude API 호출: https://api.anthropic.com/v1/messages`);
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+          
+          response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01',
+              'content-type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: 'claude-3-5-haiku-20241022',
+              max_tokens: 1,
+              messages: [{ role: 'user', content: 'Hi' }]
+            }),
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
         } else {
           return { success: false, message: '지원되지 않는 AI 제공자입니다.' };
         }
@@ -261,18 +215,18 @@ class MCPMainService {
         console.log(`📡 ${provider} API 응답:`, response.status, response.statusText);
         
         if (response.status === 200) {
-          if (provider === 'google') {
+          if (provider === 'gemini') {
             try {
               const data = await response.json();
-              console.log(`🔍 Google 응답 데이터:`, data);
+              console.log(`🔍 Gemini 응답 데이터:`, data);
               const models = data.models || [];
-              console.log(`✅ Google 모델 ${models.length}개 발견`);
+              console.log(`✅ Gemini 모델 ${models.length}개 발견`);
               return { 
                 success: true, 
                 message: `API 연결 성공 (사용 가능한 모델: ${models.length}개)` 
               };
             } catch (jsonError) {
-              console.error(`❌ Google JSON 파싱 오류:`, jsonError);
+              console.error(`❌ Gemini JSON 파싱 오류:`, jsonError);
               return { success: false, message: 'API 응답 파싱 오류' };
             }
           } else if (provider === 'openai') {
@@ -290,9 +244,20 @@ class MCPMainService {
               console.error(`❌ OpenAI JSON 파싱 오류:`, jsonError);
               return { success: false, message: 'API 응답 파싱 오류' };
             }
-          } else if (provider === 'anthropic') {
-            console.log(`✅ Claude API 연결 성공`);
-            return { success: true, message: 'API 연결 성공' };
+          } else if (provider === 'claude') {
+            try {
+              const data = await response.json();
+              console.log(`🔍 Claude 응답 데이터:`, data);
+              if (data.content && data.content.length > 0) {
+                console.log(`✅ Claude API 연결 성공`);
+                return { success: true, message: 'API 연결 성공' };
+              } else {
+                return { success: false, message: 'Claude API 응답 형식 오류' };
+              }
+            } catch (jsonError) {
+              console.error(`❌ Claude JSON 파싱 오류:`, jsonError);
+              return { success: false, message: 'API 응답 파싱 오류' };
+            }
           }
         } else {
           // 오류 응답의 상세 내용도 확인
@@ -390,8 +355,8 @@ class MCPMainService {
         // 기본 설정 반환 (새로운 형식)
         return {
           settings: {
-            information: { provider: 'google', model: 'gemini-2.0-flash', apiKey: '' },
-            writing: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', apiKey: '' },
+            information: { provider: 'gemini', model: 'gemini-2.0-flash', apiKey: '' },
+            writing: { provider: 'claude', model: 'claude-sonnet-4-20250514', apiKey: '' },
             image: { provider: 'openai', model: 'gpt-image-1', apiKey: '' }
           },
           testingStatus: {}
