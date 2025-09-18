@@ -260,9 +260,9 @@ ${titlesText}
       `${index + 1}. ${blog.title}`
     ).join('\n');
     
-    // YouTube 제목들 텍스트 구성  
+    // YouTube 제목들 텍스트 구성 (제목만)
     const youtubeTitlesText = request.youtubeTitles!.map((video, index) => 
-      `${index + 1}. ${video.title} (채널: ${video.channelName}, 조회수: ${video.viewCount.toLocaleString()}회, 길이: ${Math.floor(video.duration / 60)}분, 우선순위: ${video.priority}점)`
+      `${index + 1}. ${video.title}`
     ).join('\n');
     
     // 보조키워드 텍스트 준비
@@ -289,8 +289,10 @@ ${titlesText}
       }
     }
 
+    const hasYouTubeData = request.youtubeTitles && request.youtubeTitles.length > 0;
+    
     return `"${request.targetTitle}" 제목으로 블로그 글을 작성하려고 합니다. 
-블로그 글 작성에 도움이 될 만한 네이버 블로그와 YouTube 영상을 선별해주세요.
+블로그 글 작성에 도움이 될 만한 ${hasYouTubeData ? '네이버 블로그와 YouTube 영상을' : '네이버 블로그를'} 선별해주세요.
 
 **타겟 제목**: ${request.targetTitle}
 **메인 키워드**: ${request.mainKeyword}
@@ -299,8 +301,7 @@ ${subKeywordsText}
 ${contentTypeInfo}${reviewTypeInfo}
 
 **선별 목적**: 
-- 블로그: 참고할 구조, 정보, 관점을 얻기 위함
-- YouTube: 자막을 추출하여 블로그 본문 작성에 활용할 예정
+- 블로그: 참고할 구조, 정보, 관점을 얻기 위함${hasYouTubeData ? '\n- YouTube: 자막을 추출하여 블로그 본문 작성에 활용할 예정' : ''}
 
 **선별 기준**:
 1. 타겟 제목 "${request.targetTitle}"과 가장 주제적 관련성이 높은 콘텐츠 (최우선)
@@ -312,12 +313,12 @@ ${subKeywordsCriteria}
 
 **네이버 블로그 제목들**:
 ${blogTitlesText}
-
+${hasYouTubeData ? `
 **YouTube 영상들**:
-${youtubeTitlesText}
+${youtubeTitlesText}` : ''}
 
 **출력 형식**:
-타겟 제목과의 관련도가 가장 높은 순서대로 블로그 10개, YouTube 10개를 JSON 형태로 선별해주세요.
+타겟 제목과의 관련도가 가장 높은 순서대로 ${hasYouTubeData ? '블로그 10개, YouTube 10개를' : '블로그 10개를'} JSON 형태로 선별해주세요.
 
 {
   "selected_blogs": [
@@ -331,7 +332,7 @@ ${youtubeTitlesText}
       "relevance_reason": "타겟 제목과의 관련성 및 선별 이유"
     }
   ],
-  "selected_videos": [
+  "selected_videos": [${hasYouTubeData ? `
     {
       "title": "타겟 제목과 가장 관련성 높은 YouTube 제목 (1위)",
       "relevance_reason": "자막 추출 시 블로그 작성에 도움될 이유"
@@ -340,7 +341,7 @@ ${youtubeTitlesText}
     {
       "title": "열 번째로 관련성 높은 YouTube 제목 (10위)",
       "relevance_reason": "자막 추출 시 블로그 작성에 도움될 이유"
-    }
+    }` : ''}
   ]
 }
 

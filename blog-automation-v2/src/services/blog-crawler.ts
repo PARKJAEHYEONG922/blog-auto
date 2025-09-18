@@ -501,7 +501,7 @@ export class BlogCrawler {
 
       // 6. 해시태그 추출 (네이버 블로그만 - 레거시 방식 적용)
       if (isNaverBlog) {
-        tags = this.extractContentHashtags(html, textContent);
+        tags = this.extractHashtagsFromHtml(html, textContent);
         console.log(`✅ 네이버 블로그 해시태그 추출: ${tags.length}개`);
       }
 
@@ -705,7 +705,7 @@ export class BlogCrawler {
     return text;
   }
 
-  private extractContentHashtags(html: string, textContent: string): string[] {
+  private extractHashtagsFromHtml(html: string, textContent: string): string[] {
     /**
      * 네이버 스마트에디터 해시태그 추출 (레거시 Python 방식 적용)
      * legacy-pyside-version/src/features/blog_automation/adapters.py의 _extract_content_hashtags_from_html과 동일

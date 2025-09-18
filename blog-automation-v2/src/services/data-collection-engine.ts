@@ -25,14 +25,6 @@ export interface CollectedBlogData {
   platform: string; // 플랫폼 (네이버)
 }
 
-export interface CollectedShoppingData {
-  title: string;
-  price: string;
-  rating?: number;
-  reviewCount?: number;
-  mallName?: string;
-  imageUrl?: string;
-}
 
 export interface CollectedYouTubeData {
   title: string;
@@ -77,7 +69,6 @@ export interface DataCollectionResult {
   selectedBlogs: SelectedBlogTitle[]; // AI가 선별한 상위 10개
   crawledBlogs: BlogContent[]; // 크롤링된 블로그 본문 데이터
   contentSummary?: string; // 블로그 콘텐츠 요약 분석 결과
-  shopping: CollectedShoppingData[];
   youtube: CollectedYouTubeData[];
   seoInsights: SEOInsights;
   summary: {
@@ -101,12 +92,11 @@ export class DataCollectionEngine {
   private analysisSteps: AnalysisProgress[] = [
     { step: '키워드 분석 및 확장', progress: 0, status: 'pending' },
     { step: '네이버 블로그 데이터 수집 (서치키워드 우선, 최대 50개)', progress: 0, status: 'pending' },
-    { step: '유튜브 데이터 수집 (100개→30개 상대평가 선별)', progress: 0, status: 'pending' },
+    { step: '유튜브 데이터 수집 및 선별', progress: 0, status: 'pending' },
     { step: 'AI 블로그+YouTube 통합 선별 (상위 10개씩)', progress: 0, status: 'pending' },
     { step: '선별된 YouTube 영상 자막 추출 및 요약', progress: 0, status: 'pending' },
     { step: '선별된 블로그 본문 크롤링 (상위 3개)', progress: 0, status: 'pending' },
     { step: '블로그 콘텐츠 요약 분석', progress: 0, status: 'pending' },
-    { step: '네이버 쇼핑 데이터 수집', progress: 0, status: 'pending' },
     { step: 'SEO 최적화 가이드 생성', progress: 0, status: 'pending' },
     { step: '데이터 요약 및 인사이트 도출', progress: 0, status: 'pending' }
   ];
@@ -148,17 +138,14 @@ export class DataCollectionEngine {
       const contentSummary = await this.generateContentSummary(request, crawledBlogs);
       this.updateProgress(6, 'completed', contentSummary);
 
-      // 8. 네이버 쇼핑 데이터 수집
-      const shopping = await this.collectShoppingData(request.keyword);
-      this.updateProgress(7, 'completed', shopping);
 
-      // 9. SEO 최적화 가이드 생성
+      // 8. SEO 최적화 가이드 생성
       const seoInsights = await this.generateSEOInsights(request, selectedBlogs.selectedTitles);
-      this.updateProgress(8, 'completed', seoInsights);
+      this.updateProgress(7, 'completed', seoInsights);
 
-      // 10. 데이터 요약 및 인사이트 도출
-      const summary = await this.generateSummaryInsights(keywords, blogs, shopping, enrichedYouTube);
-      this.updateProgress(9, 'completed', summary);
+      // 9. 데이터 요약 및 인사이트 도출
+      const summary = await this.generateSummaryInsights(keywords, blogs, enrichedYouTube);
+      this.updateProgress(8, 'completed', summary);
 
       const processingTime = Date.now() - startTime;
 
@@ -168,7 +155,6 @@ export class DataCollectionEngine {
         selectedBlogs: selectedBlogs.selectedTitles, // AI가 선별한 상위 10개 블로그
         crawledBlogs, // 크롤링된 블로그 본문 데이터
         contentSummary, // 블로그 콘텐츠 요약 분석 결과
-        shopping,
         youtube: enrichedYouTube, // AI가 선별한 상위 10개 YouTube (자막 추출 완료)
         seoInsights,
         summary: {
@@ -453,26 +439,6 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
     }
   }
 
-  private async collectShoppingData(keyword: string): Promise<CollectedShoppingData[]> {
-    this.updateProgress(5, 'running');
-    
-    try {
-      console.log(`🛒 네이버 쇼핑 검색: ${keyword}`);
-      
-      const shoppingItems = await naverAPI.searchShopping(keyword, 10);
-      
-      return shoppingItems.map(item => ({
-        title: naverAPI.cleanHtmlTags(item.title),
-        price: naverAPI.formatPrice(item.lprice),
-        mallName: item.mallName || '네이버쇼핑',
-        imageUrl: item.image || ''
-      }));
-      
-    } catch (error) {
-      console.error('네이버 쇼핑 데이터 수집 실패:', error);
-      return [];
-    }
-  }
 
   private async collectYouTubeData(keyword: string): Promise<CollectedYouTubeData[]> {
     this.updateProgress(6, 'running');
@@ -535,42 +501,10 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
         return results;
         
       } catch (apiError) {
-        console.warn('YouTube API 사용 실패, 목업 데이터로 폴백:', apiError);
+        console.warn('YouTube API 사용 실패:', apiError);
         
-        // API 실패 시 목업 데이터로 폴백
-        await new Promise(resolve => setTimeout(resolve, 1200));
-        
-        const mockYoutube: CollectedYouTubeData[] = [
-          {
-            title: `${keyword} 완벽 가이드 - 초보자 필수 시청`,
-            channelName: '전문가TV',
-            viewCount: '125,000회',
-            publishedAt: '2024-12-10',
-            duration: '15:30',
-            thumbnail: '',
-            url: 'https://www.youtube.com/watch?v=example1'
-          },
-          {
-            title: `${keyword} 실전 노하우 공개`,
-            channelName: '노하우채널',
-            viewCount: '89,500회',
-            publishedAt: '2024-12-08',
-            duration: '12:45',
-            thumbnail: '',
-            url: 'https://www.youtube.com/watch?v=example2'
-          },
-          {
-            title: `${keyword} 후기와 팁 모음`,
-            channelName: '리뷰어',
-            viewCount: '67,800회',
-            publishedAt: '2024-12-05',
-            duration: '18:20',
-            thumbnail: '',
-            url: 'https://www.youtube.com/watch?v=example3'
-          }
-        ];
-
-        return mockYoutube;
+        // YouTube API 실패 시 빈 배열 반환
+        return [];
       }
       
     } catch (error) {
@@ -579,10 +513,26 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
     }
   }
 
-  private async selectTopBlogs(request: DataCollectionRequest, blogs: CollectedBlogData[]): Promise<SelectedBlogTitle[]> {
+  private async selectTopBlogs(
+    request: DataCollectionRequest, 
+    blogs: CollectedBlogData[], 
+    youtube: CollectedYouTubeData[]
+  ): Promise<{ selectedTitles: SelectedBlogTitle[], selectedVideos: SelectedYouTubeVideo[] }> {
     this.updateProgress(2, 'running');
     
     try {
+      if (!blogs || blogs.length === 0) {
+        console.log('수집된 블로그가 없어 선별을 건너뜁니다');
+        return { selectedTitles: [], selectedVideos: [] };
+      }
+
+      const hasYouTube = youtube && youtube.length > 0;
+      if (hasYouTube) {
+        console.log(`🤖 수집된 블로그 ${blogs.length}개 + YouTube ${youtube.length}개 통합 선별 시작`);
+      } else {
+        console.log(`🤖 수집된 ${blogs.length}개 블로그 중 상위 10개 선별 시작`);
+      }
+      
       const selector = new BlogTitleSelector();
       
       const selectionRequest = {
@@ -594,21 +544,42 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
         contentTypeDescription: request.contentTypeDescription,
         reviewType: request.reviewType,
         reviewTypeDescription: request.reviewTypeDescription,
-        blogTitles: blogs
+        blogTitles: blogs,
+        youtubeTitles: hasYouTube ? youtube : undefined
       };
       
       const result = await selector.selectTopBlogs(selectionRequest);
-      return result.selectedTitles;
+      return {
+        selectedTitles: result.selectedTitles,
+        selectedVideos: result.selectedVideos
+      };
       
     } catch (error) {
       console.error('블로그 제목 선별 실패:', error);
       
-      // 실패 시 상위 10개 반환
-      return blogs.slice(0, 10).map((blog) => ({
+      // 실패 시 상위 10개씩 반환
+      const fallbackBlogs = blogs.slice(0, 10).map((blog) => ({
         title: blog.title,
         url: blog.url,
         relevanceReason: '자동 선별 (AI 분석 실패)'
       }));
+      
+      const fallbackVideos = youtube && youtube.length > 0 
+        ? youtube.slice(0, 10).map((video) => ({
+            title: video.title,
+            url: video.url,
+            channelName: video.channelName,
+            viewCount: video.viewCount,
+            duration: video.duration,
+            priority: video.priority,
+            relevanceReason: '자동 선별 (AI 분석 실패)'
+          }))
+        : [];
+
+      return { 
+        selectedTitles: fallbackBlogs,
+        selectedVideos: fallbackVideos
+      };
     }
   }
 
@@ -685,12 +656,11 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
   private async generateSummaryInsights(
     keywords: KeywordAnalysis,
     blogs: CollectedBlogData[],
-    shopping: CollectedShoppingData[],
     youtube: CollectedYouTubeData[]
   ): Promise<{ totalSources: number; dataQuality: 'high' | 'medium' | 'low'; recommendations: string[] }> {
     this.updateProgress(8, 'running');
     
-    const totalSources = blogs.length + shopping.length + youtube.length;
+    const totalSources = blogs.length + youtube.length;
     
     let dataQuality: 'high' | 'medium' | 'low' = 'high';
     if (totalSources < 5) dataQuality = 'low';
@@ -707,9 +677,6 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
       recommendations.push(`블로그 ${blogs.length}개 분석 완료: 트렌드와 관점을 참고하세요.`);
     }
     
-    if (shopping.length > 0) {
-      recommendations.push(`쇼핑 ${shopping.length}개 상품 분석: 실용적 정보를 포함하세요.`);
-    }
     
     if (youtube.length > 0) {
       recommendations.push(`유튜브 ${youtube.length}개 영상 분석: 시각적 요소를 강화하세요.`);
@@ -853,21 +820,32 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
       // 1. YouTube API 설정 로드
       await youtubeAPI.loadConfig();
       
-      // 2. 100개 동영상 검색 및 30개 상대평가 선별
-      console.log('📺 100개 동영상 검색 및 우선순위 분석 중...');
-      const prioritizedVideos = await youtubeAPI.searchPrioritizedVideos(keyword, 100);
+      // 2. 50개 동영상 검색 및 스마트 선별
+      console.log('📺 50개 동영상 검색 및 우선순위 분석 중...');
+      const prioritizedVideos = await youtubeAPI.searchPrioritizedVideos(keyword, 50);
       
       if (prioritizedVideos.length === 0) {
         console.warn('YouTube 검색 결과가 없습니다');
         return [];
       }
       
-      // 3. 상대평가로 상위 30개 선별
-      const selectedVideos = prioritizedVideos
-        .sort((a, b) => b.priority - a.priority)
-        .slice(0, 30);
-      
-      console.log(`📺 상대평가 완료: ${prioritizedVideos.length}개 중 상위 ${selectedVideos.length}개 선별`);
+      // 3. 상대평가 로직: 15개 이상이면 70% 선별, 10-14개면 10개로 선별, 10개 미만이면 모두 사용
+      let selectedVideos: PrioritizedVideo[];
+      if (prioritizedVideos.length >= 15) {
+        const targetCount = Math.floor(prioritizedVideos.length * 0.7);
+        selectedVideos = prioritizedVideos
+          .sort((a, b) => b.priority - a.priority)
+          .slice(0, targetCount);
+        console.log(`📺 상대평가 완료: ${prioritizedVideos.length}개 중 상위 70%(${selectedVideos.length}개) 선별`);
+      } else if (prioritizedVideos.length >= 10) {
+        selectedVideos = prioritizedVideos
+          .sort((a, b) => b.priority - a.priority)
+          .slice(0, 10);
+        console.log(`📺 상대평가로 10개 선별: ${prioritizedVideos.length}개 중 상위 10개 AI에게 전달`);
+      } else {
+        selectedVideos = prioritizedVideos.sort((a, b) => b.priority - a.priority);
+        console.log(`📺 소량 데이터로 상대평가 생략: ${selectedVideos.length}개 모두 AI에게 전달`);
+      }
       
       // 4. CollectedYouTubeData 형식으로 변환
       const youtubeData: CollectedYouTubeData[] = selectedVideos.map((video: PrioritizedVideo) => ({

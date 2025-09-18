@@ -195,7 +195,7 @@ export class YouTubeAPI {
       console.log(`🎯 우선순위 기반 YouTube 검색: ${keyword}`);
 
       // 1. 기본 검색 (더 많은 결과를 가져와서 필터링)
-      const searchResults = await this.searchVideosWithFilters(keyword, Math.min(maxResults * 3, 50));
+      const searchResults = await this.searchVideosWithFilters(keyword, maxResults);
       
       if (searchResults.length === 0) {
         console.warn('검색 결과가 없습니다');
@@ -257,15 +257,10 @@ export class YouTubeAPI {
   // 필터가 적용된 검색
   private async searchVideosWithFilters(keyword: string, maxResults: number): Promise<YouTubeVideoItem[]> {
     const encodedKeyword = encodeURIComponent(keyword);
-    
-    // 최근 1년 이내의 영상만 검색
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-    const publishedAfter = oneYearAgo.toISOString();
 
     const url = `https://www.googleapis.com/youtube/v3/search?` +
       `part=snippet&q=${encodedKeyword}&key=${this.config.apiKey}&type=video&maxResults=${maxResults}` +
-      `&order=relevance&publishedAfter=${publishedAfter}&videoDuration=medium&videoCaption=any`;
+      `&order=relevance&videoDuration=medium&videoCaption=any`;
 
     const response = await fetch(url);
     
@@ -321,32 +316,39 @@ export class YouTubeAPI {
     return results;
   }
 
-  // 우선순위 점수 계산
+  // 우선순위 점수 계산 (블로그 작성 참고용 콘텐츠 선별)
   private calculatePriority(video: PrioritizedVideo): number {
     let score = 0;
 
-    // 1. 조회수 점수 (40%)
-    if (video.viewCount > 1000000) score += 40;
-    else if (video.viewCount > 100000) score += 30;
-    else if (video.viewCount > 10000) score += 20;
+    // 1. 조회수 점수 (35%) - 많은 사람이 본 = 유용한 정보일 가능성
+    if (video.viewCount > 1000000) score += 35;
+    else if (video.viewCount > 500000) score += 30;
+    else if (video.viewCount > 100000) score += 25;
+    else if (video.viewCount > 50000) score += 20;
+    else if (video.viewCount > 10000) score += 15;
     else if (video.viewCount > 1000) score += 10;
 
-    // 2. 업로드 날짜 점수 (25%)
+    // 2. 영상 길이 점수 (30%) - 적절한 길이 = 충분한 정보량
+    if (video.duration >= 600 && video.duration <= 1200) score += 30; // 10-20분 (최적)
+    else if (video.duration >= 300 && video.duration <= 1800) score += 25; // 5-30분
+    else if (video.duration >= 180 && video.duration <= 1800) score += 20; // 3-30분
+    else if (video.duration >= 120 && video.duration <= 1800) score += 15; // 2-30분
+
+    // 3. 채널 신뢰성 점수 (25%) - 전문성과 신뢰도
+    if (video.subscriberCount && video.subscriberCount > 1000000) score += 25;
+    else if (video.subscriberCount && video.subscriberCount > 500000) score += 22;
+    else if (video.subscriberCount && video.subscriberCount > 100000) score += 18;
+    else if (video.subscriberCount && video.subscriberCount > 50000) score += 15;
+    else if (video.subscriberCount && video.subscriberCount > 10000) score += 12;
+    else if (video.subscriberCount && video.subscriberCount > 1000) score += 8;
+
+    // 4. 업로드 날짜 점수 (10%) - 너무 오래되지 않은 정보 선호하되 큰 비중 X
     const daysSince = (Date.now() - new Date(video.publishedAt).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSince < 30) score += 25;      // 1개월 이내
-    else if (daysSince < 90) score += 20; // 3개월 이내
-    else if (daysSince < 180) score += 15; // 6개월 이내
-    else if (daysSince < 365) score += 10; // 1년 이내
-
-    // 3. 영상 길이 점수 (20%)
-    if (video.duration >= 300 && video.duration <= 1200) score += 20; // 5-20분
-    else if (video.duration >= 180 && video.duration <= 1800) score += 15; // 3-30분
-    else if (video.duration >= 120) score += 10; // 2분 이상
-
-    // 4. 채널 신뢰성 점수 (15%)
-    if (video.subscriberCount && video.subscriberCount > 100000) score += 15;
-    else if (video.subscriberCount && video.subscriberCount > 10000) score += 10;
-    else if (video.subscriberCount && video.subscriberCount > 1000) score += 5;
+    if (daysSince < 365) score += 10;        // 1년 이내
+    else if (daysSince < 365 * 2) score += 8; // 2년 이내
+    else if (daysSince < 365 * 3) score += 6; // 3년 이내
+    else if (daysSince < 365 * 5) score += 4; // 5년 이내
+    else score += 2; // 5년 이상도 좋은 정보일 수 있음
 
     return score;
   }
@@ -356,11 +358,8 @@ export class YouTubeAPI {
     // 최소 조건들
     if (video.viewCount < 100) return false; // 최소 조회수
     if (video.duration < 60) return false;   // 최소 1분
-    if (video.duration > 3600) return false; // 최대 1시간
+    if (video.duration > 1800) return false; // 최대 30분
     
-    // 1년 이내 영상만
-    const oneYearAgo = Date.now() - (365 * 24 * 60 * 60 * 1000);
-    if (new Date(video.publishedAt).getTime() < oneYearAgo) return false;
 
     return true;
   }
