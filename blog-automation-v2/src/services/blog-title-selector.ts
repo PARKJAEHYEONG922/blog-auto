@@ -151,7 +151,7 @@ ${contentTypeInfo}${reviewTypeInfo}
 2. 메인 키워드와 직접적으로 연관된 내용
 3. ${request.contentType} 유형에 적합한 접근방식의 콘텐츠${request.reviewType ? ` (${request.reviewType} 관점)` : ''}
 4. 구체적이고 실용적인 정보를 담고 있을 것으로 예상되는 제목
-5. 광고성이나 홍보성보다는 정보성 콘텐츠로 보이는 제목
+5. 정보성 콘텐츠 우선 (명백한 상품 판매나 업체 홍보가 아닌 경우 포함)
 ${subKeywordsCriteria}
 
 **네이버 블로그 제목들**:

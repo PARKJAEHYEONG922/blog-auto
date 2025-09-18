@@ -49,7 +49,7 @@ export class AnalysisPrompts {
       inputData.competitor_blogs.push({
         blog_number: i + 1,
         title: blog.title || '제목 없음',
-        content: (blog.textContent || '내용 없음').substring(0, 2000) // 내용 길이 제한
+        content: (blog.textContent || '내용 없음').substring(0, 3000) // 내용 길이 제한
       });
     }
 
@@ -101,6 +101,8 @@ ${JSON.stringify(inputData.competitor_blogs, null, 2)}
 \`\`\`
 
 분석 지침:
+- **중요**: 타겟 제목 "${request.selectedTitle}"과 관련성이 낮거나 주제가 맞지 않는 블로그는 분석에서 제외해주세요
+- 관련성이 있는 블로그들만 선별하여 분석 수행
 - 구체적이고 실용적인 내용을 우선적으로 포함
 - 경쟁사 분석을 통해 차별화 포인트를 명확히 제시
 - 반드시 위의 JSON 형식으로만 답변해주세요`;
@@ -114,18 +116,35 @@ ${JSON.stringify(inputData.competitor_blogs, null, 2)}
   static generateYouTubeAnalysisPrompt(request: DataCollectionRequest, youtubeVideos: CollectedYouTubeData[]): string {
     // 영상별 자막 데이터 구성
     const videosText = youtubeVideos.map((video, index) => {
-      const subtitlePreview = video.summary && video.summary.length > 1000 
-        ? video.summary.substring(0, 1000) + '...(이하 생략)'
-        : video.summary;
+      let subtitlePreview = video.summary || '자막 없음';
+      let lengthNote = '';
+      
+      if (video.summary && video.summary.length > 0) {
+        const originalLength = video.summary.length;
+        
+        if (originalLength > 3000) {
+          // 3000자 넘으면 앞 1500자 + 뒤 1500자 추출 (핵심 부분 유지)
+          const firstPart = video.summary.substring(0, 1500);
+          const lastPart = video.summary.substring(originalLength - 1500);
+          subtitlePreview = firstPart + '\n\n...(중간 생략)...\n\n' + lastPart;
+          lengthNote = `\n**원본 자막 길이**: ${originalLength.toLocaleString()}자 (전체 중 앞뒤 1500자씩 발췌)`;
+        } else if (originalLength > 1500) {
+          // 1500자 넘으면 1500자까지만
+          subtitlePreview = video.summary.substring(0, 1500) + '...(이하 생략)';
+          lengthNote = `\n**원본 자막 길이**: ${originalLength.toLocaleString()}자 (앞 1500자 발췌)`;
+        } else {
+          lengthNote = `\n**자막 길이**: ${originalLength.toLocaleString()}자 (전체)`;
+        }
+      }
       
       return `## ${index + 1}번 영상
 **제목**: ${video.title}
 **채널**: ${video.channelName}
 **조회수**: ${video.viewCount.toLocaleString()}회
-**길이**: ${Math.floor(video.duration / 60)}분 ${video.duration % 60}초
+**길이**: ${Math.floor(video.duration / 60)}분 ${video.duration % 60}초${lengthNote}
 
 **자막 내용**:
-${subtitlePreview || '자막 없음'}
+${subtitlePreview}
 
 ---`;
     }).join('\n\n');
@@ -195,6 +214,9 @@ ${videosText}
 \`\`\`
 
 분석 지침:
+- **중요**: 타겟 제목 "${request.selectedTitle}"과 관련성이 낮거나 주제가 맞지 않는 영상은 분석에서 제외해주세요
+- 관련성이 있는 영상들만 선별하여 분석 수행
+- **자막 길이 참고**: 긴 영상의 경우 발췌된 부분만 제공되므로, 전체 흐름을 고려하여 분석해주세요
 - 광고나 홍보성 내용은 제외하고 분석
 - 블로그 글 작성에 실질적으로 도움되는 정보 위주로 정리
 - 구체적이고 실용적인 내용을 우선적으로 포함
