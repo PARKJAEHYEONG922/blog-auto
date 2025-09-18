@@ -1,11 +1,13 @@
 import { LLMClientFactory } from './llm-client-factory';
 import { getContentTypeDescription, getContentTypeName, getContentTypeGuidelines, getToneDescription, getToneName, getToneGuidelines, getReviewTypeDescription, getReviewTypeName, getReviewTypeGuidelines } from '../constants/content-options';
 import { RequiredKeywordInfo, SelectedTitleInfo, ContentTypeInfo, ReviewTypeInfo, ToneInfo } from '../types/common-interfaces';
+import { BlogContent } from './blog-crawler';
 
 export interface BlogWritingRequest extends RequiredKeywordInfo, SelectedTitleInfo, ContentTypeInfo, ReviewTypeInfo, ToneInfo {
   bloggerIdentity?: string;
   blogAnalysisResult?: any;
   youtubeAnalysisResult?: any;
+  crawledBlogs?: BlogContent[]; // 크롤링된 블로그 데이터 (태그 추출용)
 }
 
 export interface BlogWritingResult {
@@ -20,6 +22,31 @@ export interface BlogWritingResult {
 }
 
 export class BlogWritingService {
+  /**
+   * 크롤링된 블로그들에서 공통 태그 추출
+   */
+  private static extractCommonTags(crawledBlogs: BlogContent[]): string[] {
+    const tagCount = new Map<string, number>();
+    
+    // 성공한 블로그들의 태그 수집
+    crawledBlogs
+      .filter(blog => blog.success && blog.tags && blog.tags.length > 0)
+      .forEach(blog => {
+        blog.tags.forEach(tag => {
+          const cleanTag = tag.replace('#', '').trim();
+          if (cleanTag) {
+            tagCount.set(cleanTag, (tagCount.get(cleanTag) || 0) + 1);
+          }
+        });
+      });
+    
+    // 빈도순으로 정렬하여 상위 5개 반환
+    return Array.from(tagCount.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([tag]) => tag);
+  }
+
   /**
    * 컨텐츠 유형별 상세 지침 반환
    */
@@ -91,6 +118,16 @@ ${guidelines.key_points.map(point => `  • ${point}`).join('\n')}
 **경쟁사 제목들**: ${analysis.competitor_titles?.join(', ') || '없음'}`;
     }
 
+    // 크롤링된 블로그에서 공통 태그 추출
+    let commonTagsSection = '';
+    if (request.crawledBlogs && request.crawledBlogs.length > 0) {
+      const commonTags = this.extractCommonTags(request.crawledBlogs);
+      if (commonTags.length > 0) {
+        const formattedTags = commonTags.map(tag => tag.startsWith('#') ? tag : `#${tag}`);
+        commonTagsSection = `[상위 블로그 인기 태그 참고: ${formattedTags.join(', ')}]`;
+      }
+    }
+
     // YouTube 분석 결과 포함
     let youtubeAnalysisSection = '';
     if (request.youtubeAnalysisResult) {
@@ -108,59 +145,83 @@ ${guidelines.key_points.map(point => `  • ${point}`).join('\n')}
       ? `\n**보조 키워드**: ${request.subKeywords.join(', ')}`
       : '';
 
+    // 평균 이미지 개수 계산 (블로그 분석 결과에서)
+    let avgImageCount = 3; // 기본값
+    if (request.blogAnalysisResult && request.blogAnalysisResult.avg_image_count) {
+      avgImageCount = Math.max(3, Math.round(request.blogAnalysisResult.avg_image_count));
+    }
+
+    // 컨텐츠 유형 가이드라인 가져오기
+    const contentGuidelines = getContentTypeGuidelines(request.contentType);
+    const toneGuidelines = getToneGuidelines(request.tone);
+    
+    // 보조 키워드 처리
+    const subKeywordsText = request.subKeywords && request.subKeywords.length > 0 
+      ? request.subKeywords.join(', ')
+      : '메인 키워드와 관련된 보조 키워드들을 3-5개 직접 생성하여 활용';
+
     const prompt = `# AI 역할 설정
 ${roleDescription}
 
-## 작성할 글 정보
-- **제목**: ${request.selectedTitle}
-- **검색 키워드**: ${request.searchKeyword}
-- **메인 키워드**: ${request.mainKeyword}${subKeywordsSection}
-- **컨텐츠 유형**: ${contentTypeName} (${request.contentType})
-- **말투**: ${toneName} (${request.tone})
+## 참고할 경쟁 블로그 및 YouTube 요약 정보
+'${request.searchKeyword}'로 검색시 노출되는 상위 블로그 글과 YouTube 자막을 추출하여 분석한 결과입니다. 
+아래 정보는 참고용이며, 선택된 제목과 내용이 다르더라도 선택된 제목에 맞춰서 알아서 적절한 글을 작성해주세요:
 
-${blogAnalysisSection}
+${blogAnalysisSection || '참고할 만한 경쟁사 분석 정보가 없으니, 자연스럽고 유용한 컨텐츠로 작성해주세요.'}
 
 ${youtubeAnalysisSection}
 
-## 컨텐츠 유형별 세부 지침
-- **유형**: ${contentTypeName} (${request.contentType})
-- **설명**: ${contentTypeDescription}
-${this.getDetailedContentGuidelines(request.contentType)}
+# 작성 지침
 
-## 말투별 세부 지침  
-- **말투**: ${toneName} (${request.tone})
-- **스타일**: ${toneDescription}
-${this.getDetailedToneGuidelines(request.tone)}
+## 🚨 절대 규칙: 제목 고정 🚨
+**❌ 제목 변경 절대 금지 ❌**
+**🔒 기본 정보의 제목으로 내용을 작성해주세요 🔒**
 
-${request.reviewType ? `## 후기 유형별 세부 지침
-- **후기 유형**: ${reviewTypeName} (${request.reviewType})
-- **설명**: ${reviewTypeDescription}
-${this.getDetailedReviewGuidelines(request.reviewType)}` : ''}
+## 기본 정보
+- **작성할 글 제목**: "${request.selectedTitle}"
+- **메인 키워드**: "${request.mainKeyword}"
+- **보조 키워드**: "${subKeywordsText}"
+- **컨텐츠 유형**: ${contentTypeName} (${contentGuidelines?.approach || contentTypeDescription})
 
-## 글쓰기 원칙
-1. **3초의 법칙**: 서론에서 독자가 찾는 핵심 답변을 즉시 제시
-2. **실용성 우선**: 구체적이고 실행 가능한 정보 제공
-3. **가독성**: 소제목, 리스트, 표 등을 활용한 구조화
-4. **SEO 최적화**: 메인 키워드와 보조 키워드 자연스럽게 포함
-5. **독자 몰입**: 독자의 관심사와 니즈에 맞는 내용 구성
+${request.reviewType ? `## 후기 세부 유형
+- **후기 유형**: ${reviewTypeName}
+- **후기 설명**: ${reviewTypeDescription}
+- **투명성 원칙**: ${getReviewTypeGuidelines(request.reviewType)?.transparency || ''}
+- **핵심 포인트**: ${getReviewTypeGuidelines(request.reviewType)?.key_points?.join(', ') || ''}` : ''}
+
+## 말투 지침
+- **선택된 말투**: ${toneName}
+- **말투 스타일**: ${toneGuidelines?.style || toneDescription}
+- **예시 표현**: ${toneGuidelines?.examples?.join(', ') || ''}
+- **문장 특징**: ${toneGuidelines?.sentence_style || ''}
+- **주요 특색**: ${toneGuidelines?.key_features?.join(', ') || ''}
+- **마무리 문구**: ${toneGuidelines?.ending || ''}
 
 ## 글 구성 방식
-1. **서론**: 핵심 답변 즉시 제시 (3초의 법칙)
-2. **본문**: 다양한 형식 조합
-   - 소제목 + 본문
-   - 체크리스트 (✓ 항목들)
-   - 비교표 (| 항목 | 특징 | 가격 |)
-   - TOP5 순위 (1위: 제품명 - 특징)
-   - 단계별 가이드 (1단계, 2단계...)
-   - Q&A 형식
-3. **결론**: 요약 및 독자 행동 유도
+- **글 구조**: ${contentGuidelines?.structure || ''}
+- **주요 초점**: ${contentGuidelines?.focus_areas?.join(', ') || ''}
+- **핵심 표현**: ${contentGuidelines?.keywords?.join(', ') || ''}
 
-## 주의사항
-- 제목은 절대 변경하지 말 것
-- 경쟁사 분석과 YouTube 분석 결과를 적극 활용
-- 구체적인 정보와 실례 포함
-- 독자가 바로 활용할 수 있는 실용적 내용 제공
-- 자연스러운 키워드 배치로 SEO 최적화
+## SEO 및 기술적 요구사항
+- 글자 수: 1,700-2,000자 (공백 제외)
+- 메인 키워드: 5-6회 자연 반복
+- 보조 키워드: 각각 3-4회 사용
+- 이미지: ${avgImageCount}개 이상 (이미지) 표시로 배치, 필요시 연속 4개 배치 가능
+- 동영상: 1개 (동영상) 표시로 배치
+
+## 마크다운 구조 규칙 (자동화 호환성)
+- **대제목**: ## 만 사용 (### 사용 금지)
+- **소제목**: ### 텍스트 (세부 항목용)
+- **강조**: **텍스트** (단계명, 중요 포인트)
+- **리스트**: - 항목 (일반 목록)
+- **체크리스트**: ✓ 항목 (완료/확인 항목)
+- **번호 목록**: 1. 항목 (순서가 중요한 경우)
+
+## 글쓰기 품질 요구사항
+- **제목 중심 작성**: 참고 자료와 선택된 제목이 다르더라도 반드시 선택된 제목에 맞는 내용으로 작성
+- **참고 자료 활용**: 위 분석 결과는 참고용이므로, 제목과 관련된 부분만 선별적으로 활용
+- **자연스러운 문체**: AI 생성티 없는 개성 있고 자연스러운 어투로 작성
+- **완전한 내용**: XX공원, OO병원 같은 placeholder 사용 금지. 구체적인 정보가 없다면 "근처 공원", "동네 병원" 등 일반적 표현 사용
 
 # 출력 형식
 
@@ -182,7 +243,8 @@ ${this.getDetailedReviewGuidelines(request.reviewType)}` : ''}
 
 [결론 - 요약 및 독자 행동 유도]
 
-[관련 태그 5개 이상을 # 형태로 작성]
+${commonTagsSection}
+[위 참고 태그와 작성한 글 내용을 토대로 적합한 태그 5개 이상을 # 형태로 작성]
 \`\`\`
 `;
 

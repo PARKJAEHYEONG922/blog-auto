@@ -9,9 +9,14 @@ interface Step2Props {
   data: WorkflowData;
   onNext: (data: Partial<WorkflowData>) => void;
   onBack: () => void;
+  aiModelStatus: {
+    information: string;
+    writing: string;
+    image: string;
+  };
 }
 
-const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
+const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisSteps, setAnalysisSteps] = useState<AnalysisProgress[]>([]);
   const [collectedData, setCollectedData] = useState<DataCollectionResult | null>(null);
@@ -149,7 +154,8 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
         bloggerIdentity: data.bloggerIdentity,
         subKeywords: data.subKeywords,
         blogAnalysisResult: collectedData.contentSummary,
-        youtubeAnalysisResult: collectedData.youtubeAnalysis
+        youtubeAnalysisResult: collectedData.youtubeAnalysis,
+        crawledBlogs: collectedData.crawledBlogs // 크롤링된 블로그 데이터 (태그 추출용)
       };
 
       const result = await BlogWritingService.generateBlogContent(writingRequest);
@@ -208,6 +214,9 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
                 <span>🔍</span>
                 <span>데이터 수집 및 분석</span>
               </h1>
+              <div className="text-sm text-slate-500">
+                정보처리 AI: {aiModelStatus.information}
+              </div>
             </div>
             <p className="text-base text-slate-600 leading-relaxed max-w-2xl mx-auto">
               선택된 제목을 기반으로 AI가 멀티플랫폼에서 데이터를 수집하고 분석합니다.
@@ -657,7 +666,8 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
                           <h3 className="font-semibold text-green-800">글쓰기 완료</h3>
                           {writingResult.usage && (
                             <span className="text-green-600 text-sm ml-auto">
-                              토큰: {writingResult.usage.totalTokens.toLocaleString()}
+                              토큰: {writingResult.usage.totalTokens.toLocaleString()} 
+                              (입력: {writingResult.usage.promptTokens.toLocaleString()}, 출력: {writingResult.usage.completionTokens.toLocaleString()})
                             </span>
                           )}
                         </div>

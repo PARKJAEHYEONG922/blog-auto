@@ -119,6 +119,7 @@ const App: React.FC = () => {
               setIsBackFromStep2(true); // Step2에서 돌아갈 때 플래그 설정
               setCurrentStep(1);
             }}
+            aiModelStatus={aiModelStatus}
           />
         );
       case 3:
