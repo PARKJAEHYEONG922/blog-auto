@@ -1,7 +1,8 @@
 import { LLMClientFactory, LLMMessage, LLMTool } from './llm-client-factory';
+import { getContentTypeDescription, getReviewTypeDescription } from '../constants/content-options';
 
 export interface TitleGenerationRequest {
-  keyword: string;
+  keyword: string; // 기존 호환성을 위해 유지 (searchKeyword와 동일)
   subKeywords?: string[];
   platform: string;
   platformName: string; // UI에서 한국어 플랫폼명 전달
@@ -174,77 +175,19 @@ export class TitleGenerationEngine {
     return tools;
   }
 
-  private getContentGuideline(contentType: string): any {
-    const contentGuidelines: { [key: string]: any } = {
-      'info': {
-        approach: '정확하고 풍부한 정보를 체계적으로 제공하여 검색자의 궁금증 완전 해결',
-        keywords: ['완벽 정리', '총정리', '핵심 포인트', '단계별 가이드', '정확한 정보'],
-        focusAreas: ['체계적 구조와 소제목', '실용적 가이드 제공', '구체적 실행 방법']
-      },
-      'review': {
-        approach: '개인 경험과 솔직한 후기를 중심으로 \'유일무이한 콘텐츠\' 작성',
-        keywords: ['직접 써봤어요', '솔직 후기', '개인적으로', '실제로 사용해보니', '추천하는 이유'],
-        focusAreas: ['개인 경험과 솔직한 후기', '장단점 균형 제시', '구체적 사용 데이터']
-      },
-      'compare': {
-        approach: '체계적 비교분석으로 독자의 선택 고민을 완전히 해결',
-        keywords: ['VS 비교', 'Best 5', '장단점', '상황별 추천', '가성비'],
-        focusAreas: ['객관적 비교 기준', '상황별 맞춤 추천', '명확한 선택 가이드']
-      },
-      'howto': {
-        approach: '실용적 방법론과 단계별 가이드 제공',
-        keywords: ['노하우', '방법', '가이드', '팁', '실전'],
-        focusAreas: ['단계별 실행 방법', '실용적 팁 제공', '구체적 예시']
-      }
-    };
-
-    return contentGuidelines[contentType] || contentGuidelines['info'];
-  }
-
-  private getReviewDetailGuideline(reviewType: string): any {
-    const reviewGuidelines: { [key: string]: any } = {
-      'self-purchase': {
-        description: '직접 구매해서 써본 솔직한 개인 후기',
-        transparency: '내돈내산이라는 점을 자연스럽게 어필하며 솔직하고 신뢰성 있는 톤'
-      },
-      'sponsored': {
-        description: '브랜드에서 제공받은 제품의 정직한 리뷰',
-        transparency: '협찬임을 명시하되 객관적이고 균형잡힌 평가를 강조하는 톤'
-      },
-      'experience': {
-        description: '체험단 참여를 통한 제품 사용 후기',
-        transparency: '체험 기회를 통해 얻은 경험을 바탕으로 한 상세한 후기'
-      },
-      'rental': {
-        description: '렌탈 서비스를 이용한 제품 사용 후기',
-        transparency: '렌탈 경험을 바탕으로 한 실용적이고 현실적인 후기'
-      }
-    };
-
-    return reviewGuidelines[reviewType] || {};
-  }
 
   private buildSystemPrompt(request: TitleGenerationRequest): string {
-    // 해당 유형의 지침 가져오기
-    const contentGuideline = this.getContentGuideline(request.contentType);
-    const approach = contentGuideline.approach || '';
-    const keywords = contentGuideline.keywords || [];
-    const focusAreas = contentGuideline.focusAreas || [];
-
-    // 후기 세부 유형 지침 가져오기 (후기/리뷰형일 때만)
-    const reviewGuideline = (request.reviewType && request.contentType === 'review') 
-      ? this.getReviewDetailGuideline(request.reviewType) : {};
+    // 공통 모듈에서 설명 가져오기
+    const contentTypeDescription = getContentTypeDescription(request.contentType);
+    const reviewTypeDescription = request.reviewType ? getReviewTypeDescription(request.reviewType) : '';
 
     const systemPrompt = `네이버 블로그 상위 노출에 유리한 '${request.contentTypeName}' 스타일의 제목 10개를 추천해주세요.
 
 **${request.contentTypeName} 특징**:
-- 접근법: ${approach}
-- 핵심 키워드: ${keywords.join(', ')}
-- 중점 영역: ${focusAreas.join(', ')}${reviewGuideline.description ? `
+- ${contentTypeDescription}
 
-**후기 세부 유형**: ${request.reviewTypeName}
-- 설명: ${reviewGuideline.description}
-- 적절한 톤: ${reviewGuideline.transparency}` : ''}
+${request.reviewType ? `**후기 세부 유형**: ${request.reviewTypeName}
+- ${reviewTypeDescription}` : ''}
 
 **제목 생성 규칙**:
 1. 메인키워드를 자연스럽게 포함

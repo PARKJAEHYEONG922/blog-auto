@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { WorkflowData } from '../App';
-import Dropdown, { DropdownOption } from './common/Dropdown';
+import Dropdown from './common/Dropdown';
 import SimpleDialog from './SimpleDialog';
 import { TitleWithSearch } from '../services/title-generation-engine';
+import { platforms, contentTypes, reviewTypes, tones, type DropdownOption } from '../constants/content-options';
 
 interface Step1Props {
   data: WorkflowData;
   onNext: (data: Partial<WorkflowData>) => void;
+  isBackFromStep2?: boolean; // Step2에서 돌아온 경우 true
 }
 
-const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
+const Step1: React.FC<Step1Props> = ({ data, onNext, isBackFromStep2 }) => {
   const [platform, setPlatform] = useState(data.platform || '');
   const [keyword, setKeyword] = useState(data.keyword || '');
   const [subKeywords, setSubKeywords] = useState(data.subKeywords?.join(', ') || '');
@@ -53,32 +55,6 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
     message: ''
   });
 
-  const platforms: DropdownOption[] = [
-    { id: 'naver', name: '네이버 블로그', icon: '🟢' },
-    { id: 'tistory', name: '티스토리', icon: '📝' },
-    { id: 'blogspot', name: '블로그스팟', icon: '🌐' },
-    { id: 'wordpress', name: '워드프레스', icon: '📰' }
-  ];
-
-  const contentTypes: DropdownOption[] = [
-    { id: 'info', name: '정보/가이드형', icon: '📚', description: '정확한 정보를 체계적으로 제공하여 궁금증 해결' },
-    { id: 'review', name: '후기/리뷰형', icon: '⭐', description: '개인 경험과 솔직한 후기로 유일무이한 콘텐츠 작성' },
-    { id: 'compare', name: '비교/추천형', icon: '⚖️', description: '체계적 비교분석으로 독자의 선택 고민 해결' },
-    { id: 'howto', name: '노하우형', icon: '🛠️', description: '실용적 방법론과 단계별 가이드 제공' }
-  ];
-
-  const reviewTypes: DropdownOption[] = [
-    { id: 'self-purchase', name: '내돈내산 후기', icon: '💳', description: '직접 구매해서 써본 솔직한 개인 후기' },
-    { id: 'sponsored', name: '협찬 후기', icon: '🤝', description: '브랜드에서 제공받은 제품의 정직한 리뷰' },
-    { id: 'experience', name: '체험단 후기', icon: '🎁', description: '체험단 참여를 통한 제품 사용 후기' },
-    { id: 'rental', name: '대여/렌탈 후기', icon: '📅', description: '렌탈 서비스를 이용한 제품 사용 후기' }
-  ];
-
-  const tones: DropdownOption[] = [
-    { id: 'formal', name: '정중한 존댓말', icon: '🎩', description: '사용해보았습니다, 추천드립니다 (신뢰감 조성)' },
-    { id: 'casual', name: '친근한 반말', icon: '😊', description: '써봤는데 진짜 좋더라, 완전 강추! (편안하고 친근한)' },
-    { id: 'friendly', name: '친근한 존댓말', icon: '🤝', description: '써봤는데 좋더라구요, 도움이 될 것 같아요 (따뜻한 느낌)' }
-  ];
 
 
   // 기본 설정 로드
@@ -100,6 +76,35 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
     
     loadDefaults();
   }, []);
+
+  // Step2에서 돌아온 경우 제목 선택 영역으로 스크롤
+  useEffect(() => {
+    if (isBackFromStep2) {
+      // 페이지가 렌더링된 후 스크롤 실행
+      setTimeout(() => {
+        const titleSelectionElement = document.getElementById('title-selection-area');
+        const mainElement = document.querySelector('main');
+        
+        if (titleSelectionElement && mainElement) {
+          // main 요소 내에서 제목 선택 영역으로 스크롤
+          const elementRect = titleSelectionElement.getBoundingClientRect();
+          const mainRect = mainElement.getBoundingClientRect();
+          const scrollTop = mainElement.scrollTop + elementRect.top - mainRect.top;
+          
+          mainElement.scrollTo({
+            top: scrollTop,
+            behavior: 'smooth'
+          });
+        } else if (mainElement) {
+          // fallback: main 요소 최하단으로 스크롤
+          mainElement.scrollTo({
+            top: mainElement.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }, 200);
+    }
+  }, [isBackFromStep2]);
 
   const generateTitles = async () => {
     if (!keyword.trim()) {
@@ -254,21 +259,13 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
       return;
     }
 
-    // 선택된 옵션의 상세 설명 찾기
-    const contentTypeDescription = contentTypes.find(c => c.id === contentType)?.description || '';
-    const reviewTypeDescription = reviewType ? reviewTypes.find(r => r.id === reviewType)?.description || '' : '';
-    const toneDescription = tones.find(t => t.id === tone)?.description || '';
-
     onNext({
       platform,
       keyword: keyword.trim(),
       subKeywords: subKeywords.split(',').map(k => k.trim()).filter(k => k),
       contentType,
-      contentTypeDescription,
       reviewType,
-      reviewTypeDescription,
       tone,
-      toneDescription,
       customPrompt: customPrompt.trim(),
       blogDescription: blogDescription.trim(),
       selectedTitle,
@@ -471,7 +468,7 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
           </div>
 
           {/* AI 제목 추천 섹션 */}
-          <div className="section-card" style={{padding: '20px', marginBottom: '16px'}}>
+          <div id="title-selection-area" className="section-card" style={{padding: '20px', marginBottom: '16px'}}>
             <div className="section-header" style={{marginBottom: '16px'}}>
               <div className="section-icon orange" style={{width: '32px', height: '32px', fontSize: '16px'}}>🤖</div>
               <h2 className="section-title" style={{fontSize: '16px'}}>AI 제목 추천</h2>

@@ -7,6 +7,13 @@ let globalInitState = {
   isInitializing: false
 };
 
+// 디버깅: 전역 상태 리셋 함수
+const resetGlobalState = () => {
+  console.log('🔄 전역 상태 리셋');
+  globalInitState.isInitialized = false;
+  globalInitState.isInitializing = false;
+};
+
 interface AppInitContextType {
   isInitialized: boolean;
   isInitializing: boolean;
@@ -43,10 +50,17 @@ export const AppInitProvider: React.FC<AppInitProviderProps> = ({ children }) =>
 
   const refreshModelStatus = () => {
     try {
+      console.log('🔍 AI 모델 상태 확인 시작');
       const status = LLMClientFactory.getCachedModelStatus();
+      console.log('📋 AI 모델 상태:', status);
       setAiModelStatus(status);
     } catch (error) {
-      console.error('AI 모델 상태 확인 실패:', error);
+      console.error('❌ AI 모델 상태 확인 실패:', error);
+      setAiModelStatus({
+        information: '오류',
+        writing: '오류',
+        image: '오류'
+      });
     }
   };
 
@@ -55,6 +69,8 @@ export const AppInitProvider: React.FC<AppInitProviderProps> = ({ children }) =>
     let isMounted = true;
 
     const initializeApp = async () => {
+      console.log('📍 현재 전역 상태:', globalInitState);
+      
       // 전역 상태로 중복 실행 완전 차단
       if (globalInitState.isInitializing || globalInitState.isInitialized) {
         console.log('⏭️ 전역 초기화 이미 진행됨, 스킵');
@@ -62,6 +78,7 @@ export const AppInitProvider: React.FC<AppInitProviderProps> = ({ children }) =>
         setIsInitialized(globalInitState.isInitialized);
         setIsInitializing(globalInitState.isInitializing);
         if (globalInitState.isInitialized) {
+          console.log('🔄 이미 초기화됨 - AI 모델 상태 새로고침');
           refreshModelStatus();
         }
         return;
@@ -82,6 +99,7 @@ export const AppInitProvider: React.FC<AppInitProviderProps> = ({ children }) =>
         console.log('✅ LLM 설정 로드 완료');
         
         // AI 모델 상태 업데이트
+        console.log('🔄 AI 모델 상태 새로고침 시작');
         refreshModelStatus();
         console.log('✅ AI 모델 상태 확인 완료');
         

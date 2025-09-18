@@ -1,17 +1,11 @@
 import { BlogContent } from './blog-crawler';
 import { CollectedYouTubeData, DataCollectionRequest } from './data-collection-engine';
+import { BaseRequestInfo } from '../types/common-interfaces';
+import { getContentTypeDescription, getReviewTypeDescription } from '../constants/content-options';
 
-export interface SummaryPromptRequest {
-  selectedTitle: string;
-  searchKeyword: string;
-  mainKeyword: string;
-  contentType: string;
-  contentTypeDescription?: string;
-  reviewType?: string;
-  reviewTypeDescription?: string;
+export interface SummaryPromptRequest extends BaseRequestInfo {
   competitorBlogs: BlogContent[];
   // youtubeVideos 제거 - 별도 분석으로 분리
-  subKeywords?: string[];
 }
 
 export class AnalysisPrompts {
@@ -26,15 +20,15 @@ export class AnalysisPrompts {
         search_keyword: request.searchKeyword,
         main_keyword: request.mainKeyword,
         content_type: request.contentType,
-        content_type_description: request.contentTypeDescription || ''
+        content_type_description: getContentTypeDescription(request.contentType)
       } as any,
       competitor_blogs: [] as any[]
     };
 
     // 후기형인 경우 후기 유형 정보 추가
-    if (request.reviewType && request.reviewTypeDescription) {
+    if (request.reviewType) {
       inputData.target_info.review_type = request.reviewType;
-      inputData.target_info.review_type_description = request.reviewTypeDescription;
+      inputData.target_info.review_type_description = getReviewTypeDescription(request.reviewType);
     }
 
     // 보조키워드가 있으면 추가
@@ -154,7 +148,8 @@ ${subtitlePreview}
       selected_title: request.selectedTitle,
       search_keyword: request.keyword,
       main_keyword: request.mainKeyword || request.keyword,
-      content_type: request.contentType
+      content_type: request.contentType,
+      content_type_description: getContentTypeDescription(request.contentType)
     } as any;
 
     // 보조키워드가 있으면 추가

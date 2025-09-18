@@ -1,15 +1,10 @@
 import { LLMClientFactory, LLMMessage } from './llm-client-factory';
 import { CollectedBlogData, CollectedYouTubeData } from './data-collection-engine';
+import { BaseRequestInfo } from '../types/common-interfaces';
+import { getContentTypeDescription, getReviewTypeDescription } from '../constants/content-options';
 
-export interface BlogSelectionRequest {
-  targetTitle: string;
-  mainKeyword: string;
-  subKeywords?: string[];
-  searchKeyword: string;
-  contentType: string;
-  contentTypeDescription?: string;
-  reviewType?: string;
-  reviewTypeDescription?: string;
+export interface BlogSelectionRequest extends Omit<BaseRequestInfo, 'selectedTitle'> {
+  targetTitle: string; // selectedTitle 대신 targetTitle 사용
   blogTitles: CollectedBlogData[];
   youtubeTitles?: CollectedYouTubeData[]; // YouTube 데이터 추가
 }
@@ -118,17 +113,19 @@ export class BlogTitleSelector {
     }
     
     // 콘텐츠 유형 설명 구성
+    const contentTypeDescription = getContentTypeDescription(request.contentType);
     let contentTypeInfo = `**콘텐츠 유형**: ${request.contentType}`;
-    if (request.contentTypeDescription) {
-      contentTypeInfo += ` (${request.contentTypeDescription})`;
+    if (contentTypeDescription) {
+      contentTypeInfo += ` (${contentTypeDescription})`;
     }
     
     // 후기 유형 정보 구성 (있는 경우)
     let reviewTypeInfo = '';
     if (request.reviewType) {
+      const reviewTypeDescription = getReviewTypeDescription(request.reviewType);
       reviewTypeInfo = `\n**후기 유형**: ${request.reviewType}`;
-      if (request.reviewTypeDescription) {
-        reviewTypeInfo += ` (${request.reviewTypeDescription})`;
+      if (reviewTypeDescription) {
+        reviewTypeInfo += ` (${reviewTypeDescription})`;
       }
     }
 

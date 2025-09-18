@@ -520,6 +520,13 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
           if (!result.success) {
             console.error('❌ 자동 저장 실패:', result.message);
           } else {
+            // 설정 저장 성공 시 LLMClientFactory 캐시 업데이트
+            try {
+              LLMClientFactory.updateCachedSettings(dataToSave.settings, dataToSave.testingStatus);
+            } catch (error) {
+              console.error('LLMClientFactory 캐시 업데이트 실패:', error);
+            }
+            
             // 설정 저장 성공 시 부모 컴포넌트에 알림
             if (onSettingsChange) {
               onSettingsChange();

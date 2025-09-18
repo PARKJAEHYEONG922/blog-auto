@@ -7,34 +7,70 @@ import Step2 from './components/Step2';
 import Step3 from './components/Step3';
 import LLMSettings from './components/LLMSettings';
 
-// Context 임포트
-import { useAppInit } from './contexts/AppInitContext';
+// Context 제거 - 직접 상태 관리 사용
+
+import { BlogWritingResult } from './services/blog-writing-service';
+import { LLMClientFactory } from './services/llm-client-factory';
 
 export interface WorkflowData {
   platform: string;
   keyword: string;
   subKeywords: string[];
   contentType: string;
-  contentTypeDescription?: string; // 콘텐츠 유형 상세 설명
   reviewType: string;
-  reviewTypeDescription?: string; // 후기 유형 상세 설명
   tone: string;
-  toneDescription?: string; // 말투 상세 설명
   customPrompt: string;
   blogDescription: string;
+  bloggerIdentity?: string; // 블로거 정체성
   selectedTitle: string;
   generatedTitles?: string[]; // 생성된 제목들
   titlesWithSearch?: { title: string; searchQuery: string }[]; // 제목과 검색어
   collectedData: unknown;
+  writingResult?: BlogWritingResult; // 글쓰기 결과
   generatedContent: string;
 }
 
 const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [showSettings, setShowSettings] = useState(false);
+  const [isBackFromStep2, setIsBackFromStep2] = useState(false);
   
-  // Context에서 전역 초기화 상태 가져오기
-  const { isInitialized, isInitializing, aiModelStatus, refreshModelStatus } = useAppInit();
+  // 직접 AI 모델 상태 관리
+  const [aiModelStatus, setAiModelStatus] = useState({
+    information: '미설정',
+    writing: '미설정',
+    image: '미설정'
+  });
+
+  // 모델 상태 새로고침 함수
+  const refreshModelStatus = React.useCallback(() => {
+    try {
+      const status = LLMClientFactory.getCachedModelStatus();
+      setAiModelStatus(status);
+    } catch (error) {
+      console.error('모델 상태 확인 실패:', error);
+    }
+  }, []);
+
+  // 초기화 및 상태 확인 (한번만 실행)
+  React.useEffect(() => {
+    let isInitialized = false;
+    
+    const initializeAndRefresh = async () => {
+      if (isInitialized) return;
+      isInitialized = true;
+      
+      try {
+        await LLMClientFactory.loadDefaultSettings();
+        // 로드 완료 후 상태 새로고침
+        refreshModelStatus();
+      } catch (error) {
+        console.error('초기화 실패:', error);
+      }
+    };
+
+    initializeAndRefresh();
+  }, []); // 빈 의존성 배열로 한번만 실행
   const [workflowData, setWorkflowData] = useState<WorkflowData>({
     platform: '',
     keyword: '',
@@ -65,8 +101,10 @@ const App: React.FC = () => {
             data={workflowData}
             onNext={(data) => {
               updateWorkflowData(data);
+              setIsBackFromStep2(false); // Step1에서 다음으로 갈 때는 리셋
               setCurrentStep(2);
             }}
+            isBackFromStep2={isBackFromStep2}
           />
         );
       case 2:
@@ -77,7 +115,10 @@ const App: React.FC = () => {
               updateWorkflowData(data);
               setCurrentStep(3);
             }}
-            onBack={() => setCurrentStep(1)}
+            onBack={() => {
+              setIsBackFromStep2(true); // Step2에서 돌아갈 때 플래그 설정
+              setCurrentStep(1);
+            }}
           />
         );
       case 3:
@@ -134,7 +175,12 @@ const App: React.FC = () => {
                     // API 설정 화면 진입 시 스크롤을 최상단으로 이동
                     if (!showSettings) {
                       setTimeout(() => {
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        const mainElement = document.querySelector('main');
+                        if (mainElement) {
+                          mainElement.scrollTo({ top: 0, behavior: 'smooth' });
+                        } else {
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }
                       }, 100);
                     }
                   }}
@@ -195,6 +241,7 @@ const App: React.FC = () => {
             <LLMSettings 
               onClose={() => {
                 setShowSettings(false);
+                setIsBackFromStep2(false); // API 설정에서 나올 때 Step1 스크롤 플래그 리셋
                 // 설정 변경 후 상태만 새로고침
                 refreshModelStatus();
               }}

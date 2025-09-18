@@ -4,17 +4,11 @@ import { BlogTitleSelector, SelectedBlogTitle, SelectedYouTubeVideo } from './bl
 import { BlogCrawler, BlogContent, CrawlingProgress } from './blog-crawler';
 import { AnalysisPrompts, SummaryPromptRequest } from './analysis-prompts';
 import { youtubeAPI, PrioritizedVideo } from './youtube-api';
+import { BaseRequestInfo, PlatformInfo } from '../types/common-interfaces';
 
-export interface DataCollectionRequest {
-  keyword: string; // 서치키워드
-  mainKeyword?: string; // 메인키워드
-  subKeywords?: string[];
-  selectedTitle: string;
-  platform: string;
-  contentType: string;
-  contentTypeDescription?: string;
-  reviewType?: string;
-  reviewTypeDescription?: string;
+export interface DataCollectionRequest extends BaseRequestInfo, PlatformInfo {
+  keyword: string; // 기존 호환성을 위해 유지 (searchKeyword와 동일)
+  mainKeyword?: string; // 메인키워드 (옵션)
   mode: 'fast' | 'accurate';
 }
 
@@ -331,9 +325,7 @@ export class DataCollectionEngine {
         searchKeyword: request.keyword,
         mainKeyword: request.mainKeyword || request.keyword,
         contentType: request.contentType,
-        contentTypeDescription: request.contentTypeDescription,
         reviewType: request.reviewType,
-        reviewTypeDescription: request.reviewTypeDescription,
         competitorBlogs: crawledBlogs,
         // youtubeVideos 제거 - 블로그만 분석
         subKeywords: request.subKeywords
@@ -414,9 +406,7 @@ export class DataCollectionEngine {
         subKeywords: request.subKeywords,
         searchKeyword: request.keyword,
         contentType: request.contentType,
-        contentTypeDescription: request.contentTypeDescription,
         reviewType: request.reviewType,
-        reviewTypeDescription: request.reviewTypeDescription,
         blogTitles: blogs,
         youtubeTitles: hasYouTube ? youtube : undefined
       };

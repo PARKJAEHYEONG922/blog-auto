@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { WorkflowData } from '../App';
 import { DataCollectionEngine, DataCollectionResult, AnalysisProgress } from '../services/data-collection-engine';
+import { BlogWritingService, BlogWritingResult } from '../services/blog-writing-service';
+import { getContentTypeName, getReviewTypeName, getToneName } from '../constants/content-options';
 import SimpleDialog from './SimpleDialog';
 
 interface Step2Props {
@@ -16,31 +18,10 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
   const [showBlogDetails, setShowBlogDetails] = useState(false);
   const [showYouTubeDetails, setShowYouTubeDetails] = useState(false);
   
-  // Step1에서 정의된 옵션들과 동일하게 정의
-  const contentTypes = [
-    { id: 'info', name: '정보/가이드형' },
-    { id: 'review', name: '후기/리뷰형' },
-    { id: 'compare', name: '비교/추천형' },
-    { id: 'howto', name: '노하우형' }
-  ];
-
-  const reviewTypes = [
-    { id: 'self-purchase', name: '내돈내산 후기' },
-    { id: 'sponsored', name: '협찬 후기' },
-    { id: 'experience', name: '체험단 후기' },
-    { id: 'rental', name: '대여/렌탈 후기' }
-  ];
-
-  const tones = [
-    { id: 'formal', name: '정중한 존댓말' },
-    { id: 'casual', name: '친근한 반말' },
-    { id: 'friendly', name: '친근한 존댓말' }
-  ];
-
-  // ID를 한국어 이름으로 변환하는 함수들
-  const getContentTypeName = (id: string) => contentTypes.find(c => c.id === id)?.name || id;
-  const getReviewTypeName = (id: string) => reviewTypes.find(r => r.id === id)?.name || id;
-  const getToneName = (id: string) => tones.find(t => t.id === id)?.name || id;
+  // 글쓰기 상태 관리
+  const [isWriting, setIsWriting] = useState(false);
+  const [writingResult, setWritingResult] = useState<BlogWritingResult | null>(null);
+  
   
   // 참고 검색어 관리
   const [searchKeyword, setSearchKeyword] = useState(() => {
@@ -49,7 +30,6 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
     );
     return selectedTitleData?.searchQuery || data.keyword;
   });
-  const [isEditingKeyword, setIsEditingKeyword] = useState(false);
   
   // 다이얼로그 상태 관리
   const [dialog, setDialog] = useState<{
@@ -88,15 +68,14 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
 
       // 데이터 수집 요청 구성 (사용자가 수정한 검색어 사용)
       const request = {
-        keyword: searchKeyword, // 서치키워드 (사용자가 수정 가능)
+        keyword: searchKeyword, // 서치키워드 (사용자가 수정 가능) - 기존 호환성
+        searchKeyword: searchKeyword, // 공통 인터페이스 필드
         mainKeyword: data.keyword, // 메인키워드 (원본)
         subKeywords: data.subKeywords,
         selectedTitle: data.selectedTitle,
         platform: data.platform,
         contentType: data.contentType,
-        contentTypeDescription: data.contentTypeDescription,
         reviewType: data.reviewType,
-        reviewTypeDescription: data.reviewTypeDescription,
         mode: 'fast' as const
       };
 
@@ -132,13 +111,90 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
     }
   };
 
+  // 글쓰기 실행
+  const startWriting = async () => {
+    if (!collectedData) {
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '분석 필요',
+        message: '먼저 데이터 수집 및 분석을 완료해주세요.'
+      });
+      return;
+    }
+
+    if (!BlogWritingService.isWritingClientAvailable()) {
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '글쓰기 AI 미설정',
+        message: '글쓰기 AI가 설정되지 않았습니다. 설정에서 글쓰기 AI를 먼저 설정해주세요.'
+      });
+      return;
+    }
+
+    setIsWriting(true);
+    setWritingResult(null);
+
+    try {
+      console.log('🎯 블로그 글쓰기 시작');
+      
+      const writingRequest = {
+        selectedTitle: data.selectedTitle || '',
+        searchKeyword: searchKeyword,
+        mainKeyword: data.keyword || '',
+        contentType: getContentTypeName(data.contentType || ''),
+        tone: getToneName(data.tone || ''),
+        reviewType: data.reviewType ? getReviewTypeName(data.reviewType) : undefined,
+        bloggerIdentity: data.bloggerIdentity,
+        subKeywords: data.subKeywords,
+        blogAnalysisResult: collectedData.contentSummary,
+        youtubeAnalysisResult: collectedData.youtubeAnalysis
+      };
+
+      const result = await BlogWritingService.generateBlogContent(writingRequest);
+      setWritingResult(result);
+
+      if (result.success) {
+        console.log('✅ 블로그 글쓰기 완료');
+        setDialog({
+          isOpen: true,
+          type: 'success',
+          title: '글쓰기 완료',
+          message: '블로그 글이 성공적으로 생성되었습니다!'
+        });
+      } else {
+        setDialog({
+          isOpen: true,
+          type: 'error',
+          title: '글쓰기 실패',
+          message: `글쓰기 중 오류가 발생했습니다:\n${result.error}`
+        });
+      }
+
+    } catch (error) {
+      console.error('❌ 글쓰기 실패:', error);
+      setDialog({
+        isOpen: true,
+        type: 'error',
+        title: '글쓰기 오류',
+        message: `글쓰기 중 예상치 못한 오류가 발생했습니다:\n${error.message || error}`
+      });
+    } finally {
+      setIsWriting(false);
+    }
+  };
+
   const handleNext = () => {
     if (!collectedData) {
       alert('분석을 완료해주세요.');
       return;
     }
 
-    onNext({ collectedData });
+    onNext({ 
+      collectedData,
+      writingResult: writingResult?.success ? writingResult : undefined
+    });
   };
 
   return (
@@ -535,6 +591,126 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
                   </div>
                 </div>
               )}
+
+              {/* 글쓰기 카드 */}
+              <div className="section-card" style={{padding: '20px', marginBottom: '16px'}}>
+                <div className="section-header" style={{marginBottom: '16px'}}>
+                  <div className="section-icon purple" style={{width: '32px', height: '32px', fontSize: '16px'}}>✍️</div>
+                  <h2 className="section-title" style={{fontSize: '16px'}}>블로그 글쓰기</h2>
+                  <div className="text-sm text-slate-500 ml-auto">
+                    글쓰기 AI: {BlogWritingService.getWritingClientInfo()}
+                  </div>
+                </div>
+
+                {!isWriting && !writingResult && (
+                  <div className="text-center py-8">
+                    <div className="text-4xl mb-4">✍️</div>
+                    <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                      AI 글쓰기를 시작하세요
+                    </h3>
+                    <p className="text-slate-600 mb-4">
+                      수집된 데이터를 바탕으로 AI가 블로그 글을 작성합니다
+                    </p>
+                    <button
+                      onClick={startWriting}
+                      disabled={!collectedData || !BlogWritingService.isWritingClientAvailable()}
+                      className={`ultra-btn px-6 py-3 text-sm ${
+                        !collectedData || !BlogWritingService.isWritingClientAvailable() 
+                          ? 'opacity-50 cursor-not-allowed' 
+                          : ''
+                      }`}
+                      style={{
+                        background: collectedData && BlogWritingService.isWritingClientAvailable() ? '#8b5cf6' : '#94a3b8',
+                        borderColor: collectedData && BlogWritingService.isWritingClientAvailable() ? '#8b5cf6' : '#94a3b8',
+                        color: 'white'
+                      }}
+                    >
+                      <span className="text-lg">🚀</span>
+                      <span>글쓰기 시작하기</span>
+                    </button>
+                    {!BlogWritingService.isWritingClientAvailable() && (
+                      <p className="text-red-500 text-sm mt-2">
+                        글쓰기 AI가 설정되지 않았습니다. 설정에서 글쓰기 AI를 먼저 설정해주세요.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {isWriting && (
+                  <div className="text-center py-8">
+                    <div className="ultra-spinner mx-auto mb-4" style={{width: '32px', height: '32px'}}></div>
+                    <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                      AI가 글을 작성하고 있습니다...
+                    </h3>
+                    <p className="text-slate-600">
+                      분석된 데이터를 바탕으로 고품질 블로그 글을 생성 중입니다
+                    </p>
+                  </div>
+                )}
+
+                {writingResult && (
+                  <div className="space-y-4">
+                    {writingResult.success ? (
+                      <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-green-500 text-lg">✅</span>
+                          <h3 className="font-semibold text-green-800">글쓰기 완료</h3>
+                          {writingResult.usage && (
+                            <span className="text-green-600 text-sm ml-auto">
+                              토큰: {writingResult.usage.totalTokens.toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div className="bg-white rounded-lg p-4 border border-green-200 max-h-96 overflow-y-auto">
+                          <div className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">
+                            {BlogWritingService.processWritingResult(writingResult.content || '')}
+                          </div>
+                        </div>
+                        
+                        <div className="flex gap-2 mt-3">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(BlogWritingService.processWritingResult(writingResult.content || ''));
+                              setDialog({
+                                isOpen: true,
+                                type: 'success',
+                                title: '복사 완료',
+                                message: '블로그 글이 클립보드에 복사되었습니다.'
+                              });
+                            }}
+                            className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition-colors"
+                          >
+                            📋 복사하기
+                          </button>
+                          <button
+                            onClick={() => setWritingResult(null)}
+                            className="px-3 py-1 bg-gray-500 text-white text-sm rounded hover:bg-gray-600 transition-colors"
+                          >
+                            🔄 다시 쓰기
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-red-500 text-lg">❌</span>
+                          <h3 className="font-semibold text-red-800">글쓰기 실패</h3>
+                        </div>
+                        <p className="text-red-700 text-sm mb-3">
+                          {writingResult.error}
+                        </p>
+                        <button
+                          onClick={() => setWritingResult(null)}
+                          className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors"
+                        >
+                          🔄 다시 시도
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
             </div>
           )}

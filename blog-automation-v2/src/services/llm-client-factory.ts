@@ -329,8 +329,8 @@ export class LLMClientFactory {
   private static informationClient: BaseLLMClient | null = null;
   private static writingClient: BaseLLMClient | null = null;
   private static imageClient: BaseLLMClient | null = null;
-  private static isLoading: boolean = false; // 로딩 중 상태
-  private static isLoaded: boolean = false; // 로드 완료 상태
+  private static isLoading = false; // 로딩 중 상태
+  private static isLoaded = false; // 로드 완료 상태
   private static cachedSettings: any = null; // 설정 캐시
   private static cachedTestingStatus: any = null; // 테스트 상태 캐시
 
@@ -430,11 +430,33 @@ export class LLMClientFactory {
     };
   }
 
+  // 캐시된 설정 업데이트 (자연스러운 방식)
+  static updateCachedSettings(settings: any, testingStatus: any): void {
+    this.cachedSettings = settings;
+    this.cachedTestingStatus = testingStatus;
+    
+    // 클라이언트도 업데이트
+    if (settings.information?.apiKey) {
+      this.setInformationClient(settings.information);
+    }
+    if (settings.writing?.apiKey) {
+      this.setWritingClient(settings.writing);
+    }
+    if (settings.image?.apiKey) {
+      this.setImageClient(settings.image);
+    }
+  }
+
   // 기본 설정 로드 (싱글톤 패턴으로 중복 방지)
   static async loadDefaultSettings(): Promise<void> {
-    // 이미 로드되었거나 로딩 중인 경우 스킵
-    if (this.isLoaded || this.isLoading) {
-      console.log('⏭️ LLM 설정 이미 로드됨 또는 로딩 중, 스킵');
+    // 이미 로드되었으면 스킵
+    if (this.isLoaded) {
+      return;
+    }
+    
+    // 로딩 중이면 대기
+    if (this.isLoading) {
+      console.log('⏭️ LLM 설정 로딩 중, 대기...');
       return;
     }
 
