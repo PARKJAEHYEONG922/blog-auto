@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import SimpleDialog from './SimpleDialog';
+import { LLMClientFactory } from '../services/llm-client-factory';
 
 interface LLMSettingsProps {
   onClose: () => void;
+  onSettingsChange?: () => void; // 설정 변경 시 호출할 콜백 추가
 }
 
 interface LLMConfig {
@@ -24,12 +26,23 @@ interface ProviderApiKeys {
   naver: string; // 네이버 검색 API 키 추가
 }
 
+// 성공한 설정들을 저장하는 구조
+interface SuccessfulConfig {
+  provider: string;
+  model: string;
+  apiKey: string;
+}
+
+interface SuccessfulConfigs {
+  [configKey: string]: SuccessfulConfig; // "provider-model" 형태의 키로 저장
+}
+
 interface NaverApiKeys {
   clientId: string;
   clientSecret: string;
 }
 
-const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
+const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) => {
   // 탭 상태 관리
   const [activeMainTab, setActiveMainTab] = useState<'llm' | 'naver'>('llm');
   
@@ -40,6 +53,9 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
     gemini: '',
     naver: ''
   });
+
+  // 성공한 설정들 저장소 (provider-model 키로 저장)
+  const [successfulConfigs, setSuccessfulConfigs] = useState<SuccessfulConfigs>({});
   
   const [naverApiKeys, setNaverApiKeys] = useState<NaverApiKeys>({
     clientId: '',
@@ -83,21 +99,31 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
     message: ''
   });
   
-  // 설정 로드
+  // 설정 로드 (캐시된 데이터 사용, API 호출 없음)
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const savedData = await (window as any).electronAPI.loadSettings();
-        const loadedSettings = savedData.settings || savedData;
+        console.log('🔄 LLMSettings: 캐시된 설정 로드 시작');
+        
+        // LLMClientFactory에서 캐시된 설정 가져오기 (API 호출 없음)
+        const cachedData = LLMClientFactory.getCachedSettings();
+        if (!cachedData) {
+          console.warn('캐시된 설정이 없습니다. 기본값을 사용합니다.');
+          return;
+        }
+        
+        const loadedSettings = cachedData.settings;
         
         // 네이버 API 설정 로드
         try {
           const naverSettings = await (window as any).electronAPI.loadNaverApiSettings();
+          
           if (naverSettings && naverSettings.success && naverSettings.data) {
             setNaverApiKeys({
               clientId: naverSettings.data.clientId || '',
               clientSecret: naverSettings.data.clientSecret || ''
             });
+            
             if (naverSettings.data.isValid) {
               setNaverTestingStatus({
                 testing: false,
@@ -107,7 +133,7 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
             }
           }
         } catch (error) {
-          console.log('네이버 API 설정 로드 실패:', error);
+          console.warn('네이버 API 설정 로드 실패:', error);
         }
         
         // 제공자별 API 키 추출
@@ -118,46 +144,64 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
           naver: ''
         };
         
-        // 모든 탭에서 API 키 수집
+        // 모든 탭에서 API 키 수집 - 가장 최근 값으로 업데이트
         const tabs = Object.keys(loadedSettings) as Array<keyof LLMSettings>;
         for (const tab of tabs) {
           const config = loadedSettings[tab];
           if (config.provider && config.apiKey) {
             const providerKey = config.provider as keyof ProviderApiKeys;
-            if (extractedKeys[providerKey] === '') {
-              extractedKeys[providerKey] = config.apiKey;
-            }
+            // 이미 존재하는 키도 덮어쓰기 (가장 최근 저장된 값 사용)
+            extractedKeys[providerKey] = config.apiKey;
           }
         }
         
         setProviderApiKeys(extractedKeys);
         
-        // 설정 복원 (API 키는 제공자별 저장소에서 가져오기)
+        // 설정 복원 - 같은 제공자를 사용하는 모든 탭에 같은 API 키 적용
         const restoredSettings = { ...loadedSettings };
         for (const tab of tabs) {
           const config = restoredSettings[tab];
           if (config.provider) {
             const providerKey = config.provider as keyof ProviderApiKeys;
-            restoredSettings[tab].apiKey = extractedKeys[providerKey] || '';
+            // 제공자별 저장소에서 API 키 가져오기
+            const apiKey = extractedKeys[providerKey] || config.apiKey || '';
+            restoredSettings[tab].apiKey = apiKey;
+            
+            // 같은 제공자를 사용하는 다른 탭들도 동일한 API 키로 설정
+            for (const otherTab of tabs) {
+              if (otherTab !== tab && restoredSettings[otherTab].provider === config.provider) {
+                restoredSettings[otherTab].apiKey = apiKey;
+              }
+            }
           }
         }
         
         setSettings(restoredSettings);
         
-        // 테스트 성공한 설정만 appliedSettings에 저장
+        // 성공한 설정들을 successfulConfigs에 저장
+        const successfulConfigsData: SuccessfulConfigs = {};
         const successfulSettings = { ...restoredSettings };
         for (const tab of tabs) {
-          const isTestSuccessful = savedData.testingStatus?.[tab]?.success;
-          if (!isTestSuccessful) {
+          const isTestSuccessful = cachedData.testingStatus?.[tab]?.success;
+          if (isTestSuccessful) {
+            const config = restoredSettings[tab];
+            const configKey = `${config.provider}-${config.model}`;
+            successfulConfigsData[configKey] = {
+              provider: config.provider,
+              model: config.model,
+              apiKey: config.apiKey
+            };
+          } else {
             // 테스트 성공하지 않은 설정은 appliedSettings에서 제거
             successfulSettings[tab] = { provider: '', model: '', apiKey: '' };
           }
         }
+        setSuccessfulConfigs(successfulConfigsData);
         setAppliedSettings(successfulSettings);
         
-        // 테스트 상태도 복원
-        if (savedData.testingStatus) {
-          setTestingStatus(savedData.testingStatus);
+        // 테스트 상태도 복원 (캐시된 데이터 사용)
+        if (cachedData.testingStatus) {
+          setTestingStatus(cachedData.testingStatus);
         }
       } catch (error) {
         // 에러 발생 시 무시 (기본값 사용)
@@ -211,15 +255,89 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
     }
   };
 
+  // API 키 삭제 함수
+  const deleteApiKey = (category: keyof LLMSettings) => {
+    const { provider, model } = settings[category];
+    
+    setDialog({
+      isOpen: true,
+      type: 'confirm',
+      title: 'API 키 삭제',
+      message: `${provider.toUpperCase()} 제공자의 모든 API 키를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없으며, 모든 저장된 ${provider} API 키가 제거됩니다.`,
+      onConfirm: () => {
+        // 제공자별 API 키 삭제
+        setProviderApiKeys(prev => ({
+          ...prev,
+          [provider as keyof ProviderApiKeys]: ''
+        }));
+        
+        // 해당 제공자의 모든 성공한 설정 삭제
+        setSuccessfulConfigs(prev => {
+          const newConfigs = { ...prev };
+          Object.keys(newConfigs).forEach(configKey => {
+            if (configKey.startsWith(`${provider}-`)) {
+              delete newConfigs[configKey];
+            }
+          });
+          return newConfigs;
+        });
+        
+        // 같은 제공자를 사용하는 모든 탭의 API 키 삭제
+        setSettings(prev => {
+          const newSettings = { ...prev };
+          Object.keys(newSettings).forEach(tabKey => {
+            const tab = tabKey as keyof LLMSettings;
+            if (newSettings[tab].provider === provider) {
+              newSettings[tab].apiKey = '';
+            }
+          });
+          return newSettings;
+        });
+        
+        // 해당 제공자의 모든 테스트 상태 초기화
+        setTestingStatus(prev => {
+          const newStatus = { ...prev };
+          Object.keys(newStatus).forEach(tabKey => {
+            const tab = tabKey as keyof LLMSettings;
+            if (settings[tab].provider === provider) {
+              newStatus[tab] = { testing: false, success: false, message: '' };
+            }
+          });
+          return newStatus;
+        });
+        
+        // appliedSettings에서도 해당 제공자 제거
+        setAppliedSettings(prev => {
+          const newApplied = { ...prev };
+          Object.keys(newApplied).forEach(tabKey => {
+            const tab = tabKey as keyof LLMSettings;
+            if (newApplied[tab].provider === provider) {
+              newApplied[tab] = { provider: '', model: '', apiKey: '' };
+            }
+          });
+          return newApplied;
+        });
+        
+        // 설정 변경 알림
+        if (onSettingsChange) {
+          onSettingsChange();
+        }
+      }
+    });
+  };
+
   const updateSetting = (category: keyof LLMSettings, field: keyof LLMConfig, value: string) => {
     if (field === 'provider') {
-      // 제공자 변경 시
+      // 제공자 변경 시 - 기존 API 키 유지
+      const existingApiKey = value ? (providerApiKeys[value as keyof ProviderApiKeys] || '') : '';
+      
       setSettings(prev => ({
         ...prev,
         [category]: {
           ...prev[category],
           provider: value,
-          apiKey: value ? (providerApiKeys[value as keyof ProviderApiKeys] || '') : ''
+          model: '', // 모델은 초기화
+          apiKey: existingApiKey
         }
       }));
     } else if (field === 'apiKey') {
@@ -230,17 +348,45 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
           ...prev,
           [provider as keyof ProviderApiKeys]: value
         }));
+        
+        // 같은 제공자를 사용하는 다른 탭의 API 키도 동시에 업데이트
+        setSettings(prev => {
+          const newSettings = { ...prev };
+          Object.keys(newSettings).forEach(tabKey => {
+            const tab = tabKey as keyof LLMSettings;
+            if (newSettings[tab].provider === provider) {
+              newSettings[tab].apiKey = value;
+            }
+          });
+          return newSettings;
+        });
+      } else {
+        // 제공자가 없는 경우 현재 탭만 업데이트
+        setSettings(prev => ({
+          ...prev,
+          [category]: {
+            ...prev[category],
+            apiKey: value
+          }
+        }));
       }
+    } else if (field === 'model') {
+      // 모델 변경 시 - 성공했던 설정이 있으면 API 키 복원
+      const provider = settings[category].provider;
+      const configKey = `${provider}-${value}`;
+      const successfulConfig = successfulConfigs[configKey];
       
       setSettings(prev => ({
         ...prev,
         [category]: {
           ...prev[category],
-          apiKey: value
+          model: value,
+          // 성공했던 설정이 있으면 해당 API 키 사용, 없으면 현재 제공자의 API 키 유지
+          apiKey: successfulConfig?.apiKey || prev[category].apiKey
         }
       }));
     } else {
-      // 기타 필드 (모델 등)
+      // 기타 필드
       setSettings(prev => ({
         ...prev,
         [category]: {
@@ -250,12 +396,17 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
       }));
     }
     
-    // API 키, 제공자, 모델이 변경되면 테스트 상태 초기화
+    // API 키, 제공자, 모델이 변경되면 해당 탭의 테스트 상태 초기화
     if (field === 'apiKey' || field === 'provider' || field === 'model') {
       setTestingStatus(prev => ({
         ...prev,
         [category]: { testing: false, success: false, message: '' }
       }));
+    }
+
+    // 설정 변경 시 부모 컴포넌트에 알림
+    if (onSettingsChange) {
+      onSettingsChange();
     }
   };
 
@@ -294,6 +445,17 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
         
         // 테스트 성공 시 appliedSettings 업데이트 및 저장
         try {
+          // 성공한 설정을 successfulConfigs에 저장
+          const configKey = `${provider}-${model}`;
+          setSuccessfulConfigs(prev => ({
+            ...prev,
+            [configKey]: {
+              provider,
+              model,
+              apiKey
+            }
+          }));
+          
           // 테스트 성공한 설정을 appliedSettings에 반영
           const newAppliedSettings = {
             ...appliedSettings,
@@ -320,6 +482,11 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
           const result = await (window as any).electronAPI.saveSettings(dataToSave);
           if (!result.success) {
             console.error('❌ 자동 저장 실패:', result.message);
+          } else {
+            // 설정 저장 성공 시 부모 컴포넌트에 알림
+            if (onSettingsChange) {
+              onSettingsChange();
+            }
           }
         } catch (error) {
           console.error('❌ 자동 저장 중 오류:', error);
@@ -372,102 +539,6 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
     }
   };
 
-  // API 키 삭제 함수
-  const deleteApiKey = async (category: keyof LLMSettings) => {
-    const { provider } = settings[category];
-    
-    if (!provider) {
-      setDialog({
-        isOpen: true,
-        type: 'warning',
-        title: '삭제 불가',
-        message: '삭제할 API 키가 없습니다.'
-      });
-      return;
-    }
-
-    // 사용자 확인 다이얼로그
-    setDialog({
-      isOpen: true,
-      type: 'confirm',
-      title: 'API 키 삭제',
-      message: `${provider.toUpperCase()} API 키를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없으며, 모든 탭에서 해당 제공자의 API 키가 제거됩니다.`,
-      onConfirm: () => performDeleteApiKey(category, provider)
-    });
-  };
-
-  // 실제 API 키 삭제 수행
-  const performDeleteApiKey = async (category: keyof LLMSettings, provider: string) => {
-    try {
-      // 1. 제공자별 저장소에서 해당 제공자의 API 키 제거
-      setProviderApiKeys(prev => ({
-        ...prev,
-        [provider as keyof ProviderApiKeys]: ''
-      }));
-
-      // 2. 편집 중인 설정에서 해당 제공자의 모든 API 키 제거
-      const newSettings = { ...settings };
-      Object.keys(newSettings).forEach(tab => {
-        const tabKey = tab as keyof LLMSettings;
-        if (newSettings[tabKey].provider === provider) {
-          newSettings[tabKey].apiKey = '';
-        }
-      });
-      setSettings(newSettings);
-
-      // 3. 적용된 설정에서도 해당 제공자의 모든 설정 완전 제거 (빈 상태로)
-      const newAppliedSettings = { ...appliedSettings };
-      Object.keys(newAppliedSettings).forEach(tab => {
-        const tabKey = tab as keyof LLMSettings;
-        if (newAppliedSettings[tabKey].provider === provider) {
-          newAppliedSettings[tabKey] = { provider: '', model: '', apiKey: '' };
-        }
-      });
-      setAppliedSettings(newAppliedSettings);
-
-      // 4. 테스트 상태에서도 해당 제공자의 모든 상태 제거
-      const newTestingStatus = { ...testingStatus };
-      Object.keys(newTestingStatus).forEach(tab => {
-        const tabKey = tab as keyof LLMSettings;
-        if (settings[tabKey].provider === provider) {
-          delete newTestingStatus[tabKey];
-        }
-      });
-      setTestingStatus(newTestingStatus);
-
-      // 4. 파일에도 저장
-      const dataToSave = {
-        settings: newSettings,
-        testingStatus: newTestingStatus
-      };
-      
-      const result = await (window as any).electronAPI.saveSettings(dataToSave);
-      if (result.success) {
-        setDialog({
-          isOpen: true,
-          type: 'success',
-          title: '삭제 완료',
-          message: `${provider.toUpperCase()} API 키가 성공적으로 삭제되었습니다.`
-        });
-      } else {
-        console.error('❌ 삭제 후 저장 실패:', result.message);
-        setDialog({
-          isOpen: true,
-          type: 'error',
-          title: '저장 실패',
-          message: `API 키는 삭제되었지만 저장에 실패했습니다:\n${result.message}`
-        });
-      }
-    } catch (error: any) {
-      console.error('❌ API 키 삭제 중 오류:', error);
-      setDialog({
-        isOpen: true,
-        type: 'error',
-        title: '삭제 오류',
-        message: `API 키 삭제 중 오류가 발생했습니다:\n${error.message}`
-      });
-    }
-  };
 
   // 네이버 API 테스트 및 적용 함수
   const testAndApplyNaverApi = async () => {
@@ -503,7 +574,9 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
         });
         
         // 테스트 성공시 자동으로 저장 (success: true로 명시적으로 전달)
+        console.log('🎯 테스트 성공! 저장 함수 호출 시도');
         await saveNaverApiToStorageWithStatus(true);
+        console.log('✅ 저장 함수 호출 완료');
       } else {
         const errorText = await response.text();
         setNaverTestingStatus({
@@ -525,13 +598,18 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
   const saveNaverApiToStorageWithStatus = async (isValid: boolean) => {
     const { clientId, clientSecret } = naverApiKeys;
     
+    console.log('🚀 네이버 API 저장 함수 호출됨:', { clientId: clientId.substring(0, 5) + '...', isValid });
+    
     try {
       // 네이버 API 설정 저장
+      console.log('📡 electronAPI.saveNaverApiSettings 호출');
       const result = await (window as any).electronAPI.saveNaverApiSettings({
         clientId: clientId.trim(),
         clientSecret: clientSecret.trim(),
         isValid: isValid
       });
+      
+      console.log('💾 저장 결과:', result);
 
       if (result.success) {
         setNaverTestingStatus(prev => ({
@@ -546,6 +624,7 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose }) => {
         });
       }
     } catch (error: any) {
+      console.error('❌ 네이버 API 저장 중 에러:', error);
       setNaverTestingStatus({
         testing: false,
         success: false,

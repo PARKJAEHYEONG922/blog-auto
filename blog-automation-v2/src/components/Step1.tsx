@@ -20,18 +20,24 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
   const [blogDescription, setBlogDescription] = useState(
     data.blogDescription || '당신은 네이버 블로그에서 인기 있는 글을 쓰는 블로거입니다. 독자들이 진짜 도움이 되고 재미있게 읽을 수 있는 글을 쓰는 것이 목표입니다.'
   );
-  const [generatedTitles, setGeneratedTitles] = useState<string[]>([]);
-  const [titlesWithSearch, setTitlesWithSearch] = useState<TitleWithSearch[]>([]);
+  // 더미 데이터 추가 (테스트용)
+  const dummyTitlesWithSearch: TitleWithSearch[] = [
+    { title: "블로그 마케팅 완벽 가이드 - 초보자도 쉽게 시작하는 방법", searchQuery: "블로그 마케팅 초보자 가이드" },
+    { title: "블로그 마케팅으로 월 100만원 수익 올리는 실전 노하우", searchQuery: "블로그 수익화 노하우" },
+    { title: "블로그 마케팅 성공 사례 분석 - 실제 후기와 팁", searchQuery: "블로그 마케팅 성공사례" },
+    { title: "블로그 마케팅 도구 추천 TOP 10 - 효과적인 운영법", searchQuery: "블로그 마케팅 도구 추천" },
+    { title: "블로그 마케팅 전략 수립부터 실행까지 단계별 가이드", searchQuery: "블로그 마케팅 전략 가이드" }
+  ];
+
+  const [generatedTitles, setGeneratedTitles] = useState<string[]>(
+    data.generatedTitles?.length ? data.generatedTitles : dummyTitlesWithSearch.map(item => item.title)
+  );
+  const [titlesWithSearch, setTitlesWithSearch] = useState<TitleWithSearch[]>(
+    data.titlesWithSearch?.length ? data.titlesWithSearch : dummyTitlesWithSearch
+  );
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatingMode, setGeneratingMode] = useState<'fast' | 'accurate'>('fast');
-  const [lastGeneratedMode, setLastGeneratedMode] = useState<'fast' | 'accurate'>('fast');
   const [selectedTitle, setSelectedTitle] = useState(data.selectedTitle || '');
   const [isSavingDefaults, setIsSavingDefaults] = useState(false);
-  const [mcpConnectionStatus, setMcpConnectionStatus] = useState<{
-    naverSearch: boolean;
-    youtube: boolean;
-    isChecking: boolean;
-  }>({ naverSearch: false, youtube: false, isChecking: false });
   
   // 다이얼로그 상태 관리
   const [dialog, setDialog] = useState<{
@@ -74,26 +80,6 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
     { id: 'friendly', name: '친근한 존댓말', icon: '🤝', description: '써봤는데 좋더라구요, 도움이 될 것 같아요 (따뜻한 느낌)' }
   ];
 
-  // MCP 연결 상태 확인
-  const checkMcpConnection = async () => {
-    if (mcpConnectionStatus.isChecking) return;
-    
-    setMcpConnectionStatus(prev => ({ ...prev, isChecking: true }));
-    try {
-      const { mcpClientManager } = await import('../services/mcp-client');
-      const isNaverConnected = await mcpClientManager.isConnected('naver-search');
-      const isYouTubeConnected = await mcpClientManager.isConnected('youtube');
-      
-      setMcpConnectionStatus({
-        naverSearch: isNaverConnected,
-        youtube: isYouTubeConnected,
-        isChecking: false
-      });
-    } catch (error) {
-      console.log('MCP 연결 상태 확인 실패:', error);
-      setMcpConnectionStatus({ naverSearch: false, youtube: false, isChecking: false });
-    }
-  };
 
   // 기본 설정 로드
   useEffect(() => {
@@ -113,10 +99,9 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
     };
     
     loadDefaults();
-    checkMcpConnection(); // 컴포넌트 로드 시 MCP 상태 확인
   }, []);
 
-  const generateTitles = async (mode: 'fast' | 'accurate') => {
+  const generateTitles = async () => {
     if (!keyword.trim()) {
       setDialog({
         isOpen: true,
@@ -128,7 +113,6 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
     }
 
     setIsGenerating(true);
-    setGeneratingMode(mode);
     try {
       // 실제 MCP + LLM 연동
       const { TitleGenerationEngine } = await import('../services/title-generation-engine');
@@ -137,6 +121,7 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
       // 선택된 옵션의 한국어 이름 찾기
       const platformName = platforms.find(p => p.id === platform)?.name || platform;
       const contentTypeName = contentTypes.find(c => c.id === contentType)?.name || contentType;
+      const reviewTypeName = reviewType ? reviewTypes.find(r => r.id === reviewType)?.name || reviewType : undefined;
 
       const result = await engine.generateTitles({
         keyword: keyword.trim(),
@@ -145,22 +130,18 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
         platformName,
         contentType,
         contentTypeName,
+        reviewType,
+        reviewTypeName,
         tone,
         customPrompt: customPrompt.trim(),
         blogDescription: blogDescription.trim(),
-        mode
+        mode: 'fast'
       });
 
       setGeneratedTitles(result.titles);
       setTitlesWithSearch(result.titlesWithSearch);
-      setLastGeneratedMode(mode);
       console.log('제목 생성 메타데이터:', result.metadata);
       console.log('제목과 검색어:', result.titlesWithSearch);
-      
-      // 정확모드 실행 후 MCP 연결 상태 업데이트
-      if (mode === 'accurate') {
-        checkMcpConnection();
-      }
     } catch (error) {
       console.error('제목 생성 오류:', error);
       setDialog({
@@ -273,16 +254,26 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
       return;
     }
 
+    // 선택된 옵션의 상세 설명 찾기
+    const contentTypeDescription = contentTypes.find(c => c.id === contentType)?.description || '';
+    const reviewTypeDescription = reviewType ? reviewTypes.find(r => r.id === reviewType)?.description || '' : '';
+    const toneDescription = tones.find(t => t.id === tone)?.description || '';
+
     onNext({
       platform,
       keyword: keyword.trim(),
       subKeywords: subKeywords.split(',').map(k => k.trim()).filter(k => k),
       contentType,
+      contentTypeDescription,
       reviewType,
+      reviewTypeDescription,
       tone,
+      toneDescription,
       customPrompt: customPrompt.trim(),
       blogDescription: blogDescription.trim(),
-      selectedTitle
+      selectedTitle,
+      generatedTitles, // 생성된 제목들 저장
+      titlesWithSearch // 제목과 검색어 저장
     });
   };
 
@@ -484,115 +475,40 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
             <div className="section-header" style={{marginBottom: '16px'}}>
               <div className="section-icon orange" style={{width: '32px', height: '32px', fontSize: '16px'}}>🤖</div>
               <h2 className="section-title" style={{fontSize: '16px'}}>AI 제목 추천</h2>
-            </div>
-            
-            <div className="space-y-3 mb-5">
-              <div className="flex gap-2">
-                <button
-                  onClick={() => generateTitles('fast')}
-                  disabled={isGenerating || !keyword.trim()}
-                  className="ultra-btn flex-1 px-3 py-2 text-xs"
-                  style={{
-                    background: '#f59e0b',
-                    borderColor: '#f59e0b',
-                    color: 'white'
-                  }}
-                >
-                  <span className="text-sm">🚀</span>
-                  <span>빠른 모드 (5초)</span>
-                </button>
-                <button
-                  onClick={() => generateTitles('accurate')}
-                  disabled={isGenerating || !keyword.trim()}
-                  className="ultra-btn flex-1 px-3 py-2 text-xs"
-                  style={{
-                    background: '#2563eb',
-                    borderColor: '#2563eb',
-                    color: 'white'
-                  }}
-                >
-                  <span className="text-sm">🎯</span>
-                  <span>정확 모드 (30초)</span>
-                </button>
-              </div>
-              
-              {/* MCP 연결 상태 표시 */}
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-slate-700">🔗 MCP 연결 상태</span>
-                    <button
-                      onClick={checkMcpConnection}
-                      disabled={mcpConnectionStatus.isChecking}
-                      className="text-xs text-blue-600 hover:text-blue-800"
-                    >
-                      {mcpConnectionStatus.isChecking ? '확인 중...' : '새로고침'}
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1">
-                      <div className={`w-2 h-2 rounded-full ${
-                        mcpConnectionStatus.naverSearch ? 'bg-green-500' : 'bg-gray-400'
-                      }`}></div>
-                      <span className="text-xs text-slate-600 font-medium">네이버</span>
-                      <span className="text-xs text-slate-500">
-                        {mcpConnectionStatus.naverSearch ? '연결됨' : '대기중'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className={`w-2 h-2 rounded-full ${
-                        mcpConnectionStatus.youtube ? 'bg-green-500' : 'bg-gray-400'
-                      }`}></div>
-                      <span className="text-xs text-slate-600">YouTube</span>
-                      <span className="text-xs text-slate-500">
-                        {mcpConnectionStatus.youtube ? '연결됨' : '대기중'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  정확모드는 자동으로 MCP 서버에 연결하여 실시간 트렌드 데이터를 분석합니다.
-                </div>
-              </div>
+              <button
+                onClick={generateTitles}
+                disabled={isGenerating || !keyword.trim()}
+                className="ultra-btn px-4 py-2 text-xs ml-auto"
+                style={{
+                  background: '#10b981',
+                  borderColor: '#10b981',
+                  color: 'white'
+                }}
+              >
+                <span className="text-sm">💡</span>
+                <span>제목 추천</span>
+              </button>
             </div>
 
             {isGenerating && (
               <div className="text-center py-8">
                 <div className="ultra-spinner mx-auto mb-4" style={{width: '32px', height: '32px'}}></div>
                 <h3 className="text-lg font-semibold text-slate-700 mb-2">
-                  {generatingMode === 'accurate' ? '🎯 정확모드로 제목 생성 중...' : '🚀 빠른모드로 제목 생성 중...'}
+                  💡 AI가 제목을 생성하고 있습니다...
                 </h3>
-                <div className="text-slate-500 text-sm space-y-1">
-                  {generatingMode === 'accurate' ? (
-                    <div className="space-y-1">
-                      <p>📡 실시간 트렌드 데이터 수집 중...</p>
-                      <p>🔍 네이버 블로그 분석 중...</p>
-                      <p>📺 YouTube 인기 콘텐츠 분석 중...</p>
-                      <p>🤖 AI가 최적화된 제목 생성 중...</p>
-                      <p className="text-blue-600 font-medium mt-2">정확모드는 더 많은 데이터를 분석하므로 30초 정도 소요됩니다.</p>
-                    </div>
-                  ) : (
-                    <p>빠르게 제목을 생성하고 있습니다...</p>
-                  )}
+                <div className="text-slate-500 text-sm">
+                  <p>잠시만 기다려주세요. 곧 완료됩니다!</p>
                 </div>
               </div>
             )}
 
             {generatedTitles.length > 0 && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                    <h3 className="text-base font-semibold text-slate-800">
-                      {lastGeneratedMode === 'accurate' ? '🎯 정확모드로 생성된 제목' : '🚀 빠른모드로 생성된 제목'} ({generatedTitles.length}개)
-                    </h3>
-                  </div>
-                  {lastGeneratedMode === 'accurate' && (
-                    <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
-                      <span>📊</span>
-                      <span>실시간 트렌드 분석 완료</span>
-                    </div>
-                  )}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <h3 className="text-base font-semibold text-slate-800">
+                    AI가 추천하는 제목 ({generatedTitles.length}개)
+                  </h3>
                 </div>
                 <div>
                   <label className="ultra-label" style={{fontSize: '13px', marginBottom: '6px'}}>
@@ -619,7 +535,7 @@ const Step1: React.FC<Step1Props> = ({ data, onNext }) => {
                         const selectedItem = titlesWithSearch.find(item => item.title === selectedTitle);
                         return selectedItem?.searchQuery && (
                           <p className="text-emerald-600 text-xs mt-1">
-                            <span className="font-medium">참고 검색어:</span> {selectedItem.searchQuery}
+                            <span className="font-medium">서치키워드:</span> {selectedItem.searchQuery}
                           </p>
                         );
                       })()}

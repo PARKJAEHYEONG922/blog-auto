@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import './index.css';
 
 // 3단계 워크플로우 컴포넌트들
@@ -6,21 +6,25 @@ import Step1 from './components/Step1';
 import Step2 from './components/Step2';
 import Step3 from './components/Step3';
 import LLMSettings from './components/LLMSettings';
-import MCPTestPanel from './components/MCPTestPanel';
 
-// 서비스 임포트
-import { LLMClientFactory } from './services/llm-client-factory';
+// Context 임포트
+import { useAppInit } from './contexts/AppInitContext';
 
 export interface WorkflowData {
   platform: string;
   keyword: string;
   subKeywords: string[];
   contentType: string;
+  contentTypeDescription?: string; // 콘텐츠 유형 상세 설명
   reviewType: string;
+  reviewTypeDescription?: string; // 후기 유형 상세 설명
   tone: string;
+  toneDescription?: string; // 말투 상세 설명
   customPrompt: string;
   blogDescription: string;
   selectedTitle: string;
+  generatedTitles?: string[]; // 생성된 제목들
+  titlesWithSearch?: { title: string; searchQuery: string }[]; // 제목과 검색어
   collectedData: unknown;
   generatedContent: string;
 }
@@ -28,7 +32,9 @@ export interface WorkflowData {
 const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [showSettings, setShowSettings] = useState(false);
-  const [showMCPTest, setShowMCPTest] = useState(false);
+  
+  // Context에서 전역 초기화 상태 가져오기
+  const { isInitialized, isInitializing, aiModelStatus, refreshModelStatus } = useAppInit();
   const [workflowData, setWorkflowData] = useState<WorkflowData>({
     platform: '',
     keyword: '',
@@ -39,23 +45,13 @@ const App: React.FC = () => {
     customPrompt: '',
     blogDescription: '',
     selectedTitle: '',
+    generatedTitles: [],
+    titlesWithSearch: [],
     collectedData: null,
     generatedContent: ''
   });
 
-  // 앱 초기화
-  useEffect(() => {
-    // LLM 설정 로드
-    const loadSettings = async () => {
-      try {
-        await LLMClientFactory.loadDefaultSettings();
-        console.log('LLM 설정 로드 완료');
-      } catch (error) {
-        console.error('LLM 설정 로드 중 오류:', error);
-      }
-    };
-    loadSettings();
-  }, []);
+  // 초기화 로직은 모두 AppInitContext로 이동
 
   const updateWorkflowData = (updates: Partial<WorkflowData>) => {
     setWorkflowData(prev => ({ ...prev, ...updates }));
@@ -110,65 +106,37 @@ const App: React.FC = () => {
               <div className="section-icon blue" style={{width: '32px', height: '32px', fontSize: '16px'}}>
                 <span>🤖</span>
               </div>
-              <h1 className="text-xl font-bold text-slate-900">
-                AI 블로그 자동화 V2
-              </h1>
+              <div className="flex flex-col">
+                <h1 className="text-xl font-bold text-slate-900">
+                  AI 블로그 자동화 V2
+                </h1>
+                <div className="flex items-center gap-4 text-xs text-slate-600 mt-1">
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    <span>정보처리: {aiModelStatus.information}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                    <span>글쓰기: {aiModelStatus.writing}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                    <span>이미지: {aiModelStatus.image}</span>
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="flex items-center gap-4">
               <div className="flex gap-2">
                 <button
                   onClick={() => {
-                    setShowMCPTest(!showMCPTest);
-                    if (!showMCPTest) setShowSettings(false);
-                  }}
-                  style={{
-                    background: showMCPTest ? '#2563eb' : 'white',
-                    color: showMCPTest ? 'white' : '#475569',
-                    border: showMCPTest ? 'none' : '2px solid #e2e8f0',
-                    borderRadius: '16px',
-                    padding: '12px 16px',
-                    fontFamily: 'Poppins, sans-serif',
-                    fontWeight: '600',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)',
-                    boxShadow: showMCPTest 
-                      ? '0 0 0 1px rgba(37, 99, 235, 0.1), 0 2px 4px rgba(37, 99, 235, 0.2)'
-                      : '0 0 0 1px rgba(0, 0, 0, 0.03), 0 1px 3px rgba(0, 0, 0, 0.06)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    minWidth: '80px',
-                    justifyContent: 'center'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!showMCPTest) {
-                      const target = e.target as HTMLElement;
-                      target.style.background = '#f8fafc';
-                      target.style.borderColor = '#cbd5e1';
-                      target.style.color = '#334155';
-                      target.style.transform = 'translateY(-1px)';
-                      target.style.boxShadow = '0 0 0 1px rgba(0, 0, 0, 0.06), 0 2px 6px rgba(0, 0, 0, 0.1)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!showMCPTest) {
-                      const target = e.target as HTMLElement;
-                      target.style.background = 'white';
-                      target.style.borderColor = '#e2e8f0';
-                      target.style.color = '#475569';
-                      target.style.transform = 'translateY(0)';
-                      target.style.boxShadow = '0 0 0 1px rgba(0, 0, 0, 0.03), 0 1px 3px rgba(0, 0, 0, 0.06)';
-                    }
-                  }}
-                >
-                  <span>🔧</span>
-                  <span>MCP</span>
-                </button>
-                <button
-                  onClick={() => {
                     setShowSettings(!showSettings);
-                    if (!showSettings) setShowMCPTest(false);
+                    // API 설정 화면 진입 시 스크롤을 최상단으로 이동
+                    if (!showSettings) {
+                      setTimeout(() => {
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }, 100);
+                    }
                   }}
                   style={{
                     background: showSettings ? '#2563eb' : 'white',
@@ -224,9 +192,14 @@ const App: React.FC = () => {
       <main className="flex-1 overflow-y-auto">
         <div className="h-full">
           {showSettings ? (
-            <LLMSettings onClose={() => setShowSettings(false)} />
-          ) : showMCPTest ? (
-            <MCPTestPanel />
+            <LLMSettings 
+              onClose={() => {
+                setShowSettings(false);
+                // 설정 변경 후 상태만 새로고침
+                refreshModelStatus();
+              }}
+              onSettingsChange={refreshModelStatus} // 설정 변경 시 실시간 업데이트
+            />
           ) : (
             renderCurrentStep()
           )}

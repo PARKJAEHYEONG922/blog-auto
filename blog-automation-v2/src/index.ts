@@ -1,10 +1,167 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { mcpMainService } from './main/mcp-service';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
-// MCP 서비스 초기화 (IPC 핸들러 등록)
-console.log('🚀 MCP 서비스 초기화 중...', mcpMainService);
+// 설정 파일 경로
+const getConfigPath = (filename: string) => {
+  const userDataPath = app.getPath('userData');
+  const configPath = path.join(userDataPath, filename);
+  console.log(`📁 설정 파일 경로: ${configPath}`);
+  return configPath;
+};
+
+// IPC 핸들러 설정
+const setupIpcHandlers = () => {
+  // 기본 설정 저장
+  ipcMain.handle('defaults:save', async (event, defaultSettings) => {
+    try {
+      const configPath = getConfigPath('defaults.json');
+      await fs.promises.writeFile(configPath, JSON.stringify(defaultSettings, null, 2));
+      console.log('기본 설정 저장 완료:', configPath);
+      return { success: true };
+    } catch (error) {
+      console.error('기본 설정 저장 실패:', error);
+      return { success: false, message: error.message };
+    }
+  });
+
+  // 기본 설정 로드
+  ipcMain.handle('defaults:load', async () => {
+    try {
+      const configPath = getConfigPath('defaults.json');
+      const data = await fs.promises.readFile(configPath, 'utf-8');
+      return JSON.parse(data);
+    } catch (error) {
+      console.log('기본 설정 파일이 없거나 읽기 실패:', error.message);
+      return null;
+    }
+  });
+
+  // LLM 설정 저장
+  ipcMain.handle('settings:save', async (event, settings) => {
+    try {
+      const configPath = getConfigPath('llm-settings.json');
+      await fs.promises.writeFile(configPath, JSON.stringify(settings, null, 2));
+      console.log('LLM 설정 저장 완료:', configPath);
+      return { success: true };
+    } catch (error) {
+      console.error('LLM 설정 저장 실패:', error);
+      return { success: false, message: error.message };
+    }
+  });
+
+  // LLM 설정 로드
+  ipcMain.handle('settings:load', async () => {
+    try {
+      const configPath = getConfigPath('llm-settings.json');
+      const data = await fs.promises.readFile(configPath, 'utf-8');
+      return JSON.parse(data);
+    } catch (error) {
+      console.log('LLM 설정 파일이 없거나 읽기 실패:', error.message);
+      return null;
+    }
+  });
+
+  // 네이버 API 설정 저장
+  ipcMain.handle('naverApi:save', async (event, naverApiSettings) => {
+    try {
+      const configPath = getConfigPath('naver-api.json');
+      console.log('🔧 네이버 API 설정 저장 시도:', configPath);
+      console.log('📄 저장할 데이터:', naverApiSettings);
+      await fs.promises.writeFile(configPath, JSON.stringify(naverApiSettings, null, 2));
+      console.log('✅ 네이버 API 설정 저장 완료:', configPath);
+      return { success: true };
+    } catch (error) {
+      console.error('❌ 네이버 API 설정 저장 실패:', error);
+      return { success: false, message: error.message };
+    }
+  });
+
+  // 네이버 API 설정 로드
+  ipcMain.handle('naverApi:load', async () => {
+    try {
+      const configPath = getConfigPath('naver-api.json');
+      console.log('🔍 네이버 API 설정 로드 시도:', configPath);
+      const data = await fs.promises.readFile(configPath, 'utf-8');
+      const parsedData = JSON.parse(data);
+      console.log('✅ 네이버 API 설정 로드 성공:', parsedData);
+      return { success: true, data: parsedData };
+    } catch (error) {
+      console.log('❌ 네이버 API 설정 파일이 없거나 읽기 실패:', error.message);
+      return { success: false, data: null };
+    }
+  });
+
+  // 네이버 API 설정 삭제
+  ipcMain.handle('naverApi:delete', async () => {
+    try {
+      const configPath = getConfigPath('naver-api.json');
+      await fs.promises.unlink(configPath);
+      console.log('네이버 API 설정 삭제 완료:', configPath);
+      return { success: true };
+    } catch (error) {
+      console.error('네이버 API 설정 삭제 실패:', error);
+      return { success: false, message: error.message };
+    }
+  });
+
+  // API 테스트 핸들러
+  ipcMain.handle('api:test', async (event, provider: string, apiKey: string) => {
+    try {
+      console.log(`API 테스트 시작: ${provider}`);
+      
+      // 간단한 API 테스트 구현
+      if (provider === 'openai') {
+        const response = await fetch('https://api.openai.com/v1/models', {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          return { success: true, message: 'OpenAI API 연결 성공' };
+        } else {
+          return { success: false, message: `OpenAI API 오류: ${response.status}` };
+        }
+      } else if (provider === 'anthropic' || provider === 'claude') {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'claude-3-haiku-20240307',
+            max_tokens: 10,
+            messages: [{ role: 'user', content: 'test' }]
+          })
+        });
+        
+        if (response.ok) {
+          return { success: true, message: 'Claude API 연결 성공' };
+        } else {
+          return { success: false, message: `Claude API 오류: ${response.status}` };
+        }
+      } else if (provider === 'gemini') {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        
+        if (response.ok) {
+          return { success: true, message: 'Gemini API 연결 성공' };
+        } else {
+          return { success: false, message: `Gemini API 오류: ${response.status}` };
+        }
+      } else {
+        return { success: false, message: '지원하지 않는 API 제공자입니다' };
+      }
+    } catch (error) {
+      console.error(`API 테스트 실패 (${provider}):`, error);
+      return { success: false, message: error.message };
+    }
+  });
+};
 
 
 // This allows TypeScript to pick up the magic constants that's auto-generated by Forge's Webpack
@@ -52,15 +209,15 @@ const createWindow = (): void => {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', createWindow);
+app.on('ready', () => {
+  setupIpcHandlers();
+  createWindow();
+});
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
-app.on('window-all-closed', async () => {
-  // MCP 서비스 정리
-  await mcpMainService.cleanup();
-  
+app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
