@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -106,6 +106,49 @@ const setupIpcHandlers = () => {
     }
   });
 
+  // YouTube API 설정 저장
+  ipcMain.handle('youtubeApi:save', async (event, youtubeApiSettings) => {
+    try {
+      const configPath = getConfigPath('youtube-api.json');
+      console.log('🔧 YouTube API 설정 저장 시도:', configPath);
+      console.log('📄 저장할 데이터:', youtubeApiSettings);
+      await fs.promises.writeFile(configPath, JSON.stringify(youtubeApiSettings, null, 2));
+      console.log('✅ YouTube API 설정 저장 완료:', configPath);
+      return { success: true };
+    } catch (error) {
+      console.error('❌ YouTube API 설정 저장 실패:', error);
+      return { success: false, message: error.message };
+    }
+  });
+
+  // YouTube API 설정 로드
+  ipcMain.handle('youtubeApi:load', async () => {
+    try {
+      const configPath = getConfigPath('youtube-api.json');
+      console.log('🔍 YouTube API 설정 로드 시도:', configPath);
+      const data = await fs.promises.readFile(configPath, 'utf-8');
+      const parsedData = JSON.parse(data);
+      console.log('✅ YouTube API 설정 로드 성공:', parsedData);
+      return { success: true, data: parsedData };
+    } catch (error) {
+      console.log('❌ YouTube API 설정 파일이 없거나 읽기 실패:', error.message);
+      return { success: false, data: null };
+    }
+  });
+
+  // YouTube API 설정 삭제
+  ipcMain.handle('youtubeApi:delete', async () => {
+    try {
+      const configPath = getConfigPath('youtube-api.json');
+      await fs.promises.unlink(configPath);
+      console.log('YouTube API 설정 삭제 완료:', configPath);
+      return { success: true };
+    } catch (error) {
+      console.error('YouTube API 설정 삭제 실패:', error);
+      return { success: false, message: error.message };
+    }
+  });
+
   // API 테스트 핸들러
   ipcMain.handle('api:test', async (event, provider: string, apiKey: string) => {
     try {
@@ -159,6 +202,16 @@ const setupIpcHandlers = () => {
     } catch (error) {
       console.error(`API 테스트 실패 (${provider}):`, error);
       return { success: false, message: error.message };
+    }
+  });
+
+  // 외부 링크 열기
+  ipcMain.handle('shell:openExternal', async (event, url: string) => {
+    try {
+      await shell.openExternal(url);
+      console.log(`외부 링크 열기: ${url}`);
+    } catch (error) {
+      console.error('외부 링크 열기 실패:', error);
     }
   });
 };

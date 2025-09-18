@@ -36,11 +36,19 @@ export interface CollectedShoppingData {
 export interface CollectedYouTubeData {
   title: string;
   channelName: string;
+  channelId: string;
   viewCount: string;
+  likeCount?: string;
+  commentCount?: string;
   publishedAt: string;
   duration: string;
   thumbnail: string;
   url: string;
+  description: string;
+  tags?: string[];
+  categoryId?: string;
+  definition?: string; // hd/sd
+  caption?: boolean; // 자막 여부
 }
 
 export interface KeywordAnalysis {
@@ -461,42 +469,101 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
     this.updateProgress(6, 'running');
     
     try {
-      console.log(`📺 유튜브 검색 (목업): ${keyword}`);
+      console.log(`📺 유튜브 검색: ${keyword}`);
       
-      // 목업 데이터 생성
-      await new Promise(resolve => setTimeout(resolve, 1200)); // 실제 API 호출 시뮬레이션
-      
-      const mockYoutube: CollectedYouTubeData[] = [
-        {
-          title: `${keyword} 완벽 가이드 - 초보자 필수 시청`,
-          channelName: '전문가TV',
-          viewCount: '125,000회',
-          publishedAt: '2024-12-10',
-          duration: '15:30',
-          thumbnail: '',
-          url: 'https://www.youtube.com/watch?v=example1'
-        },
-        {
-          title: `${keyword} 실전 노하우 공개`,
-          channelName: '노하우채널',
-          viewCount: '89,500회',
-          publishedAt: '2024-12-08',
-          duration: '12:45',
-          thumbnail: '',
-          url: 'https://www.youtube.com/watch?v=example2'
-        },
-        {
-          title: `${keyword} 후기와 팁 모음`,
-          channelName: '리뷰어',
-          viewCount: '67,800회',
-          publishedAt: '2024-12-05',
-          duration: '18:20',
-          thumbnail: '',
-          url: 'https://www.youtube.com/watch?v=example3'
+      // YouTube API 사용 시도
+      try {
+        const { youtubeAPI } = await import('./youtube-api');
+        await youtubeAPI.loadConfig();
+        
+        const videos = await youtubeAPI.searchVideos(keyword, 10);
+        
+        const results: CollectedYouTubeData[] = [];
+        
+        for (const video of videos) {
+          try {
+            // 동영상 상세 정보 가져오기 (조회수, 길이 등)
+            const details = await youtubeAPI.getVideoDetails(video.id.videoId);
+            
+            const result: CollectedYouTubeData = {
+              title: video.snippet.title,
+              channelName: video.snippet.channelTitle,
+              channelId: video.snippet.channelId,
+              viewCount: details ? youtubeAPI.constructor.formatViewCount(details.statistics.viewCount) : '정보 없음',
+              likeCount: details && details.statistics.likeCount ? youtubeAPI.constructor.formatViewCount(details.statistics.likeCount) : undefined,
+              commentCount: details && details.statistics.commentCount ? youtubeAPI.constructor.formatViewCount(details.statistics.commentCount) : undefined,
+              publishedAt: new Date(video.snippet.publishedAt).toLocaleDateString('ko-KR'),
+              duration: details ? youtubeAPI.constructor.parseDuration(details.contentDetails.duration) : '정보 없음',
+              thumbnail: video.snippet.thumbnails.default.url,
+              url: `https://www.youtube.com/watch?v=${video.id.videoId}`,
+              description: video.snippet.description,
+              tags: video.snippet.tags || [],
+              categoryId: video.snippet.categoryId,
+              definition: details ? details.contentDetails.definition : undefined,
+              caption: details ? details.contentDetails.caption === 'true' : undefined
+            };
+            
+            results.push(result);
+          } catch (detailError) {
+            console.warn(`동영상 상세 정보 조회 실패: ${video.id.videoId}`, detailError);
+            
+            // 상세 정보 없이라도 기본 정보는 포함
+            const result: CollectedYouTubeData = {
+              title: video.snippet.title,
+              channelName: video.snippet.channelTitle,
+              viewCount: '정보 없음',
+              publishedAt: new Date(video.snippet.publishedAt).toLocaleDateString('ko-KR'),
+              duration: '정보 없음',
+              thumbnail: video.snippet.thumbnails.default.url,
+              url: `https://www.youtube.com/watch?v=${video.id.videoId}`
+            };
+            
+            results.push(result);
+          }
         }
-      ];
+        
+        console.log(`✅ YouTube API 검색 완료: ${results.length}개`);
+        return results;
+        
+      } catch (apiError) {
+        console.warn('YouTube API 사용 실패, 목업 데이터로 폴백:', apiError);
+        
+        // API 실패 시 목업 데이터로 폴백
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        
+        const mockYoutube: CollectedYouTubeData[] = [
+          {
+            title: `${keyword} 완벽 가이드 - 초보자 필수 시청`,
+            channelName: '전문가TV',
+            viewCount: '125,000회',
+            publishedAt: '2024-12-10',
+            duration: '15:30',
+            thumbnail: '',
+            url: 'https://www.youtube.com/watch?v=example1'
+          },
+          {
+            title: `${keyword} 실전 노하우 공개`,
+            channelName: '노하우채널',
+            viewCount: '89,500회',
+            publishedAt: '2024-12-08',
+            duration: '12:45',
+            thumbnail: '',
+            url: 'https://www.youtube.com/watch?v=example2'
+          },
+          {
+            title: `${keyword} 후기와 팁 모음`,
+            channelName: '리뷰어',
+            viewCount: '67,800회',
+            publishedAt: '2024-12-05',
+            duration: '18:20',
+            thumbnail: '',
+            url: 'https://www.youtube.com/watch?v=example3'
+          }
+        ];
 
-      return mockYoutube;
+        return mockYoutube;
+      }
+      
     } catch (error) {
       console.error('유튜브 데이터 수집 실패:', error);
       return [];

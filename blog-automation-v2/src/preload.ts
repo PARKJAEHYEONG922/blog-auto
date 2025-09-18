@@ -25,6 +25,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('naverApi:load'),
   deleteNaverApiSettings: () => 
     ipcRenderer.invoke('naverApi:delete'),
+    
+  // YouTube API 설정 저장/로드/삭제
+  saveYouTubeApiSettings: (youtubeApiData: any) => 
+    ipcRenderer.invoke('youtubeApi:save', youtubeApiData),
+  loadYouTubeApiSettings: () => 
+    ipcRenderer.invoke('youtubeApi:load'),
+  deleteYouTubeApiSettings: () => 
+    ipcRenderer.invoke('youtubeApi:delete'),
+    
+  // 외부 링크 열기
+  openExternal: (url: string) => 
+    ipcRenderer.invoke('shell:openExternal', url),
 });
 
 // TypeScript 타입 정의
@@ -39,6 +51,10 @@ declare global {
       saveNaverApiSettings: (naverApiData: any) => Promise<{ success: boolean; message?: string }>;
       loadNaverApiSettings: () => Promise<{ success: boolean; data?: any; message?: string }>;
       deleteNaverApiSettings: () => Promise<{ success: boolean; message?: string }>;
+      saveYouTubeApiSettings: (youtubeApiData: any) => Promise<{ success: boolean; message?: string }>;
+      loadYouTubeApiSettings: () => Promise<{ success: boolean; data?: any; message?: string }>;
+      deleteYouTubeApiSettings: () => Promise<{ success: boolean; message?: string }>;
+      openExternal: (url: string) => Promise<void>;
     };
   }
 }
