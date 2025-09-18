@@ -28,6 +28,10 @@ export interface SelectedYouTubeVideo {
   duration: number;
   priority: number;
   relevanceReason: string;
+  subscriberCount?: number;
+  publishedAt?: string;
+  likeCount?: string;
+  commentCount?: string;
 }
 
 export interface BlogSelectionResult {

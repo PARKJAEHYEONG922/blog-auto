@@ -94,13 +94,13 @@ export interface AnalysisProgress {
 export class DataCollectionEngine {
   private progressCallback?: (progress: AnalysisProgress[]) => void;
   private analysisSteps: AnalysisProgress[] = [
-    { step: '네이버 블로그 데이터 수집 (서치키워드 우선, 최대 50개)', progress: 0, status: 'pending' },
-    { step: '유튜브 데이터 수집 및 선별', progress: 0, status: 'pending' },
-    { step: 'AI 블로그+YouTube 통합 선별 (상위 10개씩)', progress: 0, status: 'pending' },
-    { step: '선별된 YouTube 영상 자막 추출 (상위 3개)', progress: 0, status: 'pending' },
-    { step: '선별된 블로그 본문 크롤링 (상위 3개)', progress: 0, status: 'pending' },
+    { step: '네이버 블로그 수집 중', progress: 0, status: 'pending' },
+    { step: '유튜브 영상 수집 중', progress: 0, status: 'pending' },
+    { step: 'AI가 우수 콘텐츠 선별 중', progress: 0, status: 'pending' },
+    { step: '유튜브 자막 추출 중', progress: 0, status: 'pending' },
+    { step: '블로그 본문 크롤링 중', progress: 0, status: 'pending' },
     { step: '블로그 콘텐츠 분석', progress: 0, status: 'pending' },
-    { step: 'YouTube 자막 분석', progress: 0, status: 'pending' }
+    { step: '유튜브 콘텐츠 분석', progress: 0, status: 'pending' }
   ];
 
   constructor(progressCallback?: (progress: AnalysisProgress[]) => void) {
@@ -505,9 +505,9 @@ export class DataCollectionEngine {
         subscriberCount: video.subscriberCount,
         publishedAt: video.publishedAt,
         priority: video.priority,
-        // 나중에 AI 선별 후 자막 추출할 예정이므로 일단 기본값
-        likeCount: undefined as string | undefined,
-        commentCount: undefined as string | undefined,
+        // 기본 YouTube 데이터 (자막 추출 전)
+        likeCount: (video as any).likeCount || 'N/A',
+        commentCount: (video as any).commentCount || 'N/A',
         thumbnail: undefined as string | undefined,
         description: undefined as string | undefined,
         tags: undefined as string[] | undefined,
@@ -563,19 +563,46 @@ export class DataCollectionEngine {
           // 자막 전체를 저장 (요약 제거)
           const fullSubtitleText = subtitles[0].text;
           
-          // CollectedYouTubeData 형태로 변환
+          // 자막 텍스트 정리 (JSON 형태나 이상한 데이터 제거)
+          let cleanSubtitleText = fullSubtitleText;
+          
+          // JSON 형태의 데이터인 경우 정리
+          if (cleanSubtitleText.includes('"wireMagic"') || cleanSubtitleText.includes('"pens"')) {
+            console.warn(`⚠️ JSON 형태의 자막 데이터 발견, 정리 중...`);
+            // JSON 부분 제거하고 실제 텍스트만 추출 시도
+            const textMatches = cleanSubtitleText.match(/[가-힣a-zA-Z0-9\s.,!?]+/g);
+            if (textMatches && textMatches.length > 0) {
+              cleanSubtitleText = textMatches.join(' ').trim();
+            } else {
+              cleanSubtitleText = '자막 추출 실패 (데이터 형식 오류)';
+            }
+          }
+          
+          // 너무 짧은 경우 처리
+          if (cleanSubtitleText.length < 100) {
+            cleanSubtitleText = `자막 추출 성공 (${cleanSubtitleText.length}자 - 짧은 내용)`;
+          }
+
+          // CollectedYouTubeData 형태로 변환 (타입 단언 사용)
+          const videoWithExtendedData = video as SelectedYouTubeVideo & {
+            subscriberCount?: number;
+            publishedAt?: string;
+            likeCount?: string;
+            commentCount?: string;
+          };
+          
           const enrichedVideo: CollectedYouTubeData = {
             videoId: video.videoId,
             title: video.title,
             channelName: video.channelName,
             viewCount: video.viewCount,
             duration: video.duration,
-            subscriberCount: undefined,
-            publishedAt: new Date().toISOString(),
+            subscriberCount: videoWithExtendedData.subscriberCount || 0,
+            publishedAt: videoWithExtendedData.publishedAt || new Date().toISOString(),
             priority: video.priority,
-            summary: fullSubtitleText, // 자막 전체 저장
-            likeCount: undefined,
-            commentCount: undefined,
+            summary: cleanSubtitleText, // 정리된 자막 저장
+            likeCount: videoWithExtendedData.likeCount || 'N/A',
+            commentCount: videoWithExtendedData.commentCount || 'N/A',
             thumbnail: undefined,
             description: undefined,
             tags: undefined,

@@ -226,8 +226,11 @@ export class YouTubeAPI {
           viewCount: parseInt(details.statistics.viewCount || '0'),
           duration: this.parseDurationToSeconds(details.contentDetails.duration),
           subscriberCount: channel ? parseInt(channel.statistics.subscriberCount || '0') : 0,
-          priority: 0
-        };
+          priority: 0,
+          // 추가 데이터
+          likeCount: details.statistics.likeCount || 'N/A',
+          commentCount: details.statistics.commentCount || 'N/A'
+        } as PrioritizedVideo & { likeCount: string; commentCount: string };
 
         // 우선순위 점수 계산
         prioritizedVideo.priority = this.calculatePriority(prioritizedVideo);

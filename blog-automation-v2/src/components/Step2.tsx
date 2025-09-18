@@ -13,6 +13,8 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisSteps, setAnalysisSteps] = useState<AnalysisProgress[]>([]);
   const [collectedData, setCollectedData] = useState<DataCollectionResult | null>(null);
+  const [showBlogDetails, setShowBlogDetails] = useState(false);
+  const [showYouTubeDetails, setShowYouTubeDetails] = useState(false);
   
   // Step1에서 정의된 옵션들과 동일하게 정의
   const contentTypes = [
@@ -216,32 +218,32 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
 
           {isAnalyzing && (
             <div className="section-card" style={{padding: '20px', marginBottom: '16px'}}>
-              <div className="section-header" style={{marginBottom: '16px'}}>
-                <div className="section-icon orange" style={{width: '32px', height: '32px', fontSize: '16px'}}>⚡</div>
-                <h2 className="section-title" style={{fontSize: '16px'}}>분석 진행 상황</h2>
-                <div className="text-sm text-slate-500 ml-auto">
+              <div className="section-header" style={{marginBottom: '12px'}}>
+                <div className="section-icon orange" style={{width: '28px', height: '28px', fontSize: '14px'}}>⚡</div>
+                <h2 className="section-title" style={{fontSize: '14px'}}>분석 진행 상황</h2>
+                <div className="text-xs text-slate-500 ml-auto">
                   {analysisSteps.filter(s => s.status === 'completed').length} / {analysisSteps.length} 완료
                 </div>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {analysisSteps.map((step, index) => (
-                  <div key={index} className="border border-slate-200 rounded-lg p-4 bg-white">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center space-x-3">
-                        <span className="text-lg">{getStatusIcon(step.status)}</span>
-                        <span className="font-medium text-slate-800">{step.step}</span>
+                  <div key={index} className="border border-slate-200 rounded-lg p-3 bg-white">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm">{getStatusIcon(step.status)}</span>
+                        <span className="font-medium text-sm text-slate-800">{step.step}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         {step.status === 'running' && (
                           <div className="ultra-spinner" style={{width: '16px', height: '16px'}}></div>
                         )}
-                        <span className="text-sm text-slate-500">{step.progress}%</span>
+                        <span className="text-xs text-slate-500">{step.progress}%</span>
                       </div>
                     </div>
-                    <div className="w-full bg-slate-200 rounded-full h-2">
+                    <div className="w-full bg-slate-200 rounded-full h-1.5">
                       <div
-                        className={`h-2 rounded-full transition-all duration-500 ${
+                        className={`h-1.5 rounded-full transition-all duration-500 ${
                           step.status === 'completed' ? 'bg-green-500' :
                           step.status === 'running' ? 'bg-blue-500' :
                           step.status === 'error' ? 'bg-red-500' : 'bg-slate-300'
@@ -272,467 +274,268 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
 
                 {/* 요약 정보 */}
                 <div className="bg-slate-50 rounded-lg p-4 mb-4">
-                  <div className="grid grid-cols-3 gap-4 text-center">
+                  <div className="grid grid-cols-3 gap-6 text-center">
                     <div>
-                      <div className="text-2xl font-bold text-blue-600">{collectedData.summary.totalSources}</div>
-                      <div className="text-xs text-slate-600">총 데이터 소스</div>
+                      <div className="text-2xl font-bold text-blue-600">
+                        {collectedData.blogs.length + collectedData.youtube.length}
+                      </div>
+                      <div className="text-xs text-slate-600">총 데이터소스</div>
+                      <div className="text-xs text-slate-400 mt-1">
+                        블로그 {collectedData.blogs.length} + 유튜브 {collectedData.youtube.length}
+                      </div>
                     </div>
                     <div>
                       <div className="text-2xl font-bold text-green-600">{collectedData.blogs.length}</div>
-                      <div className="text-xs text-slate-600">블로그 분석</div>
+                      <div className="text-xs text-slate-600 mb-2">블로그 분석</div>
+                      <button
+                        onClick={() => setShowBlogDetails(true)}
+                        className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 transition-colors"
+                      >
+                        상세보기
+                      </button>
+                      <div className="text-xs text-slate-400 mt-1">
+                        🖼️ 이미지 {(() => {
+                          const successBlogs = collectedData.crawledBlogs?.filter(b => b.success) || [];
+                          if (successBlogs.length === 0) return '0';
+                          const avgImages = successBlogs.reduce((sum, blog) => {
+                            const imageCount = (blog.imageCount || 0) + (blog.gifCount || 0);
+                            return sum + imageCount;
+                          }, 0) / successBlogs.length;
+                          return avgImages.toFixed(1);
+                        })()} | 🎬 동영상 {(() => {
+                          const successBlogs = collectedData.crawledBlogs?.filter(b => b.success) || [];
+                          if (successBlogs.length === 0) return '0';
+                          const avgVideos = successBlogs.reduce((sum, blog) => sum + (blog.videoCount || 0), 0) / successBlogs.length;
+                          return avgVideos.toFixed(1);
+                        })()}
+                      </div>
                     </div>
                     <div>
-                      <div className={`text-2xl font-bold ${
-                        collectedData.summary.dataQuality === 'high' ? 'text-green-600' :
-                        collectedData.summary.dataQuality === 'medium' ? 'text-yellow-600' : 'text-red-600'
-                      }`}>
-                        {collectedData.summary.dataQuality === 'high' ? '높음' :
-                         collectedData.summary.dataQuality === 'medium' ? '보통' : '낮음'}
+                      <div className="text-xl font-bold text-red-600">{collectedData.youtube.length}</div>
+                      <div className="text-xs text-slate-600 mb-1">유튜브 분석</div>
+                      <button
+                        onClick={() => setShowYouTubeDetails(true)}
+                        className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
+                      >
+                        상세보기
+                      </button>
+                      <div className="text-xs text-slate-400 mt-1">
+                        자막 추출 {collectedData.youtube.filter(v => v.summary && v.summary.length > 100 && !v.summary.includes('추출 실패')).length}개 성공
                       </div>
-                      <div className="text-xs text-slate-600">데이터 품질</div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* 블로그 콘텐츠 분석 결과 */}
-              {(collectedData.contentSummary || collectedData.contentSummaryRaw) && (
-                <div className="section-card" style={{padding: '16px', marginBottom: '16px'}}>
-                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                    <span>📝</span>
-                    <span>블로그 콘텐츠 분석</span>
-                  </h4>
-                  {collectedData.contentSummary ? (
-                    <div className="space-y-4">
-                      {/* 경쟁 블로그 제목들 */}
-                      {collectedData.contentSummary.competitor_titles && collectedData.contentSummary.competitor_titles.length > 0 && (
-                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                          <h5 className="font-medium text-slate-900 mb-3">🏆 경쟁 블로그 제목들</h5>
-                          <ul className="space-y-1">
-                            {collectedData.contentSummary.competitor_titles.map((title, idx) => (
-                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
-                                <span className="text-blue-500 mt-1">•</span>
-                                <span>{title}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
+              {/* 콘텐츠 분석 결과 - 50/50 사이드바이사이드 레이아웃 */}
+              {((collectedData.contentSummary || collectedData.contentSummaryRaw) || (collectedData.youtubeAnalysis || collectedData.youtubeAnalysisRaw)) && (
+                <div className="section-card" style={{padding: '12px', marginBottom: '12px'}}>
+                  <div className="flex gap-6">
+                    {/* 블로그 콘텐츠 분석 - 왼쪽 */}
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                        <span>📝</span>
+                        <span>블로그 콘텐츠 분석</span>
+                      </h4>
+                      {(collectedData.contentSummary || collectedData.contentSummaryRaw) ? (
+                        collectedData.contentSummary ? (
+                          <div className="space-y-4">
+                            {/* 경쟁 블로그 제목들 */}
+                            {collectedData.contentSummary.competitor_titles && collectedData.contentSummary.competitor_titles.length > 0 && (
+                              <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                <h5 className="font-medium text-slate-900 mb-3">🏆 경쟁 블로그 제목들</h5>
+                                <ul className="space-y-1">
+                                  {collectedData.contentSummary.competitor_titles.map((title, idx) => (
+                                    <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
+                                      <span className="text-blue-500 mt-1">•</span>
+                                      <span>{title}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
 
-                      {/* 핵심 키워드 */}
-                      {collectedData.contentSummary.core_keywords && collectedData.contentSummary.core_keywords.length > 0 && (
-                        <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                          <h5 className="font-medium text-slate-900 mb-3">🔑 핵심 키워드</h5>
-                          <div className="flex flex-wrap gap-2">
-                            {collectedData.contentSummary.core_keywords.map((keyword, idx) => (
-                              <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
-                                {keyword}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 필수 내용 */}
-                      {collectedData.contentSummary.essential_content && collectedData.contentSummary.essential_content.length > 0 && (
-                        <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                          <h5 className="font-medium text-slate-900 mb-3">✅ 필수 내용</h5>
-                          <ul className="space-y-1">
-                            {collectedData.contentSummary.essential_content.map((content, idx) => (
-                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
-                                <span className="text-green-500 mt-1">•</span>
-                                <span>{content}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* 주요 포인트 */}
-                      {collectedData.contentSummary.key_points && collectedData.contentSummary.key_points.length > 0 && (
-                        <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-                          <h5 className="font-medium text-slate-900 mb-3">🎯 주요 포인트</h5>
-                          <ul className="space-y-1">
-                            {collectedData.contentSummary.key_points.map((point, idx) => (
-                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
-                                <span className="text-purple-500 mt-1">•</span>
-                                <span>{point}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* 개선 기회 */}
-                      {collectedData.contentSummary.improvement_opportunities && collectedData.contentSummary.improvement_opportunities.length > 0 && (
-                        <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
-                          <h5 className="font-medium text-slate-900 mb-3">💡 개선 기회</h5>
-                          <ul className="space-y-1">
-                            {collectedData.contentSummary.improvement_opportunities.map((opportunity, idx) => (
-                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
-                                <span className="text-orange-500 mt-1">•</span>
-                                <span>{opportunity}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                      <div className="text-sm text-slate-700 whitespace-pre-wrap">
-                        {collectedData.contentSummaryRaw}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* YouTube 자막 분석 결과 */}
-              {(collectedData.youtubeAnalysis || collectedData.youtubeAnalysisRaw) && (
-                <div className="section-card" style={{padding: '16px', marginBottom: '16px'}}>
-                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                    <span>📺</span>
-                    <span>YouTube 자막 분석</span>
-                  </h4>
-                  {collectedData.youtubeAnalysis ? (
-                    <div className="space-y-4">
-                      {/* 영상별 핵심 내용 요약 */}
-                      {collectedData.youtubeAnalysis.video_summaries && collectedData.youtubeAnalysis.video_summaries.length > 0 && (
-                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                          <h5 className="font-medium text-slate-900 mb-3">📹 영상별 핵심 내용 요약</h5>
-                          <div className="space-y-2">
-                            {collectedData.youtubeAnalysis.video_summaries.map((summary, idx) => (
-                              <div key={idx} className="bg-white rounded p-3 border border-slate-100">
-                                <div className="flex items-start gap-2">
-                                  <span className="bg-blue-500 text-white text-xs px-2 py-1 rounded flex-shrink-0">
-                                    {summary.video_number}번
-                                  </span>
-                                  <span className="text-sm text-slate-700">{summary.key_points}</span>
+                            {/* 핵심 키워드 */}
+                            {collectedData.contentSummary.core_keywords && collectedData.contentSummary.core_keywords.length > 0 && (
+                              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                                <h5 className="font-medium text-slate-900 mb-3">🔑 핵심 키워드</h5>
+                                <div className="flex flex-wrap gap-2">
+                                  {collectedData.contentSummary.core_keywords.map((keyword, idx) => (
+                                    <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
+                                      {keyword}
+                                    </span>
+                                  ))}
                                 </div>
                               </div>
-                            ))}
+                            )}
+
+                            {/* 필수 내용 */}
+                            {collectedData.contentSummary.essential_content && collectedData.contentSummary.essential_content.length > 0 && (
+                              <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                                <h5 className="font-medium text-slate-900 mb-3">✅ 필수 내용</h5>
+                                <ul className="space-y-1">
+                                  {collectedData.contentSummary.essential_content.map((content, idx) => (
+                                    <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
+                                      <span className="text-green-500 mt-1">•</span>
+                                      <span>{content}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* 주요 포인트 */}
+                            {collectedData.contentSummary.key_points && collectedData.contentSummary.key_points.length > 0 && (
+                              <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+                                <h5 className="font-medium text-xs text-slate-900 mb-2">🎯 주요 포인트</h5>
+                                <ul className="space-y-1">
+                                  {collectedData.contentSummary.key_points.map((point, idx) => (
+                                    <li key={idx} className="text-xs text-slate-700 flex items-start gap-2">
+                                      <span className="text-purple-500 mt-0.5">•</span>
+                                      <span>{point}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* 개선 기회 */}
+                            {collectedData.contentSummary.improvement_opportunities && collectedData.contentSummary.improvement_opportunities.length > 0 && (
+                              <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                                <h5 className="font-medium text-xs text-slate-900 mb-2">💡 개선 기회</h5>
+                                <ul className="space-y-1">
+                                  {collectedData.contentSummary.improvement_opportunities.map((opportunity, idx) => (
+                                    <li key={idx} className="text-xs text-slate-700 flex items-start gap-2">
+                                      <span className="text-orange-500 mt-0.5">•</span>
+                                      <span>{opportunity}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      )}
-
-                      {/* 공통 주제 및 트렌드 */}
-                      {collectedData.youtubeAnalysis.common_themes && collectedData.youtubeAnalysis.common_themes.length > 0 && (
-                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                          <h5 className="font-medium text-slate-900 mb-3">🔄 공통 주제 및 트렌드</h5>
-                          <ul className="space-y-1">
-                            {collectedData.youtubeAnalysis.common_themes.map((theme, idx) => (
-                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
-                                <span className="text-blue-500 mt-1">•</span>
-                                <span>{theme}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* 실용적 정보 및 팁 */}
-                      {collectedData.youtubeAnalysis.practical_tips && collectedData.youtubeAnalysis.practical_tips.length > 0 && (
-                        <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                          <h5 className="font-medium text-slate-900 mb-3">💡 실용적 정보 및 팁</h5>
-                          <ul className="space-y-1">
-                            {collectedData.youtubeAnalysis.practical_tips.map((tip, idx) => (
-                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
-                                <span className="text-green-500 mt-1">•</span>
-                                <span>{tip}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* 전문가 인사이트 */}
-                      {collectedData.youtubeAnalysis.expert_insights && collectedData.youtubeAnalysis.expert_insights.length > 0 && (
-                        <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-                          <h5 className="font-medium text-slate-900 mb-3">🎯 전문가 인사이트</h5>
-                          <ul className="space-y-1">
-                            {collectedData.youtubeAnalysis.expert_insights.map((insight, idx) => (
-                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
-                                <span className="text-purple-500 mt-1">•</span>
-                                <span>{insight}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* 블로그 활용 제안 */}
-                      {collectedData.youtubeAnalysis.blog_suggestions && collectedData.youtubeAnalysis.blog_suggestions.length > 0 && (
-                        <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
-                          <h5 className="font-medium text-slate-900 mb-3">📝 블로그 활용 제안</h5>
-                          <ul className="space-y-1">
-                            {collectedData.youtubeAnalysis.blog_suggestions.map((suggestion, idx) => (
-                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
-                                <span className="text-orange-500 mt-1">•</span>
-                                <span>{suggestion}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                      <div className="text-sm text-slate-700 whitespace-pre-wrap">
-                        {collectedData.youtubeAnalysisRaw}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 크롤링된 블로그 본문 데이터 (성공한 것만 표시) */}
-              {collectedData.crawledBlogs && collectedData.crawledBlogs.filter(blog => blog.success).length > 0 && (
-                <div className="section-card" style={{padding: '16px', marginBottom: '16px'}}>
-                  <details open>
-                    <summary className="font-semibold text-slate-900 mb-3 flex items-center gap-2 cursor-pointer">
-                      <span>📝</span>
-                      <span>크롤링된 블로그 본문 ({collectedData.crawledBlogs.filter(blog => blog.success).length}개 성공)</span>
-                    </summary>
-                    <div className="space-y-3 max-h-96 overflow-y-auto mt-3">
-                      {collectedData.crawledBlogs.filter(blog => blog.success).map((blog, idx: number) => (
-                        <div key={idx} className="border rounded-lg p-3 bg-green-50 border-green-200">
-                          <div className="flex items-start gap-3">
-                            <div className="flex-shrink-0 w-8 h-8 text-white rounded-full flex items-center justify-center text-sm font-bold bg-green-500">
-                              {idx + 1}
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-medium text-sm text-slate-900 leading-relaxed mb-2">
-                                {blog.title}
-                              </p>
-                              
-                              {/* 해시태그 표시 */}
-                              {blog.tags && blog.tags.length > 0 && (
-                                <div className="mb-2">
-                                  <span className="text-xs text-slate-600 mr-2">태그:</span>
-                                  <div className="flex flex-wrap gap-1">
-                                    {blog.tags.map((tag, tagIdx) => (
-                                      <span key={tagIdx} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
-                                        #{tag}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              
-                              <div className="mt-2">
-                                <div className="grid grid-cols-4 gap-3 mb-2 text-xs">
-                                  <div>
-                                    <span className="font-medium text-green-700">본문:</span>
-                                    <span className="text-green-600 ml-1">{blog.contentLength.toLocaleString()}자</span>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-green-700">이미지:</span>
-                                    <span className="text-green-600 ml-1">{blog.imageCount}개</span>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-green-700">GIF:</span>
-                                    <span className="text-green-600 ml-1">{blog.gifCount}개</span>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-green-700">동영상:</span>
-                                    <span className="text-green-600 ml-1">{blog.videoCount}개</span>
-                                  </div>
-                                </div>
-                                {blog.textContent && (
-                                  <div className="mt-2 p-2 bg-white border border-green-200 rounded text-xs">
-                                    <span className="font-medium text-green-700">본문 미리보기:</span>
-                                    <p className="text-slate-600 mt-1">
-                                      {blog.textContent.substring(0, 200)}
-                                      {blog.textContent.length > 200 && '...'}
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
-                              
-                              <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
-                                <a 
-                                  href={blog.url} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="text-blue-500 hover:text-blue-700 underline"
-                                >
-                                  🔗 블로그 보기
-                                </a>
-                              </div>
+                        ) : (
+                          <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                            <div className="text-xs text-slate-700 whitespace-pre-wrap">
+                              {collectedData.contentSummaryRaw}
                             </div>
                           </div>
+                        )
+                      ) : (
+                        <div className="bg-slate-100 rounded-lg p-3 border border-slate-200 text-center">
+                          <span className="text-xs text-slate-500">블로그 분석 데이터 없음</span>
                         </div>
-                      ))}
+                      )}
                     </div>
-                  </details>
-                </div>
-              )}
 
-              {/* AI가 선별한 상위 10개 블로그 (접혀짐) */}
-              {collectedData.selectedBlogs && collectedData.selectedBlogs.length > 0 && (
-                <div className="section-card" style={{padding: '16px', marginBottom: '16px'}}>
-                  <details>
-                    <summary className="font-semibold text-slate-900 mb-3 flex items-center gap-2 cursor-pointer">
-                      <span>🤖</span>
-                      <span>AI가 선별한 블로그 ({collectedData.selectedBlogs.length}개)</span>
-                    </summary>
-                    <div className="space-y-3 max-h-96 overflow-y-auto mt-3">
-                      {collectedData.selectedBlogs.map((blog, idx: number) => {
-                        // 크롤링된 데이터 찾기
-                        const crawledData = collectedData.crawledBlogs?.find(crawled => crawled.url === blog.url);
-                        
-                        return (
-                          <div key={idx} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                            <div className="flex items-start gap-3">
-                              <div className="flex-shrink-0 w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                                {idx + 1}
-                              </div>
-                              <div className="flex-1">
-                                <p className="font-medium text-sm text-slate-900 leading-relaxed">
-                                  {blog.title}
-                                </p>
-                                <p className="text-xs text-green-600 mt-1">
-                                  💡 {blog.relevanceReason}
-                                </p>
-                                
-                                
-                                <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
-                                  <a 
-                                    href={blog.url} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    className="text-blue-500 hover:text-blue-700 underline"
-                                  >
-                                    🔗 블로그 보기
-                                  </a>
+                    {/* 구분선 */}
+                    <div className="w-px bg-slate-300"></div>
+
+                    {/* 유튜브 콘텐츠 분석 - 오른쪽 */}
+                    <div className="flex-1">
+                      <h4 className="font-medium text-sm text-slate-900 mb-2 flex items-center gap-2">
+                        <span>📺</span>
+                        <span>유튜브 콘텐츠 분석</span>
+                      </h4>
+                      {(collectedData.youtubeAnalysis || collectedData.youtubeAnalysisRaw) ? (
+                        collectedData.youtubeAnalysis ? (
+                          <div className="space-y-3">
+                            {/* 영상별 핵심 내용 요약 */}
+                            {collectedData.youtubeAnalysis.video_summaries && collectedData.youtubeAnalysis.video_summaries.length > 0 && (
+                              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                                <h5 className="font-medium text-xs text-slate-900 mb-2">📹 영상별 핵심 내용 요약</h5>
+                                <div className="space-y-1.5">
+                                  {collectedData.youtubeAnalysis.video_summaries.map((summary, idx) => (
+                                    <div key={idx} className="bg-white rounded p-2 border border-slate-100">
+                                      <div className="flex items-start gap-2">
+                                        <span className="bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded flex-shrink-0">
+                                          {summary.video_number}번
+                                        </span>
+                                        <span className="text-xs text-slate-700">{summary.key_points}</span>
+                                      </div>
+                                    </div>
+                                  ))}
                                 </div>
                               </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </details>
-                </div>
-              )}
+                            )}
 
-              {/* 전체 블로그 수집 결과 (접기/펼치기) */}
-              {collectedData.blogs.length > 0 && (
-                <div className="section-card" style={{padding: '16px', marginBottom: '16px'}}>
-                  <details>
-                    <summary className="font-semibold text-slate-900 mb-3 flex items-center gap-2 cursor-pointer">
-                      <span>📝</span>
-                      <span>전체 블로그 수집 결과 ({collectedData.blogs.length}개)</span>
-                    </summary>
-                    <div className="space-y-3 max-h-96 overflow-y-auto mt-3">
-                      {collectedData.blogs.map((blog, idx: number) => (
-                        <div key={idx} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                          <div className="flex items-start gap-3">
-                            <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                              {blog.rank}
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-medium text-sm text-slate-900 leading-relaxed">
-                                {blog.title}
-                              </p>
-                              <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
-                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                                  {blog.platform}
-                                </span>
-                                <a 
-                                  href={blog.url} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="text-blue-500 hover:text-blue-700 underline"
-                                >
-                                  🔗 블로그 보기
-                                </a>
+                            {/* 공통 주제 및 트렌드 */}
+                            {collectedData.youtubeAnalysis.common_themes && collectedData.youtubeAnalysis.common_themes.length > 0 && (
+                              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                                <h5 className="font-medium text-xs text-slate-900 mb-2">🔄 공통 주제 및 트렌드</h5>
+                                <ul className="space-y-1">
+                                  {collectedData.youtubeAnalysis.common_themes.map((theme, idx) => (
+                                    <li key={idx} className="text-xs text-slate-700 flex items-start gap-2">
+                                      <span className="text-blue-500 mt-0.5">•</span>
+                                      <span>{theme}</span>
+                                    </li>
+                                  ))}
+                                </ul>
                               </div>
+                            )}
+
+                            {/* 실용적 정보 및 팁 */}
+                            {collectedData.youtubeAnalysis.practical_tips && collectedData.youtubeAnalysis.practical_tips.length > 0 && (
+                              <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                                <h5 className="font-medium text-xs text-slate-900 mb-2">💡 실용적 정보 및 팁</h5>
+                                <ul className="space-y-1">
+                                  {collectedData.youtubeAnalysis.practical_tips.map((tip, idx) => (
+                                    <li key={idx} className="text-xs text-slate-700 flex items-start gap-2">
+                                      <span className="text-green-500 mt-0.5">•</span>
+                                      <span>{tip}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* 전문가 인사이트 */}
+                            {collectedData.youtubeAnalysis.expert_insights && collectedData.youtubeAnalysis.expert_insights.length > 0 && (
+                              <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+                                <h5 className="font-medium text-xs text-slate-900 mb-2">🎯 전문가 인사이트</h5>
+                                <ul className="space-y-1">
+                                  {collectedData.youtubeAnalysis.expert_insights.map((insight, idx) => (
+                                    <li key={idx} className="text-xs text-slate-700 flex items-start gap-2">
+                                      <span className="text-purple-500 mt-0.5">•</span>
+                                      <span>{insight}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* 블로그 활용 제안 */}
+                            {collectedData.youtubeAnalysis.blog_suggestions && collectedData.youtubeAnalysis.blog_suggestions.length > 0 && (
+                              <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                                <h5 className="font-medium text-xs text-slate-900 mb-2">📝 블로그 활용 제안</h5>
+                                <ul className="space-y-1">
+                                  {collectedData.youtubeAnalysis.blog_suggestions.map((suggestion, idx) => (
+                                    <li key={idx} className="text-xs text-slate-700 flex items-start gap-2">
+                                      <span className="text-orange-500 mt-0.5">•</span>
+                                      <span>{suggestion}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                            <div className="text-xs text-slate-700 whitespace-pre-wrap">
+                              {collectedData.youtubeAnalysisRaw}
                             </div>
                           </div>
+                        )
+                      ) : (
+                        <div className="bg-slate-100 rounded-lg p-3 border border-slate-200 text-center">
+                          <span className="text-xs text-slate-500">유튜브 분석 데이터 없음</span>
                         </div>
-                      ))}
+                      )}
                     </div>
-                  </details>
-                </div>
-              )}
-
-              {/* 유튜브 분석 결과 (간단 표시) */}
-              {collectedData.youtube.length > 0 && (
-                <div className="section-card" style={{padding: '16px', marginBottom: '16px'}}>
-                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                    <span>📺</span>
-                    <span>유튜브 분석 ({collectedData.youtube.length}개)</span>
-                  </h4>
-                  <div className="space-y-3">
-                    {collectedData.youtube.map((video, idx: number) => (
-                      <div key={idx} className="border border-slate-200 rounded-lg p-4 bg-white">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1 pr-4">
-                            <p className="font-medium text-sm text-slate-900 leading-relaxed">{video.title}</p>
-                          </div>
-                          <div className="flex items-center gap-4 text-xs text-slate-500 flex-shrink-0">
-                            <span>📺 {video.channelName}</span>
-                            <span>👥 {video.subscriberCount ? `${(video.subscriberCount / 10000).toFixed(1)}만` : 'N/A'}</span>
-                            <span>👍 {video.likeCount || 'N/A'}</span>
-                            <span>⏱️ {Math.floor(video.duration / 60)}분</span>
-                          </div>
-                        </div>
-                        {video.summary && (
-                          <div className="mt-2 p-2 bg-slate-50 rounded text-xs text-slate-600">
-                            <span className="font-medium text-slate-700">📝 내용 요약: </span>
-                            {video.summary.substring(0, 150)}{video.summary.length > 150 && '...'}
-                          </div>
-                        )}
-                        <div className="mt-2 text-xs">
-                          <a 
-                            href={`https://www.youtube.com/watch?v=${video.videoId}`}
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-red-500 hover:text-red-700 underline"
-                          >
-                            🔗 YouTube에서 보기
-                          </a>
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 </div>
               )}
 
-              {/* 블로그 콘텐츠 요약 분석 결과 */}
-              {collectedData.contentSummary && (
-                <div className="section-card" style={{padding: '16px', marginBottom: '16px'}}>
-                  <details>
-                    <summary className="font-semibold text-slate-900 mb-3 flex items-center gap-2 cursor-pointer">
-                      <span>📊</span>
-                      <span>블로그 콘텐츠 요약 분석</span>
-                    </summary>
-                    <div className="mt-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                      <div className="text-sm text-slate-700 whitespace-pre-wrap">
-                        {collectedData.contentSummary ? JSON.stringify(collectedData.contentSummary, null, 2) : '분석 결과 없음'}
-                      </div>
-                    </div>
-                  </details>
-                </div>
-              )}
-
-              {/* 추천사항 */}
-              <div className="section-card" style={{padding: '16px'}}>
-                <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                  <span>💡</span>
-                  <span>AI 추천사항</span>
-                </h4>
-                <div className="space-y-2">
-                  {collectedData.summary.recommendations.map((rec, idx: number) => (
-                    <div key={idx} className="flex items-start gap-2 text-sm">
-                      <span className="text-green-500 mt-0.5">•</span>
-                      <span className="text-slate-700">{rec}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           )}
 
@@ -768,6 +571,266 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
           </div>
         </div>
       </div>
+      
+      {/* 블로그 상세보기 모달 */}
+      {showBlogDetails && collectedData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowBlogDetails(false)}>
+          <div className="bg-white rounded-lg w-11/12 h-5/6 flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">📝 블로그 상세 분석 결과</h3>
+              <button 
+                onClick={() => setShowBlogDetails(false)}
+                className="text-slate-500 hover:text-slate-700 text-xl"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              
+              {/* 크롤링된 블로그 본문 데이터 - 맨 위에 펼쳐진 상태 */}
+              {collectedData.crawledBlogs && collectedData.crawledBlogs.filter(blog => blog.success).length > 0 && (
+                <div className="section-card" style={{padding: '16px'}}>
+                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    <span>📄</span>
+                    <span>크롤링된 블로그 본문 ({collectedData.crawledBlogs.filter(blog => blog.success).length}개 성공)</span>
+                  </h4>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {collectedData.crawledBlogs.filter(blog => blog.success).map((blog, idx: number) => (
+                      <div key={idx} className="border rounded-lg p-3 bg-blue-50 border-blue-200">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 w-8 h-8 text-white rounded-full flex items-center justify-center text-sm font-bold bg-blue-500">
+                            {idx + 1}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-sm text-slate-900 leading-relaxed mb-2">
+                              {blog.title}
+                            </p>
+                            
+                            {/* 해시태그 표시 */}
+                            {blog.tags && blog.tags.length > 0 && (
+                              <div className="mb-2">
+                                <span className="text-xs text-slate-600 mr-2">태그:</span>
+                                <div className="flex flex-wrap gap-1">
+                                  {blog.tags.map((tag, tagIdx) => (
+                                    <span key={tagIdx} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                                      #{tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            <div className="mt-2">
+                              <div className="grid grid-cols-4 gap-3 mb-2 text-xs">
+                                <div>
+                                  <span className="font-medium text-blue-700">본문:</span>
+                                  <span className="text-blue-600 ml-1">{blog.contentLength.toLocaleString()}자</span>
+                                </div>
+                                <div>
+                                  <span className="font-medium text-blue-700">이미지:</span>
+                                  <span className="text-blue-600 ml-1">{blog.imageCount}개</span>
+                                </div>
+                                <div>
+                                  <span className="font-medium text-blue-700">GIF:</span>
+                                  <span className="text-blue-600 ml-1">{blog.gifCount}개</span>
+                                </div>
+                                <div>
+                                  <span className="font-medium text-blue-700">동영상:</span>
+                                  <span className="text-blue-600 ml-1">{blog.videoCount}개</span>
+                                </div>
+                              </div>
+                              {blog.textContent && (
+                                <div className="mt-2 p-2 bg-white border border-blue-200 rounded text-xs">
+                                  <span className="font-medium text-blue-700">본문 미리보기:</span>
+                                  <p className="text-slate-600 mt-1">
+                                    {blog.textContent.substring(0, 300)}
+                                    {blog.textContent.length > 300 && '...'}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                            
+                            <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
+                              <a 
+                                href={blog.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:text-blue-700 underline"
+                              >
+                                🔗 블로그 보기
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* AI가 선별한 블로그 - 접힌 상태 */}
+              {collectedData.selectedBlogs && collectedData.selectedBlogs.length > 0 && (
+                <div className="section-card" style={{padding: '16px'}}>
+                  <details>
+                    <summary className="font-semibold text-slate-900 mb-3 flex items-center gap-2 cursor-pointer">
+                      <span>🤖</span>
+                      <span>AI가 선별한 블로그 ({collectedData.selectedBlogs.length}개)</span>
+                    </summary>
+                    <div className="space-y-3 max-h-96 overflow-y-auto mt-3">
+                      {collectedData.selectedBlogs.map((blog, idx: number) => (
+                        <div key={idx} className="border border-slate-200 rounded-lg p-3 bg-green-50 border-green-200">
+                          <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0 w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                              {idx + 1}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium text-sm text-slate-900 leading-relaxed">
+                                {blog.title}
+                              </p>
+                              <p className="text-xs text-green-600 mt-1">
+                                💡 {blog.relevanceReason}
+                              </p>
+                              <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
+                                <a 
+                                  href={blog.url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-blue-500 hover:text-blue-700 underline"
+                                >
+                                  🔗 블로그 보기
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                </div>
+              )}
+
+              {/* 전체 블로그 수집 결과 - 접힌 상태 */}
+              <div className="section-card" style={{padding: '16px'}}>
+                <details>
+                  <summary className="font-semibold text-slate-900 mb-3 flex items-center gap-2 cursor-pointer">
+                    <span>📋</span>
+                    <span>전체 블로그 수집 결과 ({collectedData.blogs.length}개)</span>
+                  </summary>
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {collectedData.blogs.map((blog, idx: number) => (
+                    <div key={idx} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                          {blog.rank}
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-sm text-slate-900 leading-relaxed">
+                            {blog.title}
+                          </p>
+                          <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                              {blog.platform}
+                            </span>
+                            <a 
+                              href={blog.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-500 hover:text-blue-700 underline"
+                            >
+                              🔗 블로그 보기
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  </div>
+                </details>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 유튜브 상세보기 모달 */}
+      {showYouTubeDetails && collectedData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowYouTubeDetails(false)}>
+          <div className="bg-white rounded-lg w-11/12 h-5/6 flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">📺 유튜브 상세 분석 결과</h3>
+              <button 
+                onClick={() => setShowYouTubeDetails(false)}
+                className="text-slate-500 hover:text-slate-700 text-xl"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              
+              {/* 선별된 유튜브 영상 */}
+              {collectedData.youtube.length > 0 && (
+                <div className="section-card" style={{padding: '16px'}}>
+                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    <span>🎯</span>
+                    <span>AI가 선별한 유튜브 영상 ({collectedData.youtube.length}개)</span>
+                  </h4>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {collectedData.youtube.map((video, idx: number) => (
+                      <div key={idx} className="border border-slate-200 rounded-lg p-4 bg-red-50 border-red-200">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                            {idx + 1}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-sm text-slate-900 leading-relaxed mb-2">{video.title}</p>
+                            <div className="grid grid-cols-2 gap-3 mb-2 text-xs">
+                              <div>
+                                <span className="font-medium text-red-700">채널:</span>
+                                <span className="text-red-600 ml-1">{video.channelName}</span>
+                              </div>
+                              <div>
+                                <span className="font-medium text-red-700">길이:</span>
+                                <span className="text-red-600 ml-1">{Math.floor(video.duration / 60)}분</span>
+                              </div>
+                              <div>
+                                <span className="font-medium text-red-700">조회수:</span>
+                                <span className="text-red-600 ml-1">{video.viewCount ? (video.viewCount >= 10000 ? `${(video.viewCount / 10000).toFixed(1)}만회` : `${video.viewCount.toLocaleString()}회`) : 'N/A'}</span>
+                              </div>
+                              <div>
+                                <span className="font-medium text-red-700">자막:</span>
+                                <span className="text-red-600 ml-1">{video.summary && video.summary.length > 100 ? `${video.summary.length.toLocaleString()}자` : '없음'}</span>
+                              </div>
+                            </div>
+                            {video.summary && (
+                              <div className="mt-2 p-2 bg-white border border-red-200 rounded text-xs">
+                                <span className="font-medium text-red-700">자막 내용:</span>
+                                <p className="text-slate-600 mt-1">
+                                  {video.summary.substring(0, 500)}
+                                  {video.summary.length > 500 && '...'}
+                                </p>
+                              </div>
+                            )}
+                            <div className="mt-2 text-xs">
+                              <a 
+                                href={`https://www.youtube.com/watch?v=${video.videoId}`}
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-red-500 hover:text-red-700 underline"
+                              >
+                                🔗 YouTube에서 보기
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* SimpleDialog */}
       <SimpleDialog

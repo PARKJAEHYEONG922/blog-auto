@@ -256,7 +256,7 @@ const setupIpcHandlers = () => {
         const formatPriority = ['srt', 'vtt', 'srv1', 'ttml'];
         
         for (const format of formatPriority) {
-          const subtitleFile = metadata.automatic_captions.ko.find(sub => sub.ext === format);
+          const subtitleFile = metadata.automatic_captions.ko.find((sub: any) => sub.ext === format);
           if (subtitleFile) {
             try {
               console.log(`🔄 [메인 프로세스] 한국어 ${format} 포맷 시도`);
@@ -295,15 +295,41 @@ const setupIpcHandlers = () => {
                 textOnly = uniqueLines.join(' ').replace(/\s+/g, ' ').trim();
                 
               } else if (format === 'srv1') {
-                // XML 포맷 파싱 (srv1)
-                const textMatches = subtitleText.match(/<text[^>]*>([^<]+)<\/text>/g);
-                if (textMatches) {
-                  const lines = textMatches
-                    .map(match => match.replace(/<[^>]*>/g, '').trim())
-                    .filter(line => line.length > 0);
+                // XML 포맷 파싱 (srv1) - YouTube 내부 포맷 처리
+                try {
+                  // segs utf8 패턴으로 실제 자막 텍스트 추출
+                  const segsMatches = subtitleText.match(/segs[^,]*utf8[^,]*([^,]+)/g);
+                  if (segsMatches && segsMatches.length > 0) {
+                    const lines = segsMatches
+                      .map(match => {
+                        // "segs utf8" 뒤의 실제 텍스트만 추출
+                        const textMatch = match.match(/utf8[^,]*(.+)$/);
+                        return textMatch ? textMatch[1].trim() : '';
+                      })
+                      .filter(line => line.length > 0 && !line.includes('wireMagic') && !line.includes('pens'));
+                    
+                    if (lines.length > 0) {
+                      const uniqueLines = [...new Set(lines)];
+                      textOnly = uniqueLines.join(' ').replace(/\s+/g, ' ').trim();
+                    }
+                  }
                   
-                  const uniqueLines = [...new Set(lines)];
-                  textOnly = uniqueLines.join(' ').replace(/\s+/g, ' ').trim();
+                  // 기존 방식도 시도 (fallback)
+                  if (!textOnly || textOnly.length < 50) {
+                    const textMatches = subtitleText.match(/<text[^>]*>([^<]+)<\/text>/g);
+                    if (textMatches) {
+                      const lines = textMatches
+                        .map(match => match.replace(/<[^>]*>/g, '').trim())
+                        .filter(line => line.length > 0 && !line.includes('wireMagic'));
+                      
+                      if (lines.length > 0) {
+                        const uniqueLines = [...new Set(lines)];
+                        textOnly = uniqueLines.join(' ').replace(/\s+/g, ' ').trim();
+                      }
+                    }
+                  }
+                } catch (parseError) {
+                  console.warn(`⚠️ srv1 파싱 오류:`, parseError);
                 }
               } else if (format === 'ttml') {
                 // TTML 포맷 파싱
