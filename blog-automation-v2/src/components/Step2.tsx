@@ -295,80 +295,196 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
                 </div>
               </div>
 
-              {/* 키워드 분석 & SEO 인사이트 */}
-              <div className="grid md:grid-cols-2 gap-4 mb-4">
-                <div className="section-card" style={{padding: '16px'}}>
+              {/* 블로그 콘텐츠 분석 결과 */}
+              {(collectedData.contentSummary || collectedData.contentSummaryRaw) && (
+                <div className="section-card" style={{padding: '16px', marginBottom: '16px'}}>
                   <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                    <span>🎯</span>
-                    <span>키워드 분석</span>
+                    <span>📝</span>
+                    <span>블로그 콘텐츠 분석</span>
                   </h4>
-                  <div className="space-y-3">
-                    <div>
-                      <span className="text-sm text-slate-600 block mb-1">메인 키워드:</span>
-                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium">
-                        {collectedData.keywords.mainKeyword}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-sm text-slate-600 block mb-2">연관 키워드:</span>
-                      <div className="flex flex-wrap gap-1">
-                        {collectedData.keywords.relatedKeywords.map((kw: string, idx: number) => (
-                          <span key={idx} className="px-2 py-1 bg-slate-100 text-slate-700 rounded text-xs">
-                            {kw}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-sm text-slate-600 block mb-2">추천 키워드:</span>
-                      <div className="flex flex-wrap gap-1">
-                        {collectedData.keywords.suggestions.map((kw: string, idx: number) => (
-                          <span key={idx} className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
-                            {kw}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                  {collectedData.contentSummary ? (
+                    <div className="space-y-4">
+                      {/* 경쟁 블로그 제목들 */}
+                      {collectedData.contentSummary.competitor_titles && collectedData.contentSummary.competitor_titles.length > 0 && (
+                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                          <h5 className="font-medium text-slate-900 mb-3">🏆 경쟁 블로그 제목들</h5>
+                          <ul className="space-y-1">
+                            {collectedData.contentSummary.competitor_titles.map((title, idx) => (
+                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
+                                <span className="text-blue-500 mt-1">•</span>
+                                <span>{title}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
 
-                <div className="section-card" style={{padding: '16px'}}>
-                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                    <span>📈</span>
-                    <span>SEO 최적화 가이드</span>
-                  </h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">제목 길이:</span>
-                      <span className="font-medium">{collectedData.seoInsights.titleLength}</span>
+                      {/* 핵심 키워드 */}
+                      {collectedData.contentSummary.core_keywords && collectedData.contentSummary.core_keywords.length > 0 && (
+                        <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                          <h5 className="font-medium text-slate-900 mb-3">🔑 핵심 키워드</h5>
+                          <div className="flex flex-wrap gap-2">
+                            {collectedData.contentSummary.core_keywords.map((keyword, idx) => (
+                              <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
+                                {keyword}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 필수 내용 */}
+                      {collectedData.contentSummary.essential_content && collectedData.contentSummary.essential_content.length > 0 && (
+                        <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                          <h5 className="font-medium text-slate-900 mb-3">✅ 필수 내용</h5>
+                          <ul className="space-y-1">
+                            {collectedData.contentSummary.essential_content.map((content, idx) => (
+                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
+                                <span className="text-green-500 mt-1">•</span>
+                                <span>{content}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* 주요 포인트 */}
+                      {collectedData.contentSummary.key_points && collectedData.contentSummary.key_points.length > 0 && (
+                        <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                          <h5 className="font-medium text-slate-900 mb-3">🎯 주요 포인트</h5>
+                          <ul className="space-y-1">
+                            {collectedData.contentSummary.key_points.map((point, idx) => (
+                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
+                                <span className="text-purple-500 mt-1">•</span>
+                                <span>{point}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* 개선 기회 */}
+                      {collectedData.contentSummary.improvement_opportunities && collectedData.contentSummary.improvement_opportunities.length > 0 && (
+                        <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                          <h5 className="font-medium text-slate-900 mb-3">💡 개선 기회</h5>
+                          <ul className="space-y-1">
+                            {collectedData.contentSummary.improvement_opportunities.map((opportunity, idx) => (
+                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
+                                <span className="text-orange-500 mt-1">•</span>
+                                <span>{opportunity}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">키워드 밀도:</span>
-                      <span className="font-medium">{collectedData.seoInsights.keywordDensity}</span>
+                  ) : (
+                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                      <div className="text-sm text-slate-700 whitespace-pre-wrap">
+                        {collectedData.contentSummaryRaw}
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">글자 수:</span>
-                      <span className="font-medium">{collectedData.seoInsights.contentLength}</span>
-                    </div>
-                    <div className="pt-2 border-t border-slate-200">
-                      <span className="text-slate-600 block mb-1">구조:</span>
-                      <span className="text-xs text-slate-500">
-                        {typeof collectedData.seoInsights.headingStructure === 'string' 
-                          ? collectedData.seoInsights.headingStructure 
-                          : JSON.stringify(collectedData.seoInsights.headingStructure)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-600 block mb-1">이미지:</span>
-                      <span className="text-xs text-slate-500">
-                        {typeof collectedData.seoInsights.imageRecommendations === 'string' 
-                          ? collectedData.seoInsights.imageRecommendations 
-                          : JSON.stringify(collectedData.seoInsights.imageRecommendations)}
-                      </span>
-                    </div>
-                  </div>
+                  )}
                 </div>
-              </div>
+              )}
+
+              {/* YouTube 자막 분석 결과 */}
+              {(collectedData.youtubeAnalysis || collectedData.youtubeAnalysisRaw) && (
+                <div className="section-card" style={{padding: '16px', marginBottom: '16px'}}>
+                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    <span>📺</span>
+                    <span>YouTube 자막 분석</span>
+                  </h4>
+                  {collectedData.youtubeAnalysis ? (
+                    <div className="space-y-4">
+                      {/* 영상별 핵심 내용 요약 */}
+                      {collectedData.youtubeAnalysis.video_summaries && collectedData.youtubeAnalysis.video_summaries.length > 0 && (
+                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                          <h5 className="font-medium text-slate-900 mb-3">📹 영상별 핵심 내용 요약</h5>
+                          <div className="space-y-2">
+                            {collectedData.youtubeAnalysis.video_summaries.map((summary, idx) => (
+                              <div key={idx} className="bg-white rounded p-3 border border-slate-100">
+                                <div className="flex items-start gap-2">
+                                  <span className="bg-blue-500 text-white text-xs px-2 py-1 rounded flex-shrink-0">
+                                    {summary.video_number}번
+                                  </span>
+                                  <span className="text-sm text-slate-700">{summary.key_points}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 공통 주제 및 트렌드 */}
+                      {collectedData.youtubeAnalysis.common_themes && collectedData.youtubeAnalysis.common_themes.length > 0 && (
+                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                          <h5 className="font-medium text-slate-900 mb-3">🔄 공통 주제 및 트렌드</h5>
+                          <ul className="space-y-1">
+                            {collectedData.youtubeAnalysis.common_themes.map((theme, idx) => (
+                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
+                                <span className="text-blue-500 mt-1">•</span>
+                                <span>{theme}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* 실용적 정보 및 팁 */}
+                      {collectedData.youtubeAnalysis.practical_tips && collectedData.youtubeAnalysis.practical_tips.length > 0 && (
+                        <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                          <h5 className="font-medium text-slate-900 mb-3">💡 실용적 정보 및 팁</h5>
+                          <ul className="space-y-1">
+                            {collectedData.youtubeAnalysis.practical_tips.map((tip, idx) => (
+                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
+                                <span className="text-green-500 mt-1">•</span>
+                                <span>{tip}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* 전문가 인사이트 */}
+                      {collectedData.youtubeAnalysis.expert_insights && collectedData.youtubeAnalysis.expert_insights.length > 0 && (
+                        <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                          <h5 className="font-medium text-slate-900 mb-3">🎯 전문가 인사이트</h5>
+                          <ul className="space-y-1">
+                            {collectedData.youtubeAnalysis.expert_insights.map((insight, idx) => (
+                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
+                                <span className="text-purple-500 mt-1">•</span>
+                                <span>{insight}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* 블로그 활용 제안 */}
+                      {collectedData.youtubeAnalysis.blog_suggestions && collectedData.youtubeAnalysis.blog_suggestions.length > 0 && (
+                        <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                          <h5 className="font-medium text-slate-900 mb-3">📝 블로그 활용 제안</h5>
+                          <ul className="space-y-1">
+                            {collectedData.youtubeAnalysis.blog_suggestions.map((suggestion, idx) => (
+                              <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
+                                <span className="text-orange-500 mt-1">•</span>
+                                <span>{suggestion}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                      <div className="text-sm text-slate-700 whitespace-pre-wrap">
+                        {collectedData.youtubeAnalysisRaw}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* 크롤링된 블로그 본문 데이터 (성공한 것만 표시) */}
               {collectedData.crawledBlogs && collectedData.crawledBlogs.filter(blog => blog.success).length > 0 && (

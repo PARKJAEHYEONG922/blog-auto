@@ -2,7 +2,7 @@ import { LLMClientFactory, LLMMessage } from './llm-client-factory';
 import { naverAPI } from './naver-api';
 import { BlogTitleSelector, SelectedBlogTitle, SelectedYouTubeVideo } from './blog-title-selector';
 import { BlogCrawler, BlogContent, CrawlingProgress } from './blog-crawler';
-import { BlogSummaryPrompts, SummaryPromptRequest } from './blog-summary-prompts';
+import { AnalysisPrompts, SummaryPromptRequest } from './analysis-prompts';
 import { youtubeAPI, PrioritizedVideo } from './youtube-api';
 
 export interface DataCollectionRequest {
@@ -47,30 +47,34 @@ export interface CollectedYouTubeData {
   summary?: string; // 자막 요약
 }
 
-export interface KeywordAnalysis {
-  mainKeyword: string;
-  relatedKeywords: string[];
-  searchVolume?: number;
-  competition?: string;
-  suggestions: string[];
+export interface YouTubeAnalysisResult {
+  video_summaries: Array<{
+    video_number: number;
+    key_points: string;
+  }>;
+  common_themes: string[];
+  practical_tips: string[];
+  expert_insights: string[];
+  blog_suggestions: string[];
 }
 
-export interface SEOInsights {
-  titleLength: string;
-  keywordDensity: string;
-  contentLength: string;
-  headingStructure: string;
-  imageRecommendations: string;
+export interface BlogAnalysisResult {
+  competitor_titles: string[];
+  core_keywords: string[];
+  essential_content: string[];
+  key_points: string[];
+  improvement_opportunities: string[];
 }
 
 export interface DataCollectionResult {
-  keywords: KeywordAnalysis;
   blogs: CollectedBlogData[]; // 전체 50개 블로그
   selectedBlogs: SelectedBlogTitle[]; // AI가 선별한 상위 10개
   crawledBlogs: BlogContent[]; // 크롤링된 블로그 본문 데이터
-  contentSummary?: string; // 블로그 콘텐츠 요약 분석 결과
+  contentSummary?: BlogAnalysisResult; // 블로그 콘텐츠 분석 결과 (JSON)
+  contentSummaryRaw?: string; // 블로그 콘텐츠 분석 원본 텍스트 (호환성용)
+  youtubeAnalysis?: YouTubeAnalysisResult; // YouTube 자막 분석 결과 (JSON)
+  youtubeAnalysisRaw?: string; // YouTube 자막 분석 원본 텍스트 (호환성용)
   youtube: CollectedYouTubeData[];
-  seoInsights: SEOInsights;
   summary: {
     totalSources: number;
     dataQuality: 'high' | 'medium' | 'low';
@@ -90,15 +94,13 @@ export interface AnalysisProgress {
 export class DataCollectionEngine {
   private progressCallback?: (progress: AnalysisProgress[]) => void;
   private analysisSteps: AnalysisProgress[] = [
-    { step: '키워드 분석 및 확장', progress: 0, status: 'pending' },
     { step: '네이버 블로그 데이터 수집 (서치키워드 우선, 최대 50개)', progress: 0, status: 'pending' },
     { step: '유튜브 데이터 수집 및 선별', progress: 0, status: 'pending' },
     { step: 'AI 블로그+YouTube 통합 선별 (상위 10개씩)', progress: 0, status: 'pending' },
-    { step: '선별된 YouTube 영상 자막 추출 및 요약', progress: 0, status: 'pending' },
+    { step: '선별된 YouTube 영상 자막 추출 (상위 3개)', progress: 0, status: 'pending' },
     { step: '선별된 블로그 본문 크롤링 (상위 3개)', progress: 0, status: 'pending' },
-    { step: '블로그 콘텐츠 요약 분석', progress: 0, status: 'pending' },
-    { step: 'SEO 최적화 가이드 생성', progress: 0, status: 'pending' },
-    { step: '데이터 요약 및 인사이트 도출', progress: 0, status: 'pending' }
+    { step: '블로그 콘텐츠 분석', progress: 0, status: 'pending' },
+    { step: 'YouTube 자막 분석', progress: 0, status: 'pending' }
   ];
 
   constructor(progressCallback?: (progress: AnalysisProgress[]) => void) {
@@ -110,56 +112,64 @@ export class DataCollectionEngine {
     console.log('🔍 데이터 수집 및 분석 시작:', request);
 
     try {
-      // 1. 키워드 분석 및 확장
-      const keywords = await this.analyzeKeywords(request.keyword, request.subKeywords);
-      this.updateProgress(0, 'completed', keywords);
 
-      // 2. 네이버 블로그 데이터 수집 (50개)
+      // 1. 네이버 블로그 데이터 수집 (50개)
       const blogs = await this.collectBlogData(request.keyword, request.mainKeyword || request.keyword);
-      this.updateProgress(1, 'completed', blogs);
+      this.updateProgress(0, 'completed', blogs);
 
-      // 3. 유튜브 데이터 수집 (100개→30개 상대평가 선별)
+      // 2. 유튜브 데이터 수집 (100개→30개 상대평가 선별)
       const youtube = await this.collectYouTubeData(request.keyword);
-      this.updateProgress(2, 'completed', youtube);
+      this.updateProgress(1, 'completed', youtube);
 
-      // 4. AI 블로그+YouTube 통합 선별 (상위 10개씩)
+      // 3. AI 블로그+YouTube 통합 선별 (상위 10개씩)
       const selectedBlogs = await this.selectTopBlogs(request, blogs, youtube);
-      this.updateProgress(3, 'completed', selectedBlogs);
+      this.updateProgress(2, 'completed', selectedBlogs);
 
-      // 5. 선별된 YouTube 영상 자막 추출 및 요약
+      // 4. 선별된 YouTube 영상 자막 추출 (상위 3개)
       const enrichedYouTube = await this.extractYouTubeSubtitles(selectedBlogs.selectedVideos);
-      this.updateProgress(4, 'completed', enrichedYouTube);
+      this.updateProgress(3, 'completed', enrichedYouTube);
 
-      // 6. 선별된 블로그 본문 크롤링
+      // 5. 선별된 블로그 본문 크롤링 (상위 3개)
       const crawledBlogs = await this.crawlSelectedBlogs(selectedBlogs.selectedTitles);
-      this.updateProgress(5, 'completed', crawledBlogs);
+      this.updateProgress(4, 'completed', crawledBlogs);
 
-      // 7. 블로그 콘텐츠 요약 분석
-      const contentSummary = await this.generateContentSummary(request, crawledBlogs);
-      this.updateProgress(6, 'completed', contentSummary);
+      // 6. 블로그 콘텐츠 분석 (별도)
+      const blogAnalysisData = await this.generateContentSummary(request, crawledBlogs);
+      const contentSummaryResult = blogAnalysisData.analysisResult;
+      const contentSummaryRaw = blogAnalysisData.rawText;
+      this.updateProgress(5, 'completed', contentSummaryResult || contentSummaryRaw);
+      
+      // 7. YouTube 자막 분석 (별도)
+      let youtubeAnalysisResult: YouTubeAnalysisResult | null = null;
+      let youtubeAnalysisRaw = '';
+      if (enrichedYouTube && enrichedYouTube.length > 0) {
+        const analysisData = await this.analyzeYouTubeSubtitles(request, enrichedYouTube);
+        youtubeAnalysisResult = analysisData.analysisResult;
+        youtubeAnalysisRaw = analysisData.rawText;
+      }
+      this.updateProgress(6, 'completed', youtubeAnalysisResult || youtubeAnalysisRaw);
 
-
-      // 8. SEO 최적화 가이드 생성
-      const seoInsights = await this.generateSEOInsights(request, selectedBlogs.selectedTitles);
-      this.updateProgress(7, 'completed', seoInsights);
-
-      // 9. 데이터 요약 및 인사이트 도출
-      const summary = await this.generateSummaryInsights(keywords, blogs, enrichedYouTube);
-      this.updateProgress(8, 'completed', summary);
 
       const processingTime = Date.now() - startTime;
 
       const result: DataCollectionResult = {
-        keywords,
         blogs, // 전체 50개 블로그
         selectedBlogs: selectedBlogs.selectedTitles, // AI가 선별한 상위 10개 블로그
         crawledBlogs, // 크롤링된 블로그 본문 데이터
-        contentSummary, // 블로그 콘텐츠 요약 분석 결과
-        youtube: enrichedYouTube, // AI가 선별한 상위 10개 YouTube (자막 추출 완료)
-        seoInsights,
+        contentSummary: contentSummaryResult, // 블로그 콘텐츠 분석 결과 (JSON)
+        contentSummaryRaw, // 블로그 콘텐츠 분석 원본 텍스트
+        youtubeAnalysis: youtubeAnalysisResult, // YouTube 자막 분석 결과 (JSON)
+        youtubeAnalysisRaw, // YouTube 자막 분석 원본 텍스트
+        youtube: enrichedYouTube, // AI가 선별한 상위 3개 YouTube (자막 추출 완료)
         summary: {
-          ...summary,
-          processingTime
+          totalSources: blogs.length + enrichedYouTube.length,
+          dataQuality: crawledBlogs.filter(b => b.success).length >= 2 ? 'high' : crawledBlogs.filter(b => b.success).length >= 1 ? 'medium' : 'low',
+          processingTime,
+          recommendations: [
+            '수집된 데이터를 바탕으로 경쟁사 분석 완료',
+            contentSummaryResult || contentSummaryRaw ? '블로그 콘텐츠 분석을 참고하여 글 작성' : '블로그 분석 실패',
+            youtubeAnalysisResult || youtubeAnalysisRaw ? 'YouTube 자막 분석을 활용하여 영상 콘텐츠 인사이트 반영' : 'YouTube 분석 없음'
+          ].filter(rec => !rec.includes('실패') && !rec.includes('없음'))
         }
       };
 
@@ -202,75 +212,9 @@ export class DataCollectionEngine {
     }
   }
 
-  private async analyzeKeywords(mainKeyword: string, subKeywords?: string[]): Promise<KeywordAnalysis> {
-    this.updateProgress(0, 'running');
-    
-    try {
-      // AI를 활용한 키워드 분석
-      const informationClient = LLMClientFactory.getInformationClient();
-      
-      const systemPrompt = `당신은 SEO 키워드 분석 전문가입니다. 주어진 키워드를 분석하고 관련 키워드를 추천해주세요.`;
-      
-      const userPrompt = `메인 키워드: "${mainKeyword}"
-${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(', ')}` : ''}
-
-다음 형식으로 키워드 분석 결과를 JSON으로 반환해주세요:
-{
-  "relatedKeywords": ["관련키워드1", "관련키워드2", "관련키워드3", "관련키워드4", "관련키워드5"],
-  "suggestions": ["추천키워드1", "추천키워드2", "추천키워드3"]
-}
-
-관련 키워드는 검색량이 높고 경쟁도가 적당한 롱테일 키워드 위주로 선정해주세요.`;
-
-      const messages: LLMMessage[] = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ];
-
-      const response = await informationClient.generateText(messages);
-      
-      try {
-        const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const analysisResult = JSON.parse(jsonMatch[0]);
-          
-          return {
-            mainKeyword,
-            relatedKeywords: analysisResult.relatedKeywords || [],
-            suggestions: analysisResult.suggestions || [],
-            competition: 'medium' // 기본값
-          };
-        }
-      } catch (parseError) {
-        console.warn('키워드 분석 JSON 파싱 실패:', parseError);
-      }
-
-      // 폴백: 기본 키워드 확장
-      return {
-        mainKeyword,
-        relatedKeywords: subKeywords || [
-          `${mainKeyword} 방법`,
-          `${mainKeyword} 팁`,
-          `${mainKeyword} 가이드`,
-          `${mainKeyword} 추천`,
-          `${mainKeyword} 후기`
-        ],
-        suggestions: [
-          `${mainKeyword} 초보자`,
-          `${mainKeyword} 완벽`,
-          `${mainKeyword} 전문가`
-        ],
-        competition: 'medium'
-      };
-
-    } catch (error) {
-      console.error('키워드 분석 실패:', error);
-      throw new Error(`키워드 분석 실패: ${error.message}`);
-    }
-  }
 
   private async collectBlogData(searchKeyword: string, mainKeyword: string): Promise<CollectedBlogData[]> {
-    this.updateProgress(1, 'running');
+    this.updateProgress(0, 'running');
     
     try {
       const searchResults = [];
@@ -333,7 +277,7 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
   }
 
   private async crawlSelectedBlogs(selectedBlogs: SelectedBlogTitle[]): Promise<BlogContent[]> {
-    this.updateProgress(3, 'running');
+    this.updateProgress(4, 'running');
     
     try {
       if (!selectedBlogs || selectedBlogs.length === 0) {
@@ -347,10 +291,10 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
       const crawler = new BlogCrawler((crawlingProgress: CrawlingProgress) => {
         // 크롤링 진행률을 메인 진행률에 반영
         const overallProgress = Math.round((crawlingProgress.current / crawlingProgress.total) * 100);
-        this.analysisSteps[3].progress = overallProgress;
+        this.analysisSteps[4].progress = overallProgress;
         
         // 상세 메시지 업데이트
-        this.analysisSteps[3].message = `${crawlingProgress.current}/${crawlingProgress.total}: ${crawlingProgress.url}`;
+        this.analysisSteps[4].message = `${crawlingProgress.current}/${crawlingProgress.total}: ${crawlingProgress.url}`;
         
         // 콜백 호출
         if (this.progressCallback) {
@@ -371,18 +315,17 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
     }
   }
 
-  private async generateContentSummary(request: DataCollectionRequest, crawledBlogs: BlogContent[]): Promise<string> {
-    this.updateProgress(4, 'running');
-    
+  private async generateContentSummary(request: DataCollectionRequest, crawledBlogs: BlogContent[]): Promise<{ analysisResult: BlogAnalysisResult | null, rawText: string }> {
     try {
       if (!crawledBlogs || crawledBlogs.length === 0) {
         console.log('크롤링된 블로그가 없어 콘텐츠 요약을 건너뜁니다');
-        return '';
+        const fallbackText = '크롤링된 블로그가 없어 분석할 수 없습니다.';
+        return { analysisResult: null, rawText: fallbackText };
       }
 
       console.log(`📝 ${crawledBlogs.length}개 블로그 콘텐츠 요약 분석 시작`);
       
-      // BlogSummaryPrompts 요청 구성
+      // BlogSummaryPrompts 요청 구성 (블로그만)
       const summaryRequest: SummaryPromptRequest = {
         selectedTitle: request.selectedTitle,
         searchKeyword: request.keyword,
@@ -392,11 +335,12 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
         reviewType: request.reviewType,
         reviewTypeDescription: request.reviewTypeDescription,
         competitorBlogs: crawledBlogs,
+        // youtubeVideos 제거 - 블로그만 분석
         subKeywords: request.subKeywords
       };
 
-      // 정보요약 AI용 프롬프트 생성
-      const prompt = BlogSummaryPrompts.generateContentSummaryPrompt(summaryRequest);
+      // 블로그 분석 AI용 프롬프트 생성
+      const prompt = AnalysisPrompts.generateBlogAnalysisPrompt(summaryRequest);
       
       // LLM 호출
       const informationClient = LLMClientFactory.getInformationClient();
@@ -408,13 +352,35 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
       
       const response = await informationClient.generateText(messages);
       
-      console.log('🤖 [LLM 응답] 콘텐츠 요약 분석 결과 받음');
+      console.log('🤖 [LLM 응답] 블로그 콘텐츠 요약 분석 결과 받음');
       
-      return response.content;
+      // JSON 파싱 시도
+      try {
+        const jsonMatch = response.content.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) {
+          const analysisResult = JSON.parse(jsonMatch[1]) as BlogAnalysisResult;
+          console.log('✅ 블로그 분석 결과 JSON 파싱 성공');
+          return { analysisResult, rawText: response.content };
+        } else {
+          // JSON 블록 없이 바로 JSON이 온 경우
+          const trimmedContent = response.content.trim();
+          if (trimmedContent.startsWith('{') && trimmedContent.endsWith('}')) {
+            const analysisResult = JSON.parse(trimmedContent) as BlogAnalysisResult;
+            console.log('✅ 블로그 분석 결과 JSON 파싱 성공 (블록 없음)');
+            return { analysisResult, rawText: response.content };
+          }
+        }
+      } catch (parseError) {
+        console.warn('⚠️ 블로그 분석 결과 JSON 파싱 실패, 원본 텍스트 사용:', parseError);
+      }
+      
+      // JSON 파싱 실패 시 원본 텍스트만 반환
+      return { analysisResult: null, rawText: response.content };
       
     } catch (error) {
       console.error('블로그 콘텐츠 요약 분석 실패:', error);
-      return '콘텐츠 요약 분석 실패';
+      const errorText = '콘텐츠 요약 분석 실패';
+      return { analysisResult: null, rawText: errorText };
     }
   }
 
@@ -490,116 +456,11 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
     }
   }
 
-  private async generateSEOInsights(request: DataCollectionRequest, selectedBlogs: SelectedBlogTitle[]): Promise<SEOInsights> {
-    this.updateProgress(7, 'running');
-    
-    try {
-      const informationClient = LLMClientFactory.getInformationClient();
-      
-      const systemPrompt = `당신은 SEO 최적화 전문가입니다. 주어진 데이터를 분석하여 SEO 최적화 가이드를 제공해주세요.`;
-      
-      const competitorTitles = selectedBlogs.slice(0, 5).map(blog => blog.title).join('\n- ');
-      
-      const userPrompt = `키워드: "${request.keyword}"
-선택된 제목: "${request.selectedTitle}"
-콘텐츠 타입: ${request.contentType}
-
-상위 경쟁사 제목들:
-- ${competitorTitles}
-
-다음 형식으로 SEO 최적화 가이드를 JSON으로 반환해주세요:
-{
-  "titleLength": "권장 제목 길이",
-  "keywordDensity": "권장 키워드 밀도",
-  "contentLength": "권장 글자 수",
-  "headingStructure": "권장 제목 구조",
-  "imageRecommendations": "이미지 사용 권장사항"
-}`;
-
-      const messages: LLMMessage[] = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ];
-
-      const response = await informationClient.generateText(messages);
-      
-      try {
-        const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const insights = JSON.parse(jsonMatch[0]);
-          
-          // headingStructure가 객체인 경우 문자열로 변환
-          if (typeof insights.headingStructure === 'object' && insights.headingStructure !== null) {
-            insights.headingStructure = JSON.stringify(insights.headingStructure);
-          }
-          
-          return insights;
-        }
-      } catch (parseError) {
-        console.warn('SEO 인사이트 JSON 파싱 실패:', parseError);
-      }
-
-      // 폴백: 기본 SEO 가이드
-      return {
-        titleLength: '30-60자',
-        keywordDensity: '1-3%',
-        contentLength: '1500-3000자',
-        headingStructure: 'H1(1개), H2(3-5개), H3(섹션별 2-3개)',
-        imageRecommendations: '8-12개, 제목과 연관된 고품질 이미지 사용'
-      };
-
-    } catch (error) {
-      console.error('SEO 인사이트 생성 실패:', error);
-      return {
-        titleLength: '30-60자',
-        keywordDensity: '1-3%',
-        contentLength: '1500-3000자',
-        headingStructure: 'H1(1개), H2(3-5개), H3(섹션별 2-3개)',
-        imageRecommendations: '8-12개, 제목과 연관된 고품질 이미지 사용'
-      };
-    }
-  }
-
-  private async generateSummaryInsights(
-    keywords: KeywordAnalysis,
-    blogs: CollectedBlogData[],
-    youtube: CollectedYouTubeData[]
-  ): Promise<{ totalSources: number; dataQuality: 'high' | 'medium' | 'low'; recommendations: string[] }> {
-    this.updateProgress(8, 'running');
-    
-    const totalSources = blogs.length + youtube.length;
-    
-    let dataQuality: 'high' | 'medium' | 'low' = 'high';
-    if (totalSources < 5) dataQuality = 'low';
-    else if (totalSources < 10) dataQuality = 'medium';
-    
-    const recommendations = [
-      `총 ${totalSources}개의 데이터 소스에서 정보를 수집했습니다.`,
-      `주요 키워드 "${keywords.mainKeyword}"를 중심으로 콘텐츠를 구성하세요.`,
-      `관련 키워드 ${keywords.relatedKeywords.length}개를 자연스럽게 활용하세요.`,
-      `경쟁사 분석 결과를 참고하여 차별화된 관점을 제시하세요.`
-    ];
-
-    if (blogs.length > 0) {
-      recommendations.push(`블로그 ${blogs.length}개 분석 완료: 트렌드와 관점을 참고하세요.`);
-    }
-    
-    
-    if (youtube.length > 0) {
-      recommendations.push(`유튜브 ${youtube.length}개 영상 분석: 시각적 요소를 강화하세요.`);
-    }
-
-    return {
-      totalSources,
-      dataQuality,
-      recommendations
-    };
-  }
 
 
 
   private async collectYouTubeData(keyword: string): Promise<CollectedYouTubeData[]> {
-    this.updateProgress(2, 'running');
+    this.updateProgress(1, 'running');
     
     try {
       console.log(`📺 YouTube 데이터 수집 시작: ${keyword}`);
@@ -669,7 +530,7 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
   }
 
   private async extractYouTubeSubtitles(selectedVideos: SelectedYouTubeVideo[]): Promise<CollectedYouTubeData[]> {
-    this.updateProgress(4, 'running');
+    this.updateProgress(3, 'running');
     
     try {
       if (!selectedVideos || selectedVideos.length === 0) {
@@ -677,32 +538,37 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
         return [];
       }
 
-      console.log(`📝 선별된 YouTube ${selectedVideos.length}개 영상의 자막 추출 시작`);
+      console.log(`📝 선별된 YouTube ${selectedVideos.length}개 영상 중 상위 3개 자막 무조건 확보 시작`);
       
       const enrichedVideos: CollectedYouTubeData[] = [];
+      const targetCount = 3; // 무조건 3개 확보
+      let successCount = 0;
       
-      // 각 영상의 자막 추출
-      for (let i = 0; i < selectedVideos.length; i++) {
+      // AI 순위대로 자막 추출 시도 (3개 성공할 때까지)
+      for (let i = 0; i < selectedVideos.length && successCount < targetCount; i++) {
         const video = selectedVideos[i];
         
-        console.log(`📝 [${i + 1}/${selectedVideos.length}] "${video.title}" 자막 추출 중...`);
+        console.log(`📝 [${i + 1}위] "${video.title}" 자막 추출 중... (목표: ${successCount + 1}/${targetCount})`);
         
         try {
           // YouTube URL에서 videoId 추출
           const videoId = this.extractVideoIdFromUrl(video.url);
           if (!videoId) {
-            console.warn(`⚠️ YouTube URL에서 videoId 추출 실패: ${video.url}`);
+            console.warn(`⚠️ [${i + 1}위] YouTube URL에서 videoId 추출 실패, 다음 영상 시도`);
             continue;
           }
           
           // 자막 추출
           const subtitles = await youtubeAPI.extractSubtitlesSimple(videoId);
           
-          // 자막이 있으면 AI로 요약 생성
-          let summary = '';
-          if (subtitles.length > 0 && subtitles[0].text) {
-            summary = await this.generateVideoSummary(video.title, subtitles[0].text);
+          // 자막이 있는지 확인
+          if (subtitles.length === 0 || !subtitles[0].text || subtitles[0].text.trim().length < 50) {
+            console.warn(`⚠️ [${i + 1}위] 자막이 없거나 너무 짧음, 다음 영상 시도`);
+            continue;
           }
+          
+          // 자막 전체를 저장 (요약 제거)
+          const fullSubtitleText = subtitles[0].text;
           
           // CollectedYouTubeData 형태로 변환
           const enrichedVideo: CollectedYouTubeData = {
@@ -710,11 +576,11 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
             channelName: video.channelName,
             viewCount: video.viewCount,
             duration: video.duration,
-            subscriberCount: undefined, // SelectedYouTubeVideo에는 없음
-            publishedAt: new Date().toISOString(), // 임시값
+            subscriberCount: undefined,
+            publishedAt: new Date().toISOString(),
             url: video.url,
             priority: video.priority,
-            summary: summary || (subtitles.length > 0 ? '자막 추출 완료 (요약 생성 실패)' : '자막 없음'),
+            summary: fullSubtitleText, // 자막 전체 저장
             likeCount: undefined,
             commentCount: undefined,
             thumbnail: undefined,
@@ -722,17 +588,33 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
             tags: undefined,
             categoryId: undefined,
             definition: undefined,
-            caption: subtitles.length > 0
+            caption: true
           };
           
           enrichedVideos.push(enrichedVideo);
+          successCount++;
           
-          console.log(`✅ [${i + 1}] "${video.title}" 자막 추출 완료 (자막: ${subtitles.length > 0 ? 'O' : 'X'}, 요약: ${summary ? 'O' : 'X'})`);
+          console.log(`✅ [${i + 1}위] "${video.title}" 자막 확보 성공 (${successCount}/${targetCount})`);
+          console.log(`   자막 길이: ${fullSubtitleText.length}자`);
           
         } catch (error) {
-          console.warn(`⚠️ [${i + 1}] "${video.title}" 자막 추출 실패:`, error);
+          console.warn(`⚠️ [${i + 1}위] "${video.title}" 자막 추출 실패, 다음 영상 시도:`, error);
+          continue;
+        }
+      }
+      
+      // 3개 못 채운 경우 경고
+      if (successCount < targetCount) {
+        console.warn(`⚠️ 목표 ${targetCount}개 중 ${successCount}개만 자막 확보됨`);
+        
+        // 부족한 만큼 자막 없는 영상이라도 추가
+        const remaining = targetCount - successCount;
+        for (let i = 0; i < selectedVideos.length && enrichedVideos.length < targetCount; i++) {
+          const video = selectedVideos[i];
           
-          // 자막 추출 실패해도 기본 정보는 포함
+          // 이미 추가된 영상은 스킵
+          if (enrichedVideos.some(v => v.url === video.url)) continue;
+          
           const basicVideo: CollectedYouTubeData = {
             title: video.title,
             channelName: video.channelName,
@@ -741,23 +623,24 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
             publishedAt: new Date().toISOString(),
             url: video.url,
             priority: video.priority,
-            summary: '자막 추출 실패',
+            summary: '자막 없음',
             caption: false
           };
           
           enrichedVideos.push(basicVideo);
+          console.log(`📝 [보충] "${video.title}" 자막 없이 추가 (${enrichedVideos.length}/${targetCount})`);
         }
       }
       
-      console.log(`✅ YouTube 자막 추출 완료: ${enrichedVideos.length}개 영상 처리`);
+      console.log(`✅ YouTube 자막 추출 완료: ${enrichedVideos.length}개 영상 (자막 있음: ${successCount}개)`);
       
       return enrichedVideos;
       
     } catch (error) {
       console.error('❌ YouTube 자막 추출 실패:', error);
       
-      // 실패 시 기본 형태로 변환해서 반환
-      return selectedVideos.map(video => ({
+      // 실패 시 상위 3개라도 기본 형태로 반환
+      return selectedVideos.slice(0, 3).map(video => ({
         title: video.title,
         channelName: video.channelName,
         viewCount: video.viewCount,
@@ -770,6 +653,70 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
       }));
     }
   }
+
+  private async analyzeYouTubeSubtitles(request: DataCollectionRequest, youtubeVideos: CollectedYouTubeData[]): Promise<{ analysisResult: YouTubeAnalysisResult | null, rawText: string }> {
+    try {
+      console.log(`📺 YouTube 자막 분석 시작: ${youtubeVideos.length}개 영상`);
+      
+      // 자막이 있는 영상만 필터링
+      const videosWithSubtitles = youtubeVideos.filter(video => 
+        video.summary && video.summary !== '자막 없음' && video.summary !== '자막 추출 실패' && 
+        video.summary !== '자막 추출 시스템 오류' && video.summary.trim().length > 50
+      );
+
+      if (videosWithSubtitles.length === 0) {
+        console.warn('자막이 있는 YouTube 영상이 없어 분석을 건너뜁니다');
+        const fallbackText = '자막이 있는 YouTube 영상이 없습니다.';
+        return { analysisResult: null, rawText: fallbackText };
+      }
+
+      console.log(`📺 자막 분석 대상: ${videosWithSubtitles.length}개 영상`);
+
+      // YouTube 전용 분석 프롬프트 생성
+      const prompt = AnalysisPrompts.generateYouTubeAnalysisPrompt(request, videosWithSubtitles);
+      
+      // LLM 호출
+      const informationClient = LLMClientFactory.getInformationClient();
+      const messages: LLMMessage[] = [
+        { role: 'user', content: prompt }
+      ];
+
+      console.log('🤖 [LLM 요청] YouTube 자막 분석 요청');
+      
+      const response = await informationClient.generateText(messages);
+      
+      console.log('🤖 [LLM 응답] YouTube 자막 분석 결과 받음');
+      
+      // JSON 파싱 시도
+      try {
+        const jsonMatch = response.content.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) {
+          const analysisResult = JSON.parse(jsonMatch[1]) as YouTubeAnalysisResult;
+          console.log('✅ YouTube 분석 결과 JSON 파싱 성공');
+          return { analysisResult, rawText: response.content };
+        } else {
+          // JSON 블록 없이 바로 JSON이 온 경우
+          const trimmedContent = response.content.trim();
+          if (trimmedContent.startsWith('{') && trimmedContent.endsWith('}')) {
+            const analysisResult = JSON.parse(trimmedContent) as YouTubeAnalysisResult;
+            console.log('✅ YouTube 분석 결과 JSON 파싱 성공 (블록 없음)');
+            return { analysisResult, rawText: response.content };
+          }
+        }
+      } catch (parseError) {
+        console.warn('⚠️ YouTube 분석 결과 JSON 파싱 실패, 원본 텍스트 사용:', parseError);
+      }
+      
+      // JSON 파싱 실패 시 원본 텍스트만 반환
+      return { analysisResult: null, rawText: response.content };
+      
+    } catch (error) {
+      console.error('❌ YouTube 자막 분석 실패:', error);
+      const errorText = 'YouTube 자막 분석 실패';
+      return { analysisResult: null, rawText: errorText };
+    }
+  }
+
 
   private extractVideoIdFromUrl(url: string): string | null {
     try {
@@ -786,48 +733,5 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
     }
   }
 
-  private async generateVideoSummary(title: string, subtitleText: string): Promise<string> {
-    try {
-      if (!subtitleText || subtitleText.trim().length < 100) {
-        return '자막이 너무 짧아 요약 불가';
-      }
-
-      const informationClient = LLMClientFactory.getInformationClient();
-      
-      // 자막이 너무 길면 앞부분만 사용 (토큰 제한)
-      const maxSubtitleLength = 3000;
-      const truncatedText = subtitleText.length > maxSubtitleLength 
-        ? subtitleText.substring(0, maxSubtitleLength) + '...'
-        : subtitleText;
-
-      const userPrompt = `다음 YouTube 영상의 자막을 분석하여 블로그 작성에 도움될 만한 핵심 내용을 150자 이내로 요약해주세요.
-
-영상 제목: "${title}"
-
-자막 내용:
-${truncatedText}
-
-요약 요구사항:
-- 블로그 글 작성에 활용할 수 있는 핵심 정보와 인사이트 위주로 정리
-- 광고나 불필요한 내용은 제외
-- 150자 이내로 간결하게 작성
-- 이모지나 특수문자 사용 금지`;
-
-      const messages: LLMMessage[] = [
-        { role: 'user', content: userPrompt }
-      ];
-
-      const response = await informationClient.generateText(messages);
-      
-      // 응답에서 150자까지만 추출
-      const summary = response.content.trim().substring(0, 150);
-      
-      return summary || '요약 생성 실패';
-      
-    } catch (error) {
-      console.warn('영상 요약 생성 실패:', error);
-      return '요약 생성 중 오류 발생';
-    }
-  }
 
 }
