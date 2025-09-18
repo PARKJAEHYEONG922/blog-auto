@@ -53,26 +53,23 @@ export class AnalysisPrompts {
       });
     }
 
-    // JSON 문자열로 변환
-    const jsonInput = JSON.stringify(inputData, null, 2);
-
     // 블로그 분석 프롬프트
     const summaryPrompt = `"${request.selectedTitle}" 제목의 블로그 글 작성을 위한 경쟁사 분석을 수행해주세요.
 
-**분석 목표**:
-- 선택된 제목: "${request.selectedTitle}"
-- 서치 키워드: "${request.searchKeyword}" (경쟁사 블로그 검색에 사용한 키워드)
-- 메인 키워드: "${request.mainKeyword}" (SEO 타겟 키워드)
-- 콘텐츠 유형: ${request.contentType}
+**분석 목적**:
+아래 작성할 블로그 정보에 따라 경쟁사 블로그들을 분석하여, 우리가 선택한 제목으로 더 나은 블로그 글을 작성할 수 있도록 도움이 되는 인사이트를 제공해주세요.
+
+**작성할 블로그 정보**:
+\`\`\`json
+${JSON.stringify(inputData.target_info, null, 2)}
+\`\`\`
 
 **데이터 설명**:
-아래 JSON 데이터는 "${request.searchKeyword}" 키워드로 검색해서 찾은 ${successfulBlogs.length}개의 경쟁사 블로그입니다.
-- target_info: 작성할 블로그의 기본 정보
-- competitor_blogs: 경쟁사 블로그들의 제목과 본문 내용
+아래는 "${request.searchKeyword}" 키워드로 검색해서 찾은 ${successfulBlogs.length}개의 경쟁사 블로그들의 제목과 본문 내용입니다.
 
 **분석 대상 데이터**:
 \`\`\`json
-${jsonInput}
+${JSON.stringify(inputData.competitor_blogs, null, 2)}
 \`\`\`
 
 **요청 사항**:
@@ -133,19 +130,34 @@ ${subtitlePreview || '자막 없음'}
 ---`;
     }).join('\n\n');
 
+    // target_info 구성
+    const targetInfo = {
+      selected_title: request.selectedTitle,
+      search_keyword: request.keyword,
+      main_keyword: request.mainKeyword || request.keyword,
+      content_type: request.contentType
+    } as any;
+
+    // 보조키워드가 있으면 추가
+    if (request.subKeywords && request.subKeywords.length > 0) {
+      targetInfo.sub_keywords = request.subKeywords.join(', ');
+    }
+
     return `"${request.selectedTitle}" 제목의 블로그 글 작성을 위한 YouTube 영상 자막 분석을 수행해주세요.
 
-**분석 목표**:
-- 선택된 제목: "${request.selectedTitle}"
-- 서치 키워드: "${request.keyword}" (YouTube 영상 검색에 사용한 키워드)
-- 메인 키워드: "${request.mainKeyword || request.keyword}" (SEO 타겟 키워드)
-- 콘텐츠 유형: ${request.contentType}
+**분석 목적**:
+아래 작성할 블로그 정보에 따라 YouTube 영상들의 자막을 분석하여, 우리가 선택한 제목으로 더 나은 블로그 글을 작성할 수 있도록 도움이 되는 인사이트를 제공해주세요.
+
+**작성할 블로그 정보**:
+\`\`\`json
+${JSON.stringify(targetInfo, null, 2)}
+\`\`\`
 
 **데이터 설명**:
 아래는 "${request.keyword}" 키워드로 검색해서 찾은 상위 ${youtubeVideos.length}개 YouTube 영상들의 자막 데이터입니다.
 각 영상의 제목, 채널, 조회수, 길이, 자막 내용을 포함합니다.
 
-**분석 대상 영상들**:
+**분석 대상 영상 자막 스크립트**:
 ${videosText}
 
 **요청 사항**:
