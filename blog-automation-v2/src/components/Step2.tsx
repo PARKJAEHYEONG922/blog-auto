@@ -542,53 +542,38 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
                 </div>
               )}
 
-              {/* 쇼핑 & 유튜브 데이터 */}
-              <div className="grid md:grid-cols-2 gap-4 mb-4">
-                {/* 쇼핑 데이터 */}
-                {collectedData.shopping.length > 0 && (
-                  <div className="section-card" style={{padding: '16px'}}>
-                    <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <span>🛒</span>
-                      <span>쇼핑 분석 ({collectedData.shopping.length}개)</span>
-                    </h4>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {collectedData.shopping.map((product, idx: number) => (
-                        <div key={idx} className="border border-slate-200 rounded p-2 bg-white">
-                          <p className="font-medium text-xs text-slate-900">{product.title}</p>
-                          <div className="flex items-center justify-between mt-1">
-                            <span className="text-sm font-bold text-green-600">{product.price}</span>
-                            <div className="flex items-center gap-2 text-xs text-slate-500">
-                              {product.rating && <span>⭐ {product.rating}</span>}
-                              {product.reviewCount && <span>💬 {product.reviewCount}</span>}
-                            </div>
+              {/* 유튜브 분석 결과 (간단 표시) */}
+              {collectedData.youtube.length > 0 && (
+                <div className="section-card" style={{padding: '16px', marginBottom: '16px'}}>
+                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    <span>📺</span>
+                    <span>유튜브 분석 ({collectedData.youtube.length}개)</span>
+                  </h4>
+                  <div className="space-y-3">
+                    {collectedData.youtube.map((video, idx: number) => (
+                      <div key={idx} className="border border-slate-200 rounded-lg p-4 bg-white">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 pr-4">
+                            <p className="font-medium text-sm text-slate-900 leading-relaxed">{video.title}</p>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* 유튜브 데이터 */}
-                {collectedData.youtube.length > 0 && (
-                  <div className="section-card" style={{padding: '16px'}}>
-                    <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <span>📺</span>
-                      <span>유튜브 분석 ({collectedData.youtube.length}개)</span>
-                    </h4>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {collectedData.youtube.map((video, idx: number) => (
-                        <div key={idx} className="border border-slate-200 rounded p-2 bg-white">
-                          <p className="font-medium text-xs text-slate-900">{video.title}</p>
-                          <div className="flex items-center justify-between mt-1 text-xs text-slate-500">
+                          <div className="flex items-center gap-4 text-xs text-slate-500 flex-shrink-0">
                             <span>📺 {video.channelName}</span>
-                            <span>👁️ {video.viewCount}</span>
+                            <span>👥 {video.subscriberCount ? `${(video.subscriberCount / 10000).toFixed(1)}만` : 'N/A'}</span>
+                            <span>👍 {video.likeCount || 'N/A'}</span>
+                            <span>⏱️ {Math.floor(video.duration / 60)}분</span>
                           </div>
                         </div>
-                      ))}
-                    </div>
+                        {video.summary && (
+                          <div className="mt-2 p-2 bg-slate-50 rounded text-xs text-slate-600">
+                            <span className="font-medium text-slate-700">📝 내용 요약: </span>
+                            {video.summary.substring(0, 150)}{video.summary.length > 150 && '...'}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* 블로그 콘텐츠 요약 분석 결과 */}
               {collectedData.contentSummary && (
