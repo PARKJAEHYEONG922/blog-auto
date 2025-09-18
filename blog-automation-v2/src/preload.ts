@@ -37,6 +37,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 외부 링크 열기
   openExternal: (url: string) => 
     ipcRenderer.invoke('shell:openExternal', url),
+    
+  // YouTube 자막 추출 (메인 프로세스에서 실행)
+  extractYouTubeSubtitles: (videoId: string, language?: string) => 
+    ipcRenderer.invoke('youtube:extractSubtitles', videoId, language),
 });
 
 // TypeScript 타입 정의
@@ -55,6 +59,8 @@ declare global {
       loadYouTubeApiSettings: () => Promise<{ success: boolean; data?: any; message?: string }>;
       deleteYouTubeApiSettings: () => Promise<{ success: boolean; message?: string }>;
       openExternal: (url: string) => Promise<void>;
+      extractYouTubeSubtitles: (videoId: string, language?: string) => Promise<{ success: boolean; data?: any; message?: string }>;
+      testYouTubeSubtitleExtraction: (testVideoId?: string) => Promise<{ success: boolean; data?: any; message?: string }>;
     };
   }
 }

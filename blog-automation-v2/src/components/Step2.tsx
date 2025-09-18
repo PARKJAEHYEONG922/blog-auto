@@ -685,6 +685,16 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
                             {video.summary.substring(0, 150)}{video.summary.length > 150 && '...'}
                           </div>
                         )}
+                        <div className="mt-2 text-xs">
+                          <a 
+                            href={`https://www.youtube.com/watch?v=${video.videoId}`}
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-red-500 hover:text-red-700 underline"
+                          >
+                            🔗 YouTube에서 보기
+                          </a>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -701,7 +711,7 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack }) => {
                     </summary>
                     <div className="mt-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
                       <div className="text-sm text-slate-700 whitespace-pre-wrap">
-                        {collectedData.contentSummary}
+                        {collectedData.contentSummary ? JSON.stringify(collectedData.contentSummary, null, 2) : '분석 결과 없음'}
                       </div>
                     </div>
                   </details>
