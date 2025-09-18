@@ -27,6 +27,7 @@ export interface CollectedBlogData {
 
 
 export interface CollectedYouTubeData {
+  videoId: string; // YouTube videoId
   title: string;
   channelName: string;
   channelId?: string;
@@ -37,7 +38,6 @@ export interface CollectedYouTubeData {
   duration: number; // seconds
   subscriberCount?: number;
   thumbnail?: string;
-  url: string;
   description?: string;
   tags?: string[];
   categoryId?: string;
@@ -439,8 +439,8 @@ export class DataCollectionEngine {
       
       const fallbackVideos = youtube && youtube.length > 0 
         ? youtube.slice(0, 10).map((video) => ({
+            videoId: video.videoId,
             title: video.title,
-            url: video.url,
             channelName: video.channelName,
             viewCount: video.viewCount,
             duration: video.duration,
@@ -497,13 +497,13 @@ export class DataCollectionEngine {
       
       // 4. CollectedYouTubeData 형식으로 변환
       const youtubeData: CollectedYouTubeData[] = selectedVideos.map((video: PrioritizedVideo) => ({
+        videoId: video.videoId,
         title: video.title,
         channelName: video.channelTitle,
         viewCount: video.viewCount,
         duration: video.duration,
         subscriberCount: video.subscriberCount,
         publishedAt: video.publishedAt,
-        url: video.url,
         priority: video.priority,
         // 나중에 AI 선별 후 자막 추출할 예정이므로 일단 기본값
         likeCount: undefined as string | undefined,
@@ -551,19 +551,12 @@ export class DataCollectionEngine {
         console.log(`📝 [${i + 1}위] "${video.title}" 자막 추출 중... (목표: ${successCount + 1}/${targetCount})`);
         
         try {
-          // YouTube URL에서 videoId 추출
-          const videoId = this.extractVideoIdFromUrl(video.url);
-          if (!videoId) {
-            console.warn(`⚠️ [${i + 1}위] YouTube URL에서 videoId 추출 실패, 다음 영상 시도`);
-            continue;
-          }
+          // 자막 추출 (300자 이상만 통과)
+          const subtitles = await youtubeAPI.extractSubtitlesSimple(video.videoId);
           
-          // 자막 추출
-          const subtitles = await youtubeAPI.extractSubtitlesSimple(videoId);
-          
-          // 자막이 있는지 확인
-          if (subtitles.length === 0 || !subtitles[0].text || subtitles[0].text.trim().length < 50) {
-            console.warn(`⚠️ [${i + 1}위] 자막이 없거나 너무 짧음, 다음 영상 시도`);
+          // 자막 추출 실패시 다음 영상으로
+          if (subtitles.length === 0) {
+            console.warn(`⚠️ [${i + 1}위] 자막 추출 실패, 다음 영상 시도`);
             continue;
           }
           
@@ -572,13 +565,13 @@ export class DataCollectionEngine {
           
           // CollectedYouTubeData 형태로 변환
           const enrichedVideo: CollectedYouTubeData = {
+            videoId: video.videoId,
             title: video.title,
             channelName: video.channelName,
             viewCount: video.viewCount,
             duration: video.duration,
             subscriberCount: undefined,
             publishedAt: new Date().toISOString(),
-            url: video.url,
             priority: video.priority,
             summary: fullSubtitleText, // 자막 전체 저장
             likeCount: undefined,
@@ -603,33 +596,9 @@ export class DataCollectionEngine {
         }
       }
       
-      // 3개 못 채운 경우 경고
+      // 자막 확보 결과 로그
       if (successCount < targetCount) {
-        console.warn(`⚠️ 목표 ${targetCount}개 중 ${successCount}개만 자막 확보됨`);
-        
-        // 부족한 만큼 자막 없는 영상이라도 추가
-        const remaining = targetCount - successCount;
-        for (let i = 0; i < selectedVideos.length && enrichedVideos.length < targetCount; i++) {
-          const video = selectedVideos[i];
-          
-          // 이미 추가된 영상은 스킵
-          if (enrichedVideos.some(v => v.url === video.url)) continue;
-          
-          const basicVideo: CollectedYouTubeData = {
-            title: video.title,
-            channelName: video.channelName,
-            viewCount: video.viewCount,
-            duration: video.duration,
-            publishedAt: new Date().toISOString(),
-            url: video.url,
-            priority: video.priority,
-            summary: '자막 없음',
-            caption: false
-          };
-          
-          enrichedVideos.push(basicVideo);
-          console.log(`📝 [보충] "${video.title}" 자막 없이 추가 (${enrichedVideos.length}/${targetCount})`);
-        }
+        console.warn(`⚠️ 목표 ${targetCount}개 중 ${successCount}개만 자막 확보됨 (자막 없는 영상은 제외)`);
       }
       
       console.log(`✅ YouTube 자막 추출 완료: ${enrichedVideos.length}개 영상 (자막 있음: ${successCount}개)`);
@@ -637,43 +606,25 @@ export class DataCollectionEngine {
       return enrichedVideos;
       
     } catch (error) {
-      console.error('❌ YouTube 자막 추출 실패:', error);
+      console.error('❌ YouTube 자막 추출 시스템 오류:', error);
       
-      // 실패 시 상위 3개라도 기본 형태로 반환
-      return selectedVideos.slice(0, 3).map(video => ({
-        title: video.title,
-        channelName: video.channelName,
-        viewCount: video.viewCount,
-        duration: video.duration,
-        publishedAt: new Date().toISOString(),
-        url: video.url,
-        priority: video.priority,
-        summary: '자막 추출 시스템 오류',
-        caption: false
-      }));
+      // 시스템 오류 시 빈 배열 반환
+      return [];
     }
   }
 
   private async analyzeYouTubeSubtitles(request: DataCollectionRequest, youtubeVideos: CollectedYouTubeData[]): Promise<{ analysisResult: YouTubeAnalysisResult | null, rawText: string }> {
     try {
-      console.log(`📺 YouTube 자막 분석 시작: ${youtubeVideos.length}개 영상`);
-      
-      // 자막이 있는 영상만 필터링
-      const videosWithSubtitles = youtubeVideos.filter(video => 
-        video.summary && video.summary !== '자막 없음' && video.summary !== '자막 추출 실패' && 
-        video.summary !== '자막 추출 시스템 오류' && video.summary.trim().length > 50
-      );
-
-      if (videosWithSubtitles.length === 0) {
+      if (youtubeVideos.length === 0) {
         console.warn('자막이 있는 YouTube 영상이 없어 분석을 건너뜁니다');
         const fallbackText = '자막이 있는 YouTube 영상이 없습니다.';
         return { analysisResult: null, rawText: fallbackText };
       }
 
-      console.log(`📺 자막 분석 대상: ${videosWithSubtitles.length}개 영상`);
+      console.log(`📺 YouTube 자막 분석 시작: ${youtubeVideos.length}개 영상`);
 
       // YouTube 전용 분석 프롬프트 생성
-      const prompt = AnalysisPrompts.generateYouTubeAnalysisPrompt(request, videosWithSubtitles);
+      const prompt = AnalysisPrompts.generateYouTubeAnalysisPrompt(request, youtubeVideos);
       
       // LLM 호출
       const informationClient = LLMClientFactory.getInformationClient();
@@ -718,20 +669,6 @@ export class DataCollectionEngine {
   }
 
 
-  private extractVideoIdFromUrl(url: string): string | null {
-    try {
-      // YouTube URL 형태: https://www.youtube.com/watch?v=VIDEO_ID
-      const urlObj = new URL(url);
-      if (urlObj.hostname === 'www.youtube.com' && urlObj.pathname === '/watch') {
-        return urlObj.searchParams.get('v');
-      }
-      // 다른 YouTube URL 형태도 지원 가능
-      return null;
-    } catch (error) {
-      console.warn('YouTube URL 파싱 실패:', url);
-      return null;
-    }
-  }
 
 
 }

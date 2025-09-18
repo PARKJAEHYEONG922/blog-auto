@@ -21,8 +21,8 @@ export interface SelectedBlogTitle {
 }
 
 export interface SelectedYouTubeVideo {
+  videoId: string; // YouTube videoId
   title: string;
-  url: string;
   channelName: string;
   viewCount: number;
   duration: number;
@@ -79,8 +79,8 @@ export class BlogTitleSelector {
           relevanceReason: '자동 선별 (AI 분석 실패)'
         })),
         selectedVideos: (request.youtubeTitles || []).slice(0, 10).map((video) => ({
+          videoId: video.videoId,
           title: video.title,
-          url: video.url,
           channelName: video.channelName,
           viewCount: video.viewCount,
           duration: video.duration,
@@ -258,8 +258,8 @@ ${youtubeTitlesText}` : ''}
             }
             
             return {
+              videoId: originalVideo.videoId,
               title: item.title,
-              url: originalVideo.url,
               channelName: originalVideo.channelName,
               viewCount: originalVideo.viewCount,
               duration: originalVideo.duration,
@@ -288,8 +288,8 @@ ${youtubeTitlesText}` : ''}
         relevanceReason: '자동 선별 (파싱 실패)'
       })),
       selectedVideos: originalVideos.slice(0, 10).map((video) => ({
+        videoId: video.videoId,
         title: video.title,
-        url: video.url,
         channelName: video.channelName,
         viewCount: video.viewCount,
         duration: video.duration,
