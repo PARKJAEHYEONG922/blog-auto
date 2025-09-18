@@ -209,12 +209,12 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
         <div className="ultra-card p-5 slide-in">
           {/* 헤더 */}
           <div className="text-center mb-4">
-            <div className="inline-flex items-center gap-3 mb-3">
-              <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <div className="relative mb-3">
+              <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2 justify-center">
                 <span>🔍</span>
                 <span>데이터 수집 및 분석</span>
               </h1>
-              <div className="text-sm text-slate-500">
+              <div className="absolute right-0 top-0 text-sm text-slate-500">
                 정보처리 AI: {aiModelStatus.information}
               </div>
             </div>
@@ -678,27 +678,37 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                           </div>
                         </div>
                         
-                        <div className="flex gap-2 mt-3">
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(BlogWritingService.processWritingResult(writingResult.content || ''));
-                              setDialog({
-                                isOpen: true,
-                                type: 'success',
-                                title: '복사 완료',
-                                message: '블로그 글이 클립보드에 복사되었습니다.'
-                              });
-                            }}
-                            className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition-colors"
-                          >
-                            📋 복사하기
-                          </button>
-                          <button
-                            onClick={() => setWritingResult(null)}
-                            className="px-3 py-1 bg-gray-500 text-white text-sm rounded hover:bg-gray-600 transition-colors"
-                          >
-                            🔄 다시 쓰기
-                          </button>
+                        <div className="flex justify-between items-center mt-3">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(BlogWritingService.processWritingResult(writingResult.content || ''));
+                                setDialog({
+                                  isOpen: true,
+                                  type: 'success',
+                                  title: '복사 완료',
+                                  message: '블로그 글이 클립보드에 복사되었습니다.'
+                                });
+                              }}
+                              className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition-colors"
+                            >
+                              📋 복사하기
+                            </button>
+                            <button
+                              onClick={() => setWritingResult(null)}
+                              className="px-3 py-1 bg-gray-500 text-white text-sm rounded hover:bg-gray-600 transition-colors"
+                            >
+                              🔄 다시 쓰기
+                            </button>
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {(() => {
+                              const content = BlogWritingService.processWritingResult(writingResult.content || '');
+                              const withoutSpaces = content.replace(/\s/g, '').length;
+                              const withSpaces = content.length;
+                              return `글자수: ${withoutSpaces.toLocaleString()} / ${withSpaces.toLocaleString()}(공백포함)`;
+                            })()}
+                          </div>
                         </div>
                       </div>
                     ) : (

@@ -145,10 +145,17 @@ ${guidelines.key_points.map(point => `  • ${point}`).join('\n')}
       ? `\n**보조 키워드**: ${request.subKeywords.join(', ')}`
       : '';
 
-    // 평균 이미지 개수 계산 (블로그 분석 결과에서)
+    // 평균 이미지 개수 계산 (크롤링된 블로그에서)
     let avgImageCount = 3; // 기본값
-    if (request.blogAnalysisResult && request.blogAnalysisResult.avg_image_count) {
-      avgImageCount = Math.max(3, Math.round(request.blogAnalysisResult.avg_image_count));
+    if (request.crawledBlogs && request.crawledBlogs.length > 0) {
+      const successfulBlogs = request.crawledBlogs.filter(blog => blog.success);
+      if (successfulBlogs.length > 0) {
+        const totalImages = successfulBlogs.reduce((sum, blog) => {
+          return sum + (blog.imageCount || 0) + (blog.gifCount || 0);
+        }, 0);
+        const calculatedAvg = totalImages / successfulBlogs.length;
+        avgImageCount = Math.max(3, Math.round(calculatedAvg));
+      }
     }
 
     // 컨텐츠 유형 가이드라인 가져오기
