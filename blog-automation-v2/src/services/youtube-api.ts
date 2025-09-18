@@ -445,8 +445,7 @@ export class YouTubeAPI {
       const { YoutubeTranscript } = await import('youtube-transcript');
       
       const transcript = await YoutubeTranscript.fetchTranscript(videoId, {
-        lang: language || 'ko',
-        country: 'KR'
+        lang: language || 'ko'
       });
 
       // 자막 텍스트 조합
