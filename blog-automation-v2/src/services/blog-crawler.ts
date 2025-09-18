@@ -534,27 +534,35 @@ export class BlogCrawler {
       return false;
     }
 
+    console.log(`🔍 필터링 검사 시작: "${content.title}"`);
+
     // 글자수 기준 필터링 (공백 제거한 순수 글자수)
     const cleanedLength = content.textContent.replace(/\s/g, '').length;
     if (cleanedLength < 300) {
-      console.log(`글자수 부족으로 필터링: ${cleanedLength}자 (최소 300자 필요)`);
+      console.log(`❌ 글자수 부족으로 필터링: ${cleanedLength}자 (최소 300자 필요)`);
       return true;
     }
     if (cleanedLength > 4000) {
-      console.log(`글자수 초과로 필터링: ${cleanedLength}자 (최대 4000자 제한)`);
+      console.log(`❌ 글자수 초과로 필터링: ${cleanedLength}자 (최대 4000자 제한)`);
       return true;
     }
+    console.log(`✅ 글자수 검사 통과: ${cleanedLength}자`);
 
     // 광고/협찬 글 필터링
     if (this.isAdvertisementContent(content.textContent, content.title)) {
+      console.log(`❌ 광고/협찬 콘텐츠로 필터링`);
       return true;
     }
+    console.log(`✅ 광고/협찬 검사 통과`);
 
     // 저품질 콘텐츠 필터링
     if (this.isLowQualityContent(content.textContent)) {
+      console.log(`❌ 저품질 콘텐츠로 필터링`);
       return true;
     }
+    console.log(`✅ 저품질 검사 통과`);
 
+    console.log(`✅ 모든 필터링 검사 통과: "${content.title}"`);
     return false;
   }
 
@@ -574,14 +582,14 @@ export class BlogCrawler {
       // 협찬 관련 (일부 제거)
       '협찬받', '협찬글', '협찬 글', '협찬으로', '협찬을', '무료로 제공',
       '브랜드로부터', '업체로부터', '해당업체', '해당 업체', 
-      '지원을 받아', '지원받아', '업체에서 제공', '업체로부터 제품',
+      '업체에서 제공', '업체로부터 제품',
       
       // 체험단 관련 (일부 제거)
       '리뷰어', '서포터즈', '앰배서더',
       
-      // 기타 상업적 키워드
-      '원고료', '대가', '소정의', '혜택을', '증정', '무료로 받', '공짜로', 
-      '할인코드', '쿠폰', '프로모션', '이벤트 참여'
+      // 기타 상업적 키워드 (민생지원금 관련 키워드 제거)
+      '원고료', '대가', '소정의', '증정', '무료로 받', '공짜로', 
+      '할인코드', '프로모션', '이벤트 참여'
     ];
 
     // 키워드 매칭 검사
@@ -597,7 +605,6 @@ export class BlogCrawler {
       /.*협찬.*받.*글.*/,  // "협찬받은 글", "협찬을 받아서" 등  
       /.*무료.*받.*후기.*/, // "무료로 받아서 후기", "무료로 받은 후기" 등
       /.*광고.*포함.*/,     // "광고가 포함", "광고를 포함한" 등
-      /.*업체.*지원.*받.*/, // "해당 업체에 지원을 받아", "업체로부터 지원받아" 등
       /.*업체.*제품.*제공.*/, // "업체로부터 제품을 제공받아" 등
     ];
 

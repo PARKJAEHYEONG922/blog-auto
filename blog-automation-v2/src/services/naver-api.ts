@@ -120,9 +120,25 @@ export class NaverAPI {
         )
       );
       
-      console.log(`📊 전체 ${response.items?.length || 0}개 중 지원 블로그 ${supportedBlogs.length}개 (네이버+티스토리)`);
+      // 상업적/홍보성 키워드 필터링
+      const filteredBlogs = supportedBlogs.filter(item => {
+        const title = this.cleanHtmlTags(item.title).toLowerCase();
+        const description = this.cleanHtmlTags(item.description).toLowerCase();
+        const fullText = `${title} ${description}`;
+        
+        // 필터링할 키워드들
+        const excludeKeywords = [
+          '할인', '세일', '특가', '이벤트', '무료배송',
+          '최저가', '가격비교', '구매', '주문', '배송',
+          '추천템', '리뷰이벤트', '체험단', '협찬', '제공'
+        ];
+        
+        return !excludeKeywords.some(keyword => fullText.includes(keyword));
+      });
       
-      return supportedBlogs;
+      console.log(`📊 전체 ${response.items?.length || 0}개 → 지원 블로그 ${supportedBlogs.length}개 → 필터링 후 ${filteredBlogs.length}개`);
+      
+      return filteredBlogs;
     } catch (error) {
       console.error('네이버 블로그 검색 실패:', error);
       return [];
