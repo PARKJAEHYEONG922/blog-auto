@@ -310,27 +310,6 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
     }
   }
 
-  private async searchNaverBlogs(query: string): Promise<CollectedBlogData[]> {
-    try {
-      console.log(`🔍 네이버 블로그 검색: ${query}`);
-      
-      const blogItems = await naverAPI.searchBlogs(query, 10); // 10개만 가져오기
-      
-      return blogItems.map((item, index) => ({
-        rank: index + 1, // 순위 (1부터 시작)
-        title: naverAPI.cleanHtmlTags(item.title),
-        url: item.link,
-        platform: 'naver'
-      }));
-      
-    } catch (error) {
-      console.error(`네이버 블로그 검색 실패 (${query}):`, error);
-      
-      // API 실패 시 빈 배열 반환
-      return [];
-    }
-  }
-
   // 순위를 유지하면서 지정된 개수만큼 블로그 검색
   private async searchNaverBlogsWithRank(query: string, count: number, startRank: number): Promise<CollectedBlogData[]> {
     try {
@@ -440,78 +419,6 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
   }
 
 
-  private async collectYouTubeData(keyword: string): Promise<CollectedYouTubeData[]> {
-    this.updateProgress(6, 'running');
-    
-    try {
-      console.log(`📺 유튜브 검색: ${keyword}`);
-      
-      // YouTube API 사용 시도
-      try {
-        const { youtubeAPI } = await import('./youtube-api');
-        await youtubeAPI.loadConfig();
-        
-        const videos = await youtubeAPI.searchVideos(keyword, 10);
-        
-        const results: CollectedYouTubeData[] = [];
-        
-        for (const video of videos) {
-          try {
-            // 동영상 상세 정보 가져오기 (조회수, 길이 등)
-            const details = await youtubeAPI.getVideoDetails(video.id.videoId);
-            
-            const result: CollectedYouTubeData = {
-              title: video.snippet.title,
-              channelName: video.snippet.channelTitle,
-              channelId: video.snippet.channelId,
-              viewCount: details ? youtubeAPI.constructor.formatViewCount(details.statistics.viewCount) : '정보 없음',
-              likeCount: details && details.statistics.likeCount ? youtubeAPI.constructor.formatViewCount(details.statistics.likeCount) : undefined,
-              commentCount: details && details.statistics.commentCount ? youtubeAPI.constructor.formatViewCount(details.statistics.commentCount) : undefined,
-              publishedAt: new Date(video.snippet.publishedAt).toLocaleDateString('ko-KR'),
-              duration: details ? youtubeAPI.constructor.parseDuration(details.contentDetails.duration) : '정보 없음',
-              thumbnail: video.snippet.thumbnails.default.url,
-              url: `https://www.youtube.com/watch?v=${video.id.videoId}`,
-              description: video.snippet.description,
-              tags: video.snippet.tags || [],
-              categoryId: video.snippet.categoryId,
-              definition: details ? details.contentDetails.definition : undefined,
-              caption: details ? details.contentDetails.caption === 'true' : undefined
-            };
-            
-            results.push(result);
-          } catch (detailError) {
-            console.warn(`동영상 상세 정보 조회 실패: ${video.id.videoId}`, detailError);
-            
-            // 상세 정보 없이라도 기본 정보는 포함
-            const result: CollectedYouTubeData = {
-              title: video.snippet.title,
-              channelName: video.snippet.channelTitle,
-              viewCount: '정보 없음',
-              publishedAt: new Date(video.snippet.publishedAt).toLocaleDateString('ko-KR'),
-              duration: '정보 없음',
-              thumbnail: video.snippet.thumbnails.default.url,
-              url: `https://www.youtube.com/watch?v=${video.id.videoId}`
-            };
-            
-            results.push(result);
-          }
-        }
-        
-        console.log(`✅ YouTube API 검색 완료: ${results.length}개`);
-        return results;
-        
-      } catch (apiError) {
-        console.warn('YouTube API 사용 실패:', apiError);
-        
-        // YouTube API 실패 시 빈 배열 반환
-        return [];
-      }
-      
-    } catch (error) {
-      console.error('유튜브 데이터 수집 실패:', error);
-      return [];
-    }
-  }
 
   private async selectTopBlogs(
     request: DataCollectionRequest, 
@@ -689,127 +596,7 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
     };
   }
 
-  private async searchNaverBlogsWithRank(
-    keyword: string, 
-    count: number, 
-    startRank: number = 1
-  ): Promise<CollectedBlogData[]> {
-    try {
-      console.log(`🔍 네이버 블로그 검색: ${keyword} (${count}개)`);
-      
-      // 네이버 API 호출
-      const searchResults = await naverAPI.searchBlogs(keyword, count);
-      
-      if (!searchResults || searchResults.length === 0) {
-        console.warn('네이버 블로그 검색 결과가 없습니다.');
-        return [];
-      }
 
-      // CollectedBlogData 형식으로 변환
-      const blogs: CollectedBlogData[] = searchResults.map((blog, index) => {
-        const cleanedTitle = this.cleanHtmlTags(blog.title);
-        const url = blog.link;
-        
-        // URL 디버깅 로그
-        console.log(`📋 블로그 ${startRank + index}: "${cleanedTitle}"`);
-        console.log(`   원본 URL: "${url}" (타입: ${typeof url}, 길이: ${url?.length || 0})`);
-        
-        return {
-          rank: startRank + index,
-          title: cleanedTitle,
-          url: url,
-          platform: '네이버'
-        };
-      });
-
-      console.log(`✅ 네이버 블로그 ${blogs.length}개 수집 완료`);
-      
-      // 수집된 블로그들의 URL 상태 요약
-      const urlStats = {
-        total: blogs.length,
-        valid: blogs.filter(b => b.url && b.url.includes('blog.naver.com')).length,
-        empty: blogs.filter(b => !b.url || b.url.trim() === '').length,
-        invalid: blogs.filter(b => b.url && !b.url.includes('blog.naver.com')).length
-      };
-      console.log(`📊 URL 상태 요약: 전체 ${urlStats.total}개 | 유효 ${urlStats.valid}개 | 빈값 ${urlStats.empty}개 | 무효 ${urlStats.invalid}개`);
-      
-      return blogs;
-
-    } catch (error) {
-      console.error('네이버 블로그 검색 실패:', error);
-      return [];
-    }
-  }
-
-  private async selectTopBlogs(
-    request: DataCollectionRequest, 
-    blogs: CollectedBlogData[], 
-    youtube: CollectedYouTubeData[]
-  ): Promise<{ selectedTitles: SelectedBlogTitle[], selectedVideos: SelectedYouTubeVideo[] }> {
-    this.updateProgress(3, 'running');
-    
-    try {
-      if (!blogs || blogs.length === 0) {
-        console.log('수집된 블로그가 없어 선별을 건너뜁니다');
-        return { selectedTitles: [], selectedVideos: [] };
-      }
-
-      const hasYouTube = youtube && youtube.length > 0;
-      if (hasYouTube) {
-        console.log(`🤖 수집된 블로그 ${blogs.length}개 + YouTube ${youtube.length}개 통합 선별 시작`);
-      } else {
-        console.log(`🤖 수집된 ${blogs.length}개 블로그 중 상위 10개 선별 시작`);
-      }
-      
-      const selector = new BlogTitleSelector();
-      
-      const selectionRequest = {
-        targetTitle: request.selectedTitle,
-        mainKeyword: request.mainKeyword || request.keyword,
-        subKeywords: request.subKeywords,
-        searchKeyword: request.keyword,
-        contentType: request.contentType,
-        contentTypeDescription: request.contentTypeDescription,
-        reviewType: request.reviewType,
-        reviewTypeDescription: request.reviewTypeDescription,
-        blogTitles: blogs,
-        youtubeTitles: hasYouTube ? youtube : undefined
-      };
-
-      const result = await selector.selectTopBlogs(selectionRequest);
-      
-      console.log(`✅ AI가 선별한 블로그 ${result.selectedTitles.length}개${hasYouTube ? `, YouTube ${result.selectedVideos.length}개` : ''}`);
-      
-      return result;
-      
-    } catch (error) {
-      console.error('콘텐츠 선별 실패:', error);
-      
-      // 폴백: 상위 10개씩 자동 선택
-      const fallbackBlogs = blogs.slice(0, 10).map((blog) => ({
-        title: blog.title,
-        url: blog.url,
-        relevanceReason: '자동 선별 (AI 선별 실패)'
-      }));
-      
-      const fallbackVideos = youtube 
-        ? youtube.slice(0, 10).map((video) => ({
-            title: video.title,
-            url: video.url,
-            channelName: video.channelName,
-            viewCount: video.viewCount,
-            duration: video.duration,
-            priority: video.priority,
-            relevanceReason: '자동 선별 (AI 선별 실패)'
-          }))
-        : [];
-      
-      return { 
-        selectedTitles: fallbackBlogs,
-        selectedVideos: fallbackVideos
-      };
-    }
-  }
 
   private async collectYouTubeData(keyword: string): Promise<CollectedYouTubeData[]> {
     this.updateProgress(2, 'running');
@@ -858,15 +645,15 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
         url: video.url,
         priority: video.priority,
         // 나중에 AI 선별 후 자막 추출할 예정이므로 일단 기본값
-        likeCount: undefined,
-        commentCount: undefined,
-        thumbnail: undefined,
-        description: undefined,
-        tags: undefined,
-        categoryId: undefined,
-        definition: undefined,
-        caption: undefined,
-        summary: undefined
+        likeCount: undefined as string | undefined,
+        commentCount: undefined as string | undefined,
+        thumbnail: undefined as string | undefined,
+        description: undefined as string | undefined,
+        tags: undefined as string[] | undefined,
+        categoryId: undefined as string | undefined,
+        definition: undefined as string | undefined,
+        caption: undefined as boolean | undefined,
+        summary: undefined as string | undefined
       }));
       
       console.log(`✅ YouTube 데이터 ${youtubeData.length}개 수집 완료`);
@@ -897,7 +684,6 @@ ${subKeywords && subKeywords.length > 0 ? `서브 키워드: ${subKeywords.join(
       // 각 영상의 자막 추출
       for (let i = 0; i < selectedVideos.length; i++) {
         const video = selectedVideos[i];
-        const progressPercent = (i / selectedVideos.length) * 100;
         
         console.log(`📝 [${i + 1}/${selectedVideos.length}] "${video.title}" 자막 추출 중...`);
         
@@ -1044,7 +830,4 @@ ${truncatedText}
     }
   }
 
-  private cleanHtmlTags(text: string): string {
-    return text.replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').trim();
-  }
 }
