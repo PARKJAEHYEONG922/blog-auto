@@ -412,18 +412,176 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                   SEO 최적화 인사이트를 제공합니다
                 </p>
               </div>
-              <button
-                onClick={startAnalysis}
-                className="ultra-btn px-6 py-3 text-sm"
-                style={{
-                  background: '#10b981',
-                  borderColor: '#10b981',
-                  color: 'white'
-                }}
-              >
-                <span className="text-lg">🚀</span>
-                <span>분석 시작하기</span>
-              </button>
+              <div className="flex gap-4 justify-center">
+                <button
+                  onClick={startAnalysis}
+                  className="ultra-btn px-6 py-3 text-sm"
+                  style={{
+                    background: '#10b981',
+                    borderColor: '#10b981',
+                    color: 'white'
+                  }}
+                >
+                  <span className="text-lg">🚀</span>
+                  <span>분석 시작하기</span>
+                </button>
+                <button
+                  onClick={() => {
+                    // 더미 데이터 생성
+                    const dummyCollectedData = {
+                      blogs: [
+                        {
+                          rank: 1,
+                          title: "민생지원금 2차 신청 방법 총정리 (자격요건, 신청기간, 지급액)",
+                          url: "https://blog.naver.com/example1",
+                          platform: "네이버블로그"
+                        },
+                        {
+                          rank: 2,
+                          title: "🏦 민생지원금 2차 놓치면 안되는 이유 (소득기준 완화됨)",
+                          url: "https://blog.naver.com/example2",
+                          platform: "네이버블로그"
+                        },
+                        {
+                          rank: 3,
+                          title: "민생지원금 2차 신청 후기 - 실제 받은 금액과 사용법",
+                          url: "https://blog.naver.com/example3",
+                          platform: "네이버블로그"
+                        }
+                      ],
+                      youtube: [
+                        {
+                          videoId: "test123",
+                          title: "민생지원금 2차 완벽 가이드 - 신청부터 받기까지",
+                          channelName: "경제정보TV",
+                          duration: 480,
+                          viewCount: 125000,
+                          summary: "민생지원금 2차 신청 방법에 대해 자세히 설명드리겠습니다. 이번에는 소득 기준이 완화되어 더 많은 분들이 혜택을 받을 수 있게 되었습니다."
+                        },
+                        {
+                          videoId: "test456",
+                          title: "민생지원금 2차 신청 실수하면 안되는 포인트 5가지",
+                          channelName: "재정정보채널",
+                          duration: 360,
+                          viewCount: 89000,
+                          summary: "민생지원금 2차 신청할 때 놓치기 쉬운 중요한 포인트들을 알려드리겠습니다."
+                        }
+                      ],
+                      selectedBlogs: [
+                        {
+                          title: "민생지원금 2차 신청 방법 총정리 (자격요건, 신청기간, 지급액)",
+                          url: "https://blog.naver.com/example1",
+                          relevanceReason: "신청 방법과 자격 요건을 체계적으로 설명하여 검색 의도와 정확히 일치"
+                        }
+                      ],
+                      crawledBlogs: [
+                        {
+                          title: "민생지원금 2차 신청 방법 총정리 (자격요건, 신청기간, 지급액)",
+                          url: "https://blog.naver.com/example1",
+                          success: true,
+                          contentLength: 4580,
+                          imageCount: 8,
+                          gifCount: 1,
+                          videoCount: 0,
+                          tags: ["민생지원금", "정부지원금", "소비쿠폰", "생활지원", "경제정책"],
+                          textContent: "민생지원금 2차 신청이 시작되었습니다..."
+                        }
+                      ],
+                      contentSummary: {
+                        competitor_titles: ["민생지원금 2차 신청 방법 총정리"],
+                        core_keywords: ["민생지원금 2차", "신청 방법", "자격 요건"],
+                        essential_content: ["소득 하위 90% 가구 대상", "1인당 13만원 지급"],
+                        key_points: ["기준 중위소득 상향 조정"],
+                        improvement_opportunities: ["실제 신청 화면 캡처"]
+                      },
+                      youtubeAnalysis: {
+                        video_summaries: [
+                          {
+                            video_number: 1,
+                            key_points: "건강보험료 기준으로 자격 확인"
+                          }
+                        ],
+                        common_themes: ["소득 기준 완화"],
+                        practical_tips: ["카드사 앱 이용"],
+                        expert_insights: ["기준 중위소득 상향 조정"],
+                        blog_suggestions: ["신청 과정 상세 설명"]
+                      },
+                      summary: {
+                        processingTime: 12500
+                      }
+                    };
+                    
+                    // 더미 글쓰기 결과도 함께 생성
+                    const dummyWritingResult = {
+                      success: true,
+                      content: `민생지원금 2차 놓치면 손해! 지금 바로 신청하세요 (신청 방법 포함)
+
+**📢 핵심 답변 먼저 확인하세요!**
+
+민생지원금 2차는 **2024년 12월 31일**까지 신청 가능하며, 소득 하위 90% 가구에게 **1인당 13만원**이 지급됩니다. 건강보험료 기준으로 빠르게 자격 확인이 가능하고, 카드사 앱이나 지자체 앱에서 간단히 신청할 수 있습니다. 지금 바로 신청하지 않으면 혜택을 받을 수 없으니 서둘러 확인해보세요!
+
+## ✅ 나도 받을 수 있을까? 지급 대상 자격 체크리스트
+
+**소득 기준 (다음 중 하나라도 해당되면 신청 가능)**
+✓ 건강보험료 본인부담금이 기준 이하인 가구
+- 1인 가구: 월 97,000원 이하
+- 2인 가구: 월 162,000원 이하  
+- 3인 가구: 월 209,000원 이하
+- 4인 가구: 월 255,000원 이하
+
+**재산 기준 (모두 충족해야 함)**
+✓ 재산세 과세표준액 12억원 이하
+✓ 금융소득 연 2,000만원 이하
+✓ 기존 복지급여 수급자도 신청 가능
+
+**⚠️ 중요한 변화점**
+기준 중위소득이 상향 조정되어 기존에 탈락했던 분들도 다시 신청해볼 필요가 있습니다!
+
+## 📱 민생지원금 2차 신청 방법 단계별 가이드
+
+### 1단계: 신청 채널 선택하기
+
+| 신청 방법 | 특징 | 준비물 | 소요시간 |
+|---------|------|--------|----------|
+| 카드사 앱/홈페이지 | 가장 간편, 24시간 가능 | 신분증, 카드 | 5분 |
+| 지자체 앱 | 지역별 맞춤 서비스 | 신분증, 주소 확인 | 7분 |
+| 행정복지센터 | 대면 상담 가능 | 신분증, 가족관계증명서 | 20분 |
+
+### 2단계: 온라인 신청 상세 과정
+
+**카드사 앱 신청 방법**
+1. 본인 명의 카드사 앱 접속
+2. '민생지원금 2차' 메뉴 선택
+3. 본인인증 (휴대폰, 공인인증서)
+4. 가구원 정보 입력
+5. 소득·재산 정보 확인
+6. 신청 완료 및 접수번호 확인
+
+민생지원금 2차는 경제적 부담을 덜어주는 소중한 기회입니다. 복잡한 절차 없이 간단한 온라인 신청으로 13만원의 혜택을 받을 수 있으니, 자격 요건을 확인하고 지금 바로 신청하시기 바랍니다!
+
+#민생지원금2차 #민생지원금신청 #소비쿠폰 #정부지원금 #생활지원금`,
+                      usage: {
+                        totalTokens: 15420,
+                        promptTokens: 8240,
+                        completionTokens: 7180
+                      }
+                    };
+                    
+                    setCollectedData(dummyCollectedData);
+                    setWritingResult(dummyWritingResult);
+                    console.log('🧪 더미 데이터 및 글쓰기 결과 생성됨');
+                  }}
+                  className="ultra-btn px-6 py-3 text-sm"
+                  style={{
+                    background: '#f59e0b',
+                    borderColor: '#f59e0b',
+                    color: 'white'
+                  }}
+                >
+                  <span className="text-lg">🧪</span>
+                  <span>더미 데이터 테스트</span>
+                </button>
+              </div>
             </div>
           )}
 

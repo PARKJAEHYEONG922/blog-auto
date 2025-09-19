@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { WorkflowData } from '../App';
+import React, { useState, useRef, useEffect } from 'react';
+import { WorkflowData, BlogWritingResult } from '../App';
 
 interface Step3Props {
   data: WorkflowData;
@@ -7,290 +7,373 @@ interface Step3Props {
   onBack: () => void;
 }
 
-interface GenerationProgress {
-  step: string;
-  progress: number;
-  status: 'pending' | 'running' | 'completed' | 'error';
-}
-
 const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
-  const [isGenerating, setIsGenerating] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [generatedContent, setGeneratedContent] = useState('');
-  const [generatedImages, setGeneratedImages] = useState<string[]>([]);
-  const [generationSteps, setGenerationSteps] = useState<GenerationProgress[]>([
-    { step: 'SEO 최적화 구조 설계', progress: 0, status: 'pending' },
-    { step: '플랫폼별 맞춤 콘텐츠 생성', progress: 0, status: 'pending' },
-    { step: '이미지 생성 및 최적화', progress: 0, status: 'pending' },
-    { step: '최종 검토 및 포맷팅', progress: 0, status: 'pending' }
-  ]);
+  const [editedContent, setEditedContent] = useState('');
+  const [charCount, setCharCount] = useState(0);
+  const [charCountWithSpaces, setCharCountWithSpaces] = useState(0);
+  const [currentFontSize, setCurrentFontSize] = useState('15px');
 
-  const generateContent = async () => {
-    setIsGenerating(true);
-    
-    // 단계별 생성 시뮬레이션
-    for (let i = 0; i < generationSteps.length; i++) {
-      setGenerationSteps(prev => prev.map((step, idx) => 
-        idx === i ? { ...step, status: 'running' } : step
-      ));
+  // 폰트 크기 옵션
+  const fontSizes = [
+    { name: '대제목 (24px)', size: '24px', weight: 'bold' },
+    { name: '소제목 (19px)', size: '19px', weight: 'bold' },
+    { name: '강조 (16px)', size: '16px', weight: 'bold' },
+    { name: '일반 (15px)', size: '15px', weight: 'normal' }
+  ];
 
-      for (let progress = 0; progress <= 100; progress += 25) {
-        await new Promise(resolve => setTimeout(resolve, 300));
-        setGenerationSteps(prev => prev.map((step, idx) => 
-          idx === i ? { ...step, progress } : step
-        ));
+  // 글쓰기 결과 가져오기
+  useEffect(() => {
+    if (data.writingResult && data.writingResult.success) {
+      const content = data.writingResult.content || '';
+      // 마크다운 처리해서 HTML로 변환
+      const processedContent = processMarkdown(content);
+      setEditedContent(processedContent);
+      updateCharCount(content);
+      
+      if (editorRef.current) {
+        editorRef.current.innerHTML = processedContent;
       }
-
-      setGenerationSteps(prev => prev.map((step, idx) => 
-        idx === i ? { ...step, status: 'completed', progress: 100 } : step
-      ));
-
-      await new Promise(resolve => setTimeout(resolve, 500));
     }
+  }, [data.writingResult]);
 
-    // 생성된 콘텐츠 시뮬레이션
-    const mockContent = `
-# ${data.selectedTitle}
-
-## 서론
-${data.keyword}에 대해 알아보는 것은 매우 중요합니다. 이번 포스팅에서는 ${data.keyword}의 모든 것을 상세히 다뤄보겠습니다.
-
-## ${data.keyword}란 무엇인가?
-${data.keyword}는 현대 디지털 마케팅에서 핵심적인 역할을 담당하는 개념입니다. 
-
-### 주요 특징
-1. **효율성**: ${data.keyword}를 통해 더 나은 결과를 얻을 수 있습니다.
-2. **접근성**: 누구나 쉽게 시작할 수 있는 분야입니다.
-3. **확장성**: 점진적으로 발전시켜 나갈 수 있습니다.
-
-## ${data.keyword} 실전 가이드
-
-### 1단계: 기초 이해하기
-먼저 ${data.keyword}의 기본 개념을 정확히 이해하는 것이 중요합니다.
-
-### 2단계: 실습해보기
-이론을 바탕으로 직접 실습해보면서 경험을 쌓아보세요.
-
-### 3단계: 최적화하기
-${data.keyword}를 더욱 효과적으로 활용하는 방법을 모색해보세요.
-
-## 주의사항
-${data.keyword}를 진행할 때 다음 사항들을 주의해야 합니다:
-- 지속적인 학습과 개선
-- 트렌드 변화에 대한 민감성
-- 데이터 기반 의사결정
-
-## 결론
-${data.keyword}는 현재와 미래의 디지털 환경에서 필수적인 요소입니다. 이번 가이드를 통해 ${data.keyword}에 대한 이해를 높이고, 실제로 활용해보시기 바랍니다.
-
-## 자주 묻는 질문
-**Q: ${data.keyword} 초보자도 쉽게 시작할 수 있나요?**
-A: 네, 단계별로 차근차근 접근하면 누구나 성공할 수 있습니다.
-
-**Q: ${data.keyword}의 효과를 보기까지 얼마나 걸리나요?**
-A: 개인차가 있지만, 보통 3-6개월 정도의 꾸준한 노력이 필요합니다.
-    `.trim();
-
-    // 이미지 URL 시뮬레이션
-    const mockImages = [
-      'https://via.placeholder.com/600x400?text=Introduction',
-      'https://via.placeholder.com/600x400?text=Guide+Step+1',
-      'https://via.placeholder.com/600x400?text=Guide+Step+2',
-      'https://via.placeholder.com/600x400?text=Guide+Step+3',
-      'https://via.placeholder.com/600x400?text=Best+Practices',
-      'https://via.placeholder.com/600x400?text=Results',
-      'https://via.placeholder.com/600x400?text=Tips',
-      'https://via.placeholder.com/600x400?text=Conclusion'
-    ];
-
-    setGeneratedContent(mockContent);
-    setGeneratedImages(mockImages);
-    setIsGenerating(false);
+  // 마크다운을 HTML로 변환 - 모든 줄을 일관된 div로 처리
+  const processMarkdown = (content: string): string => {
+    const lines = content.split('\n');
+    const processedLines: string[] = [];
+    
+    for (const line of lines) {
+      if (line.trim().startsWith('## ')) {
+        // 대제목 (24px)
+        const text = line.substring(line.indexOf('## ') + 3);
+        processedLines.push(`<div style="font-size: 24px; font-weight: bold; line-height: 1.8; margin: 8px 0; min-height: 1.8em;">${text}</div>`);
+      } else if (line.trim().startsWith('### ')) {
+        // 소제목 (19px)
+        const text = line.substring(line.indexOf('### ') + 4);
+        processedLines.push(`<div style="font-size: 19px; font-weight: bold; line-height: 1.8; margin: 8px 0; min-height: 1.8em;">${text}</div>`);
+      } else if (line.trim() === '') {
+        // 빈 줄도 일정한 높이의 div로 처리
+        processedLines.push(`<div style="font-size: 15px; line-height: 1.8; margin: 0; min-height: 1.8em;"><br></div>`);
+      } else {
+        // 일반 텍스트 - **강조** 처리
+        let processedLine = line.replace(/\*\*([^*]+)\*\*/g, '<span style="font-size: 16px; font-weight: bold;">$1</span>');
+        
+        // 모든 일반 텍스트를 동일한 스타일의 div로 감싸기
+        processedLines.push(`<div style="font-size: 15px; line-height: 1.8; margin: 0; min-height: 1.8em;">${processedLine}</div>`);
+      }
+    }
+    
+    return processedLines.join('');
   };
 
-  const publishContent = async () => {
+  // 글자 수 계산
+  const updateCharCount = (content: string) => {
+    const textContent = content.replace(/<[^>]*>/g, '');
+    const textContentNoSpaces = textContent.replace(/\s+/g, '');
+    
+    setCharCount(textContentNoSpaces.length);
+    setCharCountWithSpaces(textContent.length);
+  };
+
+  // 콘텐츠 변경 처리
+  const handleContentChange = () => {
+    if (editorRef.current) {
+      const content = editorRef.current.innerHTML;
+      setEditedContent(content);
+      updateCharCount(content);
+    }
+  };
+
+  // 간단한 엔터키 처리
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // 기본 엔터키 동작 허용하되 추가 처리만
+    if (e.key === 'Enter') {
+      setTimeout(() => {
+        handleContentChange();
+      }, 0);
+    }
+  };
+
+  // 폰트 크기 변경
+  const handleFontSizeChange = (newSize: string) => {
+    setCurrentFontSize(newSize);
+    applyFontSizeToSelection(newSize);
+  };
+
+  // 선택된 텍스트에 폰트 크기 적용
+  const applyFontSizeToSelection = (fontSize: string) => {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0 && editorRef.current) {
+      const range = selection.getRangeAt(0);
+      const fontInfo = fontSizes.find(f => f.size === fontSize);
+      
+      if (!fontInfo || range.collapsed) return;
+      
+      // 선택된 텍스트를 span으로 감싸기
+      const span = document.createElement('span');
+      span.style.fontSize = fontInfo.size;
+      span.style.fontWeight = fontInfo.weight;
+      span.style.lineHeight = '1.8';
+      
+      try {
+        range.surroundContents(span);
+        handleContentChange();
+      } catch (e) {
+        // 복잡한 선택 영역의 경우 execCommand 사용
+        document.execCommand('fontSize', false, '7');
+        const elements = editorRef.current.querySelectorAll('font[size="7"]');
+        elements.forEach(element => {
+          const newSpan = document.createElement('span');
+          newSpan.style.fontSize = fontInfo.size;
+          newSpan.style.fontWeight = fontInfo.weight;
+          newSpan.style.lineHeight = '1.8';
+          newSpan.innerHTML = element.innerHTML;
+          element.parentNode?.replaceChild(newSpan, element);
+        });
+        handleContentChange();
+      }
+    }
+  };
+
+  // 원본 복원
+  const restoreOriginal = () => {
+    if (data.writingResult && data.writingResult.success) {
+      const content = data.writingResult.content || '';
+      // 마크다운 처리해서 복원
+      const processedContent = processMarkdown(content);
+      setEditedContent(processedContent);
+      updateCharCount(content);
+      
+      if (editorRef.current) {
+        editorRef.current.innerHTML = processedContent;
+      }
+    }
+  };
+
+  // 클립보드 복사
+  const copyToClipboard = () => {
+    if (editorRef.current) {
+      const content = editorRef.current.innerText || '';
+      navigator.clipboard.writeText(content).then(() => {
+        alert('클립보드에 복사되었습니다!');
+      }).catch((err) => {
+        console.error('복사 실패:', err);
+        alert('복사에 실패했습니다.');
+      });
+    }
+  };
+
+  // 발행
+  const publishToNaverBlog = async () => {
     setIsPublishing(true);
     
-    // 발행 시뮬레이션 (3초)
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    setIsPublishing(false);
-    alert(`${data.platform}에 성공적으로 발행되었습니다!`);
-    onComplete({ generatedContent });
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'completed': return '✅';
-      case 'running': return '🔄';
-      case 'error': return '❌';
-      default: return '⏳';
+    try {
+      // 발행 시뮬레이션 (3초)
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      alert('네이버 블로그에 성공적으로 발행되었습니다!');
+      onComplete({ 
+        generatedContent: editedContent,
+        finalContent: editedContent
+      });
+    } catch (error) {
+      console.error('발행 실패:', error);
+      alert('발행에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsPublishing(false);
     }
   };
 
-  const getPlatformName = (platform: string) => {
-    const platforms: { [key: string]: string } = {
-      'naver': '네이버 블로그',
-      'tistory': '티스토리',
-      'blogspot': '블로그스팟',
-      'wordpress': '워드프레스'
-    };
-    return platforms[platform] || platform;
-  };
+  const writingResult = data.writingResult as BlogWritingResult;
+  const hasContent = writingResult && writingResult.success;
 
-  return (
-    <div className="max-w-4xl mx-auto">
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            ✍️ Step 3: 플랫폼 맞춤 콘텐츠 생성 및 발행
-          </h2>
-          <p className="text-gray-600">
-            발행 플랫폼: <span className="font-medium text-blue-600">{getPlatformName(data.platform)}</span>
+  if (!hasContent) {
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4">❌</div>
+          <h3 className="text-xl font-medium text-gray-900 mb-2">
+            생성된 콘텐츠가 없습니다
+          </h3>
+          <p className="text-gray-600 mb-4">
+            2단계에서 먼저 블로그 콘텐츠를 생성해주세요.
           </p>
-        </div>
-
-        {!isGenerating && !generatedContent && (
-          <div className="text-center py-12">
-            <div className="mb-6">
-              <div className="text-6xl mb-4">✨</div>
-              <h3 className="text-xl font-medium text-gray-900 mb-2">
-                최고 품질의 콘텐츠를 생성할 준비가 되었습니다
-              </h3>
-              <p className="text-gray-600">
-                분석된 데이터를 바탕으로 {getPlatformName(data.platform)}에 최적화된 글과 이미지를 생성합니다
-              </p>
-            </div>
-            <button
-              onClick={generateContent}
-              className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
-            >
-              🎨 콘텐츠 생성하기
-            </button>
-          </div>
-        )}
-
-        {isGenerating && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-medium text-gray-900">생성 진행 상황</h3>
-              <div className="text-sm text-gray-500">
-                {generationSteps.filter(s => s.status === 'completed').length} / {generationSteps.length} 완료
-              </div>
-            </div>
-
-            {generationSteps.map((step, index) => (
-              <div key={index} className="border rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-lg">{getStatusIcon(step.status)}</span>
-                    <span className="font-medium">{step.step}</span>
-                  </div>
-                  <span className="text-sm text-gray-500">{step.progress}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className={`h-2 rounded-full transition-all duration-500 ${
-                      step.status === 'completed' ? 'bg-green-500' :
-                      step.status === 'running' ? 'bg-purple-500' :
-                      'bg-gray-300'
-                    }`}
-                    style={{ width: `${step.progress}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {generatedContent && (
-          <div className="space-y-6">
-            <div className="border-t pt-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">📝 생성된 콘텐츠</h3>
-              
-              {/* 콘텐츠 미리보기 */}
-              <div className="border rounded-lg p-6 bg-gray-50 max-h-96 overflow-y-auto">
-                <div className="prose max-w-none">
-                  <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
-                    {generatedContent}
-                  </pre>
-                </div>
-              </div>
-
-              {/* 생성된 이미지 */}
-              <div className="mt-6">
-                <h4 className="font-medium mb-3">🖼️ 생성된 이미지 ({generatedImages.length}개)</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {generatedImages.map((img, idx) => (
-                    <div key={idx} className="border rounded-lg overflow-hidden">
-                      <img 
-                        src={img} 
-                        alt={`Generated image ${idx + 1}`}
-                        className="w-full h-24 object-cover"
-                      />
-                      <div className="p-2 text-xs text-gray-600 text-center">
-                        이미지 {idx + 1}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 콘텐츠 통계 */}
-              <div className="grid md:grid-cols-3 gap-4 mt-6">
-                <div className="border rounded-lg p-4 text-center">
-                  <div className="text-2xl font-bold text-blue-600">{generatedContent.length}</div>
-                  <div className="text-sm text-gray-600">총 글자 수</div>
-                </div>
-                <div className="border rounded-lg p-4 text-center">
-                  <div className="text-2xl font-bold text-green-600">{generatedImages.length}</div>
-                  <div className="text-sm text-gray-600">이미지 개수</div>
-                </div>
-                <div className="border rounded-lg p-4 text-center">
-                  <div className="text-2xl font-bold text-purple-600">95%</div>
-                  <div className="text-sm text-gray-600">SEO 최적화 점수</div>
-                </div>
-              </div>
-
-              {/* 발행 버튼 */}
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mt-6">
-                <div className="flex items-start space-x-3">
-                  <div className="flex-shrink-0">
-                    <div className="text-yellow-600 text-xl">⚠️</div>
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-medium text-yellow-800 mb-1">발행 전 확인</h4>
-                    <p className="text-sm text-yellow-700 mb-3">
-                      생성된 콘텐츠를 검토하신 후 {getPlatformName(data.platform)}에 자동으로 발행됩니다.
-                    </p>
-                    <button
-                      onClick={publishContent}
-                      disabled={isPublishing}
-                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    >
-                      {isPublishing ? '🚀 발행 중...' : `📤 ${getPlatformName(data.platform)}에 발행하기`}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 네비게이션 */}
-        <div className="flex justify-between pt-6 border-t">
           <button
             onClick={onBack}
-            className="px-6 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
-          >
-            ← 이전 단계
-          </button>
-          <button
-            onClick={() => window.location.reload()}
             className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
-            🔄 새로운 글 작성하기
+            ← 2단계로 돌아가기
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full h-full">
+      <div className="max-w-5xl mx-auto px-6 py-4">
+        <div className="ultra-card p-5 slide-in">
+          {/* 헤더 */}
+          <div className="text-center mb-4">
+            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2 justify-center">
+              <span>✍️</span>
+              <span>콘텐츠 편집 및 발행</span>
+            </h1>
+            <p className="text-base text-slate-600 leading-relaxed max-w-2xl mx-auto">
+              AI가 생성한 콘텐츠를 편집하고 네이버 블로그에 발행하세요.
+            </p>
+          </div>
+
+          {/* 작업 요약 */}
+          <div className="section-card" style={{padding: '20px', marginBottom: '16px'}}>
+            <div className="section-header" style={{marginBottom: '16px'}}>
+              <div className="section-icon blue" style={{width: '32px', height: '32px', fontSize: '16px'}}>📋</div>
+              <h2 className="section-title" style={{fontSize: '16px'}}>작업 요약</h2>
+            </div>
+            
+            <div className="grid md:grid-cols-3 gap-4 text-sm">
+              <div className="p-3 bg-blue-50 rounded-lg">
+                <div className="text-blue-700 font-medium">📝 선택된 제목</div>
+                <div className="text-blue-600">{data.selectedTitle}</div>
+              </div>
+              <div className="p-3 bg-green-50 rounded-lg">
+                <div className="text-green-700 font-medium">🎯 메인 키워드</div>
+                <div className="text-green-600">{data.keyword}</div>
+              </div>
+              <div className="p-3 bg-purple-50 rounded-lg">
+                <div className="text-purple-700 font-medium">📊 글자 수</div>
+                <div className="text-purple-600">
+                  {charCount.toLocaleString()}자 / 공백포함: {charCountWithSpaces.toLocaleString()}자
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 편집 도구 */}
+          <div className="section-card" style={{padding: '20px', marginBottom: '16px'}}>
+            <div className="section-header" style={{marginBottom: '16px'}}>
+              <div className="section-icon orange" style={{width: '32px', height: '32px', fontSize: '16px'}}>🔧</div>
+              <h2 className="section-title" style={{fontSize: '16px'}}>편집 도구</h2>
+            </div>
+            
+            <div className="flex flex-wrap gap-3 items-center">
+              {/* 폰트 크기 선택 */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">폰트 크기:</label>
+                <select
+                  value={currentFontSize}
+                  onChange={(e) => handleFontSizeChange(e.target.value)}
+                  className="text-xs border rounded px-2 py-1"
+                >
+                  {fontSizes.map((font) => (
+                    <option key={font.size} value={font.size}>
+                      {font.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 기능 버튼들 */}
+              <button
+                onClick={restoreOriginal}
+                className="text-xs px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600"
+              >
+                🔄 원본 복원
+              </button>
+              
+              <button
+                onClick={copyToClipboard}
+                className="text-xs px-3 py-1 bg-purple-500 text-white rounded hover:bg-purple-600"
+              >
+                📋 복사
+              </button>
+            </div>
+          </div>
+
+          {/* 콘텐츠 편집기 */}
+          <div className="section-card" style={{padding: '20px', marginBottom: '16px'}}>
+            <div className="section-header" style={{marginBottom: '16px'}}>
+              <div className="section-icon green" style={{width: '32px', height: '32px', fontSize: '16px'}}>📝</div>
+              <h2 className="section-title" style={{fontSize: '16px'}}>
+                콘텐츠 편집 ({charCount.toLocaleString()}자 / 공백포함: {charCountWithSpaces.toLocaleString()}자)
+              </h2>
+            </div>
+            
+            <div
+              ref={editorRef}
+              contentEditable
+              className="w-full min-h-96 p-4 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{
+                fontSize: '15px',
+                lineHeight: '1.8',
+                fontFamily: 'system-ui, -apple-system, sans-serif',
+                backgroundColor: 'white',
+                position: 'relative',
+                zIndex: 1,
+                minHeight: '400px',
+                maxHeight: '600px',
+                overflowY: 'auto'
+              }}
+              onInput={handleContentChange}
+              onKeyDown={handleKeyDown}
+              suppressContentEditableWarning={true}
+            />
+            
+            <div className="mt-3 text-xs text-gray-500">
+              💡 <strong>편집 팁:</strong> 텍스트 선택 후 폰트 크기 변경 | 콘텐츠는 이미 최적화된 상태입니다
+            </div>
+          </div>
+
+          {/* 발행 */}
+          <div className="section-card" style={{padding: '20px', marginBottom: '16px'}}>
+            <div className="section-header" style={{marginBottom: '16px'}}>
+              <div className="section-icon red" style={{width: '32px', height: '32px', fontSize: '16px'}}>🚀</div>
+              <h2 className="section-title" style={{fontSize: '16px'}}>네이버 블로그 발행</h2>
+            </div>
+            
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0">
+                  <div className="text-yellow-600 text-xl">⚠️</div>
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-medium text-yellow-800 mb-1">발행 전 확인</h4>
+                  <p className="text-sm text-yellow-700 mb-3">
+                    편집된 콘텐츠를 검토하신 후 네이버 블로그에 자동으로 발행됩니다.
+                  </p>
+                  <button
+                    onClick={publishToNaverBlog}
+                    disabled={isPublishing}
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  >
+                    {isPublishing ? '🚀 발행 중...' : '📤 네이버 블로그 작성하기'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 네비게이션 */}
+          <div className="flex justify-between pt-4">
+            <button
+              onClick={onBack}
+              className="ultra-btn px-3 py-2 text-sm"
+              style={{
+                background: '#6b7280',
+                borderColor: '#6b7280',
+                color: 'white'
+              }}
+            >
+              <span>← 이전 단계</span>
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="ultra-btn px-3 py-2 text-sm"
+            >
+              <span>🔄 새로운 글 작성하기</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
