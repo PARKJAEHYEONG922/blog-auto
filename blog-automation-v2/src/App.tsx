@@ -25,6 +25,7 @@ export interface WorkflowData {
   selectedTitle: string;
   generatedTitles?: string[]; // 생성된 제목들
   titlesWithSearch?: { title: string; searchQuery: string }[]; // 제목과 검색어
+  searchKeyword?: string; // Step2에서 사용자가 수정한 서치키워드
   collectedData: unknown;
   writingResult?: BlogWritingResult; // 글쓰기 결과
   generatedContent: string;
@@ -90,7 +91,27 @@ const App: React.FC = () => {
   // 초기화 로직은 모두 AppInitContext로 이동
 
   const updateWorkflowData = (updates: Partial<WorkflowData>) => {
-    setWorkflowData(prev => ({ ...prev, ...updates }));
+    setWorkflowData(prev => {
+      const newData = { ...prev, ...updates };
+      
+      // Step1에서 핵심 정보가 변경된 경우 Step2 상태 초기화
+      const coreFieldsChanged = 
+        (updates.platform && updates.platform !== prev.platform) ||
+        (updates.keyword && updates.keyword !== prev.keyword) ||
+        (updates.contentType && updates.contentType !== prev.contentType) ||
+        (updates.reviewType && updates.reviewType !== prev.reviewType) ||
+        (updates.tone && updates.tone !== prev.tone) ||
+        (updates.selectedTitle && updates.selectedTitle !== prev.selectedTitle);
+      
+      if (coreFieldsChanged) {
+        // 핵심 정보 변경 시 Step2 관련 상태 초기화
+        newData.collectedData = null;
+        newData.writingResult = undefined;
+        newData.searchKeyword = undefined;
+      }
+      
+      return newData;
+    });
   };
 
   const renderCurrentStep = () => {

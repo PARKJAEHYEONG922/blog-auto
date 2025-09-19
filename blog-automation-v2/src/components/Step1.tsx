@@ -107,12 +107,78 @@ const Step1: React.FC<Step1Props> = ({ data, onNext, isBackFromStep2 }) => {
   }, [isBackFromStep2]);
 
   const generateTitles = async () => {
+    // 1. 기본 설정 완료 여부 확인
+    if (!platform) {
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '발행 플랫폼 선택 필요',
+        message: '발행 플랫폼을 먼저 선택해주세요.'
+      });
+      return;
+    }
+
+    if (!contentType) {
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '콘텐츠 타입 선택 필요',
+        message: '콘텐츠 타입을 먼저 선택해주세요.'
+      });
+      return;
+    }
+
+    if (!tone) {
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '말투 스타일 선택 필요',
+        message: '말투 스타일을 먼저 선택해주세요.'
+      });
+      return;
+    }
+
+    // 2. 후기형 선택 시 후기 유형 필수 확인
+    if (contentType === 'review' && !reviewType) {
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '후기 유형 선택 필요',
+        message: '후기형을 선택하셨습니다.\n내돈내산 후기 또는 협찬 후기 중 하나를 선택해주세요.'
+      });
+      return;
+    }
+
+    // 3. 키워드 입력 확인
     if (!keyword.trim()) {
       setDialog({
         isOpen: true,
         type: 'warning',
-        title: '키워드 필요',
-        message: '키워드를 입력해주세요.'
+        title: '메인 키워드 입력 필요',
+        message: '메인 키워드를 입력해주세요.'
+      });
+      return;
+    }
+
+    // API 연결 상태 확인
+    try {
+      const { LLMClientFactory } = await import('../services/llm-client-factory');
+      if (!LLMClientFactory.isInformationClientAvailable()) {
+        setDialog({
+          isOpen: true,
+          type: 'warning',
+          title: '정보처리 AI 미설정',
+          message: '제목 생성을 위해서는 정보처리 AI가 필요합니다.\n설정에서 정보처리 AI를 먼저 설정해주세요.'
+        });
+        return;
+      }
+    } catch (error) {
+      console.error('LLMClientFactory 로드 실패:', error);
+      setDialog({
+        isOpen: true,
+        type: 'error',
+        title: 'API 설정 확인 실패',
+        message: 'API 설정을 확인할 수 없습니다. 페이지를 새로고침 후 다시 시도해주세요.'
       });
       return;
     }
@@ -418,6 +484,53 @@ const Step1: React.FC<Step1Props> = ({ data, onNext, isBackFromStep2 }) => {
               <h2 className="section-title" style={{fontSize: '16px'}}>키워드 설정</h2>
             </div>
             
+            {/* 콘텐츠 유형별 키워드 가이드 */}
+            {contentType && (
+              <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <h4 className="text-sm font-medium text-blue-800 mb-2">
+                  📝 {(() => {
+                    switch(contentType) {
+                      case 'info': return '정보형';
+                      case 'review': return '후기형';
+                      case 'compare': return '비교추천형';
+                      case 'howto': return '노하우형';
+                      default: return '';
+                    }
+                  })()} 키워드 작성 가이드
+                </h4>
+                <div className="text-xs text-blue-700 space-y-2">
+                  {contentType === 'info' && (
+                    <>
+                      <p><strong>메인 키워드:</strong> "주제 + 핵심어" (예: 블로그 마케팅, 강아지 훈련, 다이어트 방법)</p>
+                      <p><strong>서브 키워드:</strong> "세부 정보, 관련 용어, 타겟층" (예: SEO최적화, 수익화, 광고수입, 초보자가이드)</p>
+                      <p className="text-blue-600">💡 정보 전달이 목적이므로 검색량이 많은 일반적 키워드를 사용하세요.</p>
+                    </>
+                  )}
+                  {contentType === 'review' && (
+                    <>
+                      <p><strong>메인 키워드:</strong> "브랜드명 + 제품명" (예: 쥬페리 하네스, 로얄캐닌 사료, 아이폰15)</p>
+                      <p><strong>서브 키워드:</strong> "사용목적, 체험요소, 비교대상" (예: 강아지산책, 가슴압박방지, 목걸이vs하네스, 내돈내산)</p>
+                      <p className="text-blue-600">💡 구체적인 브랜드명을 포함하면 더 정확한 후기 콘텐츠가 생성됩니다.</p>
+                    </>
+                  )}
+                  {contentType === 'compare' && (
+                    <>
+                      <p><strong>메인 키워드:</strong> "카테고리 + 추천/비교" (예: 강아지 하네스 추천, 노트북 비교, 다이어트 보조제 순위)</p>
+                      <p><strong>서브 키워드:</strong> "비교기준, 가격대, 브랜드들" (예: 가성비, 고급형, 쥬페리vs펫디아, 5만원대, 베스트5)</p>
+                      <p className="text-blue-600">💡 여러 제품을 비교하므로 구체적인 브랜드명과 비교기준을 포함하세요.</p>
+                    </>
+                  )}
+                  {contentType === 'howto' && (
+                    <>
+                      <p><strong>메인 키워드:</strong> "목표 + 방법/노하우" (예: 강아지 훈련 방법, 블로그 수익화, 다이어트 성공법)</p>
+                      <p><strong>서브 키워드:</strong> "단계, 팁, 주의사항, 타겟" (예: 초보자, 단계별, 실수방지, 효과적인방법, 집에서)</p>
+                      <p className="text-blue-600">💡 실용적인 방법 제시가 목적이므로 구체적인 실행 단계를 키워드에 포함하세요.</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <label className="ultra-label" style={{fontSize: '13px', marginBottom: '6px'}}>
@@ -427,7 +540,15 @@ const Step1: React.FC<Step1Props> = ({ data, onNext, isBackFromStep2 }) => {
                   type="text"
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
-                  placeholder="예: 블로그 마케팅"
+                  placeholder={(() => {
+                    switch(contentType) {
+                      case 'info': return '예: 블로그 마케팅';
+                      case 'review': return '예: 쥬페리 하네스';
+                      case 'compare': return '예: 강아지 하네스 추천';
+                      case 'howto': return '예: 강아지 훈련 방법';
+                      default: return '예: 블로그 마케팅';
+                    }
+                  })()}
                   className="ultra-input" style={{padding: '10px 16px', fontSize: '14px'}}
                 />
               </div>
@@ -439,7 +560,15 @@ const Step1: React.FC<Step1Props> = ({ data, onNext, isBackFromStep2 }) => {
                   type="text"
                   value={subKeywords}
                   onChange={(e) => setSubKeywords(e.target.value)}
-                  placeholder="예: SEO, 콘텐츠 마케팅 (쉼표로 구분)"
+                  placeholder={(() => {
+                    switch(contentType) {
+                      case 'info': return '예: SEO최적화, 수익화, 광고수입';
+                      case 'review': return '예: 강아지산책, 가슴압박방지, 목걸이vs하네스';
+                      case 'compare': return '예: 가성비, 고급형, 쥬페리vs펫디아, 5만원대';
+                      case 'howto': return '예: 초보자, 단계별, 실수방지, 효과적인방법';
+                      default: return '예: SEO, 콘텐츠 마케팅 (쉼표로 구분)';
+                    }
+                  })()} 
                   className="ultra-input" style={{padding: '10px 16px', fontSize: '14px'}}
                 />
               </div>

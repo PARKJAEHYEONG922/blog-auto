@@ -108,7 +108,7 @@ export class DataCollectionEngine {
     try {
 
       // 1. 네이버 블로그 데이터 수집 (50개)
-      const blogs = await this.collectBlogData(request.keyword, request.mainKeyword || request.keyword);
+      const blogs = await this.collectBlogData(request.keyword, request.mainKeyword || request.keyword, request.contentType);
       this.updateProgress(0, 'completed', blogs);
 
       // 2. 유튜브 데이터 수집 (100개→30개 상대평가 선별)
@@ -207,7 +207,7 @@ export class DataCollectionEngine {
   }
 
 
-  private async collectBlogData(searchKeyword: string, mainKeyword: string): Promise<CollectedBlogData[]> {
+  private async collectBlogData(searchKeyword: string, mainKeyword: string, contentType?: string): Promise<CollectedBlogData[]> {
     this.updateProgress(0, 'running');
     
     try {
@@ -217,7 +217,7 @@ export class DataCollectionEngine {
       
       // 1. 서치키워드로 50개 시도
       console.log(`🔍 서치키워드로 최대 50개 검색: ${searchKeyword}`);
-      const searchKeywordResults = await this.searchNaverBlogsWithRank(searchKeyword, 50, currentRank);
+      const searchKeywordResults = await this.searchNaverBlogsWithRank(searchKeyword, 50, currentRank, contentType);
       searchResults.push(...searchKeywordResults);
       currentRank += searchKeywordResults.length;
       
@@ -228,7 +228,7 @@ export class DataCollectionEngine {
         const remaining = targetTotal - searchResults.length;
         console.log(`🎯 메인키워드로 ${remaining}개 추가 검색: ${mainKeyword}`);
         
-        const mainKeywordResults = await this.searchNaverBlogsWithRank(mainKeyword, remaining, currentRank);
+        const mainKeywordResults = await this.searchNaverBlogsWithRank(mainKeyword, remaining, currentRank, contentType);
         searchResults.push(...mainKeywordResults);
         
         console.log(`📊 메인키워드 검색 결과: ${mainKeywordResults.length}개 추가`);
@@ -249,11 +249,11 @@ export class DataCollectionEngine {
   }
 
   // 순위를 유지하면서 지정된 개수만큼 블로그 검색
-  private async searchNaverBlogsWithRank(query: string, count: number, startRank: number): Promise<CollectedBlogData[]> {
+  private async searchNaverBlogsWithRank(query: string, count: number, startRank: number, contentType?: string): Promise<CollectedBlogData[]> {
     try {
       console.log(`🔍 네이버 블로그 검색 (${count}개): ${query}`);
       
-      const blogItems = await naverAPI.searchBlogs(query, count);
+      const blogItems = await naverAPI.searchBlogs(query, count, 1, 'sim', contentType);
       
       return blogItems.map((item, index) => ({
         rank: startRank + index, // 연속된 순위

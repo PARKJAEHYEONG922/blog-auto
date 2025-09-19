@@ -19,17 +19,27 @@ interface Step2Props {
 const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisSteps, setAnalysisSteps] = useState<AnalysisProgress[]>([]);
-  const [collectedData, setCollectedData] = useState<DataCollectionResult | null>(null);
+  // 기존 상태가 있으면 그것을 사용, 없으면 null
+  const [collectedData, setCollectedData] = useState<DataCollectionResult | null>(
+    data.collectedData ? data.collectedData as DataCollectionResult : null
+  );
   const [showBlogDetails, setShowBlogDetails] = useState(false);
   const [showYouTubeDetails, setShowYouTubeDetails] = useState(false);
   
-  // 글쓰기 상태 관리
+  // 글쓰기 상태 관리 - 기존 글쓰기 결과가 있으면 복원
   const [isWriting, setIsWriting] = useState(false);
-  const [writingResult, setWritingResult] = useState<BlogWritingResult | null>(null);
+  const [writingResult, setWritingResult] = useState<BlogWritingResult | null>(
+    data.writingResult || null
+  );
   
   
-  // 참고 검색어 관리
+  // 참고 검색어 관리 - 저장된 searchKeyword가 있으면 우선 사용
   const [searchKeyword, setSearchKeyword] = useState(() => {
+    // 1. 이전에 Step2에서 수정한 searchKeyword가 있으면 그것을 사용
+    if (data.searchKeyword) {
+      return data.searchKeyword;
+    }
+    // 2. 없으면 기존 로직 사용
     const selectedTitleData = data.titlesWithSearch?.find(
       item => item.title === data.selectedTitle
     );
@@ -51,19 +61,106 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
   });
 
   const startAnalysis = async () => {
-    // 검색어 유효성 확인
+    // 1. 기본 설정 완료 여부 확인
+    if (!data.platform) {
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '발행 플랫폼 선택 필요',
+        message: '1단계에서 발행 플랫폼을 먼저 선택해주세요.'
+      });
+      return;
+    }
+
+    if (!data.contentType) {
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '콘텐츠 타입 선택 필요',
+        message: '1단계에서 콘텐츠 타입을 먼저 선택해주세요.'
+      });
+      return;
+    }
+
+    if (!data.tone) {
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '말투 스타일 선택 필요',
+        message: '1단계에서 말투 스타일을 먼저 선택해주세요.'
+      });
+      return;
+    }
+
+    // 2. 후기형 선택 시 후기 유형 필수 확인
+    if (data.contentType === 'review' && !data.reviewType) {
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '후기 유형 선택 필요',
+        message: '1단계에서 후기형을 선택하셨습니다.\n내돈내산 후기 또는 협찬 후기 중 하나를 선택해주세요.'
+      });
+      return;
+    }
+
+    // 3. 키워드 및 제목 선택 확인
+    if (!data.keyword || !data.keyword.trim()) {
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '메인 키워드 입력 필요',
+        message: '1단계에서 메인 키워드를 입력해주세요.'
+      });
+      return;
+    }
+
+    if (!data.selectedTitle) {
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '제목 선택 필요',
+        message: '1단계에서 AI가 추천한 제목 중 하나를 선택해주세요.'
+      });
+      return;
+    }
+
+    // 4. 검색어 유효성 확인
     if (!searchKeyword.trim()) {
       setDialog({
         isOpen: true,
         type: 'warning',
-        title: '검색어 필요',
-        message: '참고 검색어를 입력해주세요.'
+        title: '서치키워드 입력 필요',
+        message: '분석에 사용할 서치키워드를 입력해주세요.'
+      });
+      return;
+    }
+
+    // 5. 정보처리 AI 연결 상태 확인
+    try {
+      const { LLMClientFactory } = await import('../services/llm-client-factory');
+      if (!LLMClientFactory.isInformationClientAvailable()) {
+        setDialog({
+          isOpen: true,
+          type: 'warning',
+          title: '정보처리 AI 미설정',
+          message: '데이터 수집 및 분석을 위해서는 정보처리 AI가 필요합니다.\n설정에서 정보처리 AI를 먼저 설정해주세요.'
+        });
+        return;
+      }
+    } catch (error) {
+      console.error('LLMClientFactory 로드 실패:', error);
+      setDialog({
+        isOpen: true,
+        type: 'error',
+        title: 'API 설정 확인 실패',
+        message: 'API 설정을 확인할 수 없습니다. 페이지를 새로고침 후 다시 시도해주세요.'
       });
       return;
     }
 
     setIsAnalyzing(true);
     setCollectedData(null);
+    setWritingResult(null); // 새로운 분석 시작 시 기존 글쓰기 결과 초기화
     
     try {
       // 데이터 수집 엔진 생성
@@ -197,9 +294,12 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
       return;
     }
 
+    // 현재 상태를 저장하여 뒤로가기 시에도 유지되도록 함
     onNext({ 
       collectedData,
-      writingResult: writingResult?.success ? writingResult : undefined
+      writingResult: writingResult?.success ? writingResult : undefined,
+      // 검색키워드 변경사항도 저장
+      searchKeyword
     });
   };
 
@@ -221,14 +321,46 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
             <p className="text-base text-slate-600 leading-relaxed max-w-2xl mx-auto">
               선택된 제목을 기반으로 AI가 멀티플랫폼에서 데이터를 수집하고 분석합니다.
             </p>
-            <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-blue-800 text-sm font-medium mb-2">
+            <div className="mt-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-blue-800 text-sm font-medium mb-3">
                 📝 선택된 제목: {data.selectedTitle}
               </p>
               
-              <p className="text-blue-500 text-sm mb-2">
-                🎯 메인 키워드: {data.keyword} {data.subKeywords && data.subKeywords.length > 0 && `+ ${data.subKeywords.join(', ')}`} | 📝 콘텐츠 유형: {getContentTypeName(data.contentType)} | 💬 말투: {getToneName(data.tone)}{data.reviewType && ` | ⭐ 후기 유형: ${getReviewTypeName(data.reviewType)}`}
-              </p>
+              {/* 키워드 정보 */}
+              <div className="mb-3">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-blue-700 font-medium">🎯 메인 키워드:</span>
+                    <span className="text-blue-600 ml-2">{data.keyword}</span>
+                  </div>
+                  <div>
+                    <span className="text-blue-700 font-medium">🔗 서브 키워드:</span>
+                    <span className="text-blue-600 ml-2">
+                      {data.subKeywords && data.subKeywords.length > 0 ? data.subKeywords.join(', ') : '없음'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 설정 정보 */}
+              <div className="mb-2">
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <span className="text-blue-700 font-medium">📝 콘텐츠 유형:</span>
+                    <span className="text-blue-600 ml-2">{getContentTypeName(data.contentType)}</span>
+                  </div>
+                  <div>
+                    <span className="text-blue-700 font-medium">💬 말투:</span>
+                    <span className="text-blue-600 ml-2">{getToneName(data.tone)}</span>
+                  </div>
+                  {data.reviewType && (
+                    <div>
+                      <span className="text-blue-700 font-medium">⭐ 후기 유형:</span>
+                      <span className="text-blue-600 ml-2">{getReviewTypeName(data.reviewType)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
               
               {/* 서치 키워드 편집 */}
               <div className="mb-2">
@@ -246,9 +378,23 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                     }`}
                     placeholder="검색에 사용할 키워드를 입력하세요"
                   />
+                  {collectedData && (
+                    <button
+                      onClick={startAnalysis}
+                      disabled={isAnalyzing || !searchKeyword.trim()}
+                      className={`px-3 py-1 text-xs rounded transition-colors ${
+                        isAnalyzing || !searchKeyword.trim()
+                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          : 'bg-blue-500 text-white hover:bg-blue-600'
+                      }`}
+                    >
+                      🔄 재분석
+                    </button>
+                  )}
                 </div>
                 <p className="text-blue-400 text-xs">
                   💡 이 서치키워드로 데이터를 수집합니다. 제목과 연관된 서치키워드가 아니면 수정해주세요.
+                  {collectedData && " 키워드 변경 후 재분석 버튼을 눌러 새로운 데이터를 수집할 수 있습니다."}
                 </p>
               </div>
             </div>

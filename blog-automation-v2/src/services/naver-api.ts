@@ -107,7 +107,7 @@ export class NaverAPI {
     }
   }
 
-  async searchBlogs(query: string, display: number = 10, start: number = 1, sort: string = 'sim'): Promise<NaverBlogItem[]> {
+  async searchBlogs(query: string, display: number = 10, start: number = 1, sort: string = 'sim', contentType?: string): Promise<NaverBlogItem[]> {
     try {
       console.log(`🔍 네이버 블로그 검색: ${query}`);
       const response = await this.makeRequest<NaverBlogItem>('blog.json', query, display, start, sort);
@@ -120,21 +120,26 @@ export class NaverAPI {
         )
       );
       
-      // 상업적/홍보성 키워드 필터링
-      const filteredBlogs = supportedBlogs.filter(item => {
-        const title = this.cleanHtmlTags(item.title).toLowerCase();
-        const description = this.cleanHtmlTags(item.description).toLowerCase();
-        const fullText = `${title} ${description}`;
-        
-        // 필터링할 키워드들
-        const excludeKeywords = [
-          '할인', '세일', '특가', '이벤트', '무료배송',
-          '최저가', '가격비교', '구매', '주문', '배송',
-          '추천템', '리뷰이벤트', '체험단', '협찬', '제공'
-        ];
-        
-        return !excludeKeywords.some(keyword => fullText.includes(keyword));
-      });
+      // 콘텐츠 타입에 따른 조건부 필터링
+      let filteredBlogs = supportedBlogs;
+      
+      // 후기형과 비교추천형이 아닌 경우에만 광고성 키워드 필터링
+      if (contentType !== 'review' && contentType !== 'compare') {
+        filteredBlogs = supportedBlogs.filter(item => {
+          const title = this.cleanHtmlTags(item.title).toLowerCase();
+          const description = this.cleanHtmlTags(item.description).toLowerCase();
+          const fullText = `${title} ${description}`;
+          
+          // 정보형과 노하우형에서만 필터링할 키워드들
+          const excludeKeywords = [
+            '할인', '세일', '특가', '이벤트', '무료배송',
+            '최저가', '가격비교', '구매', '주문', '배송',
+            '추천템', '리뷰이벤트', '체험단', '협찬', '제공'
+          ];
+          
+          return !excludeKeywords.some(keyword => fullText.includes(keyword));
+        });
+      }
       
       console.log(`📊 전체 ${response.items?.length || 0}개 → 지원 블로그 ${supportedBlogs.length}개 → 필터링 후 ${filteredBlogs.length}개`);
       

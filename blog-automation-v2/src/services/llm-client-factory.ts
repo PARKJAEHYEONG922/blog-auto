@@ -583,4 +583,33 @@ export class LLMClientFactory {
     });
     */
   }
+
+  /**
+   * 정보처리 AI 연결 상태 확인 (설정 + 테스트 상태 포함)
+   */
+  static isInformationClientAvailable(): boolean {
+    // 1. 클라이언트가 설정되어 있는지 확인
+    if (!this.hasInformationClient()) {
+      return false;
+    }
+    
+    // 2. 캐시된 설정과 테스트 상태 확인
+    if (!this.isLoaded || !this.cachedSettings || !this.cachedTestingStatus) {
+      return false;
+    }
+    
+    // 3. API 키가 있고 테스트가 성공했는지 확인
+    const settings = this.cachedSettings;
+    const testingStatus = this.cachedTestingStatus;
+    
+    return !!(settings.information?.apiKey && testingStatus.information?.success);
+  }
+
+  /**
+   * 현재 설정된 정보처리 AI 정보 반환
+   */
+  static getInformationClientInfo(): string {
+    const modelStatus = this.getCachedModelStatus();
+    return modelStatus.information || '미설정';
+  }
 }
