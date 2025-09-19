@@ -30,10 +30,10 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       // 마크다운 처리해서 HTML로 변환
       const processedContent = processMarkdown(content);
       setEditedContent(processedContent);
-      updateCharCount(content);
       
       if (editorRef.current) {
         editorRef.current.innerHTML = processedContent;
+        updateCharCount();
       }
     }
   }, [data.writingResult]);
@@ -68,12 +68,15 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
   };
 
   // 글자 수 계산
-  const updateCharCount = (content: string) => {
-    const textContent = content.replace(/<[^>]*>/g, '');
-    const textContentNoSpaces = textContent.replace(/\s+/g, '');
-    
-    setCharCount(textContentNoSpaces.length);
-    setCharCountWithSpaces(textContent.length);
+  const updateCharCount = () => {
+    if (editorRef.current) {
+      // innerText를 사용하여 실제 보이는 텍스트만 가져오기
+      const textContent = editorRef.current.innerText || '';
+      const textContentNoSpaces = textContent.replace(/\s+/g, '');
+      
+      setCharCount(textContentNoSpaces.length);
+      setCharCountWithSpaces(textContent.length);
+    }
   };
 
   // 콘텐츠 변경 처리
@@ -81,7 +84,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     if (editorRef.current) {
       const content = editorRef.current.innerHTML;
       setEditedContent(content);
-      updateCharCount(content);
+      updateCharCount();
     }
   };
 
@@ -143,10 +146,10 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       // 마크다운 처리해서 복원
       const processedContent = processMarkdown(content);
       setEditedContent(processedContent);
-      updateCharCount(content);
       
       if (editorRef.current) {
         editorRef.current.innerHTML = processedContent;
+        updateCharCount();
       }
     }
   };
@@ -250,54 +253,52 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
             </div>
           </div>
 
-          {/* 편집 도구 */}
-          <div className="section-card" style={{padding: '20px', marginBottom: '16px'}}>
-            <div className="section-header" style={{marginBottom: '16px'}}>
-              <div className="section-icon orange" style={{width: '32px', height: '32px', fontSize: '16px'}}>🔧</div>
-              <h2 className="section-title" style={{fontSize: '16px'}}>편집 도구</h2>
-            </div>
-            
-            <div className="flex flex-wrap gap-3 items-center">
-              {/* 폰트 크기 선택 */}
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium">폰트 크기:</label>
-                <select
-                  value={currentFontSize}
-                  onChange={(e) => handleFontSizeChange(e.target.value)}
-                  className="text-xs border rounded px-2 py-1"
-                >
-                  {fontSizes.map((font) => (
-                    <option key={font.size} value={font.size}>
-                      {font.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 기능 버튼들 */}
-              <button
-                onClick={restoreOriginal}
-                className="text-xs px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600"
-              >
-                🔄 원본 복원
-              </button>
-              
-              <button
-                onClick={copyToClipboard}
-                className="text-xs px-3 py-1 bg-purple-500 text-white rounded hover:bg-purple-600"
-              >
-                📋 복사
-              </button>
-            </div>
-          </div>
-
           {/* 콘텐츠 편집기 */}
           <div className="section-card" style={{padding: '20px', marginBottom: '16px'}}>
             <div className="section-header" style={{marginBottom: '16px'}}>
               <div className="section-icon green" style={{width: '32px', height: '32px', fontSize: '16px'}}>📝</div>
-              <h2 className="section-title" style={{fontSize: '16px'}}>
-                콘텐츠 편집 ({charCount.toLocaleString()}자 / 공백포함: {charCountWithSpaces.toLocaleString()}자)
-              </h2>
+              <h2 className="section-title" style={{fontSize: '16px'}}>콘텐츠 편집</h2>
+            </div>
+            
+            {/* 편집 도구 바 */}
+            <div className="flex flex-wrap gap-3 items-center justify-between mb-4">
+              <div className="flex flex-wrap gap-3 items-center">
+                {/* 폰트 크기 선택 */}
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium">폰트 크기:</label>
+                  <select
+                    value={currentFontSize}
+                    onChange={(e) => handleFontSizeChange(e.target.value)}
+                    className="text-xs border rounded px-2 py-1"
+                  >
+                    {fontSizes.map((font) => (
+                      <option key={font.size} value={font.size}>
+                        {font.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 기능 버튼들 */}
+                <button
+                  onClick={restoreOriginal}
+                  className="text-xs px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600"
+                >
+                  🔄 원본 복원
+                </button>
+                
+                <button
+                  onClick={copyToClipboard}
+                  className="text-xs px-3 py-1 bg-purple-500 text-white rounded hover:bg-purple-600"
+                >
+                  📋 복사
+                </button>
+              </div>
+              
+              {/* 글자 수 표시 */}
+              <div className="text-sm text-gray-600">
+                글자 수: {charCount.toLocaleString()}자 / 공백포함: {charCountWithSpaces.toLocaleString()}자
+              </div>
             </div>
             
             <div
@@ -324,6 +325,46 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
               💡 <strong>편집 팁:</strong> 텍스트 선택 후 폰트 크기 변경 | 콘텐츠는 이미 최적화된 상태입니다
             </div>
           </div>
+
+          {/* 이미지 섹션 */}
+          {(() => {
+            // 다양한 형태의 이미지 태그 개수 계산
+            // (이미지), [이미지], *이미지*, _이미지_ 등 모든 형태 감지
+            const imageRegex = /[\(\[\*_]이미지[\)\]\*_]/g;
+            const imageCount = (editedContent.match(imageRegex) || []).length;
+            
+            if (imageCount > 0) {
+              // 더미 이미지 URL 생성
+              const dummyImages = Array.from({ length: imageCount }, (_, idx) => 
+                `https://via.placeholder.com/600x400/4F46E5/FFFFFF?text=Image+${idx + 1}`
+              );
+              
+              return (
+                <div className="section-card" style={{padding: '20px', marginBottom: '16px'}}>
+                  <div className="section-header" style={{marginBottom: '16px'}}>
+                    <div className="section-icon purple" style={{width: '32px', height: '32px', fontSize: '16px'}}>🖼️</div>
+                    <h2 className="section-title" style={{fontSize: '16px'}}>생성된 이미지 ({imageCount}개)</h2>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {dummyImages.map((img, idx) => (
+                      <div key={idx} className="border rounded-lg overflow-hidden">
+                        <img 
+                          src={img} 
+                          alt={`Generated image ${idx + 1}`}
+                          className="w-full h-24 object-cover"
+                        />
+                        <div className="p-2 text-xs text-gray-600 text-center">
+                          이미지 {idx + 1}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
 
           {/* 발행 */}
           <div className="section-card" style={{padding: '20px', marginBottom: '16px'}}>
