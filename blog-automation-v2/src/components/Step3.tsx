@@ -88,6 +88,81 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     }
   };
 
+  // 커서 위치의 폰트 크기 감지
+  const detectCursorFontSize = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0);
+    if (!range.collapsed) return; // 텍스트가 선택된 경우는 무시
+
+    // 현재 커서 위치 저장
+    const startContainer = range.startContainer;
+    const startOffset = range.startOffset;
+    
+    let detectedFontSize = '15px'; // 기본값
+    
+    // 부모 요소의 스타일 확인 (커서를 건드리지 않음)
+    let node = startContainer;
+    
+    if (node.nodeType === Node.TEXT_NODE) {
+      node = node.parentElement;
+    }
+    
+    let currentElement = node as HTMLElement;
+    while (currentElement && currentElement !== editorRef.current) {
+      // 인라인 스타일이 있는 경우 우선적으로 사용
+      if (currentElement.style.fontSize) {
+        detectedFontSize = currentElement.style.fontSize;
+        console.log('인라인 스타일 감지:', detectedFontSize);
+        break;
+      } 
+      
+      // span 요소인 경우 스타일 확인
+      if (currentElement.tagName === 'SPAN') {
+        const computedStyle = window.getComputedStyle(currentElement);
+        const fontSize = computedStyle.fontSize;
+        if (fontSize && fontSize !== '15px') {
+          detectedFontSize = fontSize;
+          console.log('span 스타일 감지:', detectedFontSize);
+          break;
+        }
+      }
+      
+      // div 요소인 경우 (마크다운 처리된 헤더)
+      if (currentElement.tagName === 'DIV') {
+        const computedStyle = window.getComputedStyle(currentElement);
+        const fontSize = computedStyle.fontSize;
+        if (fontSize && fontSize !== '15px') {
+          detectedFontSize = fontSize;
+          console.log('div 스타일 감지:', detectedFontSize);
+          break;
+        }
+      }
+      
+      currentElement = currentElement.parentElement as HTMLElement;
+    }
+    
+    // 감지된 폰트 크기를 드롭다운에 반영
+    const matchingFont = fontSizes.find(f => f.size === detectedFontSize);
+    if (matchingFont && matchingFont.size !== currentFontSize) {
+      console.log('드롭다운 업데이트:', detectedFontSize, '→', matchingFont.name);
+      setCurrentFontSize(matchingFont.size);
+    } else if (!matchingFont && currentFontSize !== '15px') {
+      // 일치하는 폰트가 없으면 기본값으로
+      console.log('기본 폰트로 설정');
+      setCurrentFontSize('15px');
+    }
+  };
+
+  // 클릭 이벤트 처리
+  const handleClick = () => {
+    setTimeout(() => {
+      detectCursorFontSize();
+      handleContentChange();
+    }, 10);
+  };
+
   // 간단한 엔터키 처리
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // 기본 엔터키 동작 허용하되 추가 처리만
@@ -95,6 +170,13 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       setTimeout(() => {
         handleContentChange();
       }, 0);
+    }
+    
+    // 방향키나 클릭으로 커서 이동 시 폰트 크기 감지
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
+      setTimeout(() => {
+        detectCursorFontSize();
+      }, 10);
     }
   };
 
@@ -106,37 +188,117 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
 
   // 선택된 텍스트에 폰트 크기 적용
   const applyFontSizeToSelection = (fontSize: string) => {
+    if (!editorRef.current) return;
+    
+    const fontInfo = fontSizes.find(f => f.size === fontSize);
+    if (!fontInfo) return;
+
+    console.log('폰트 적용:', fontInfo); // 디버깅용
+
+    // 에디터에 포커스
+    editorRef.current.focus();
+
     const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0 && editorRef.current) {
+    if (!selection) return;
+
+    // 선택된 텍스트가 있는 경우
+    if (selection.rangeCount > 0 && !selection.getRangeAt(0).collapsed) {
       const range = selection.getRangeAt(0);
-      const fontInfo = fontSizes.find(f => f.size === fontSize);
       
-      if (!fontInfo || range.collapsed) return;
+      // 기존 스타일 요소들을 제거하고 순수 텍스트만 추출
+      const selectedText = range.toString();
+      const fragment = range.extractContents();
       
-      // 선택된 텍스트를 span으로 감싸기
+      // 모든 span과 div에서 텍스트만 추출
+      const cleanText = fragment.textContent || selectedText;
+      
+      // 헤더 크기는 div, 일반/강조는 span 사용
+      const isHeaderSize = fontInfo.size === '24px' || fontInfo.size === '19px';
+      
+      if (isHeaderSize) {
+        // 헤더 크기는 div로 생성 (블록 요소, 마진 포함)
+        const newDiv = document.createElement('div');
+        newDiv.style.fontSize = fontInfo.size;
+        newDiv.style.fontWeight = fontInfo.weight;
+        newDiv.style.lineHeight = '1.8';
+        newDiv.style.margin = '8px 0';
+        const pxSize = parseInt(fontInfo.size);
+        newDiv.style.minHeight = `${pxSize * 1.8}px`;
+        newDiv.textContent = cleanText;
+        
+        range.insertNode(newDiv);
+        range.selectNode(newDiv);
+        
+        console.log('헤더 div 생성:', fontInfo.size);
+      } else {
+        // 일반/강조는 span으로 생성 (인라인 요소, 기존 줄간격 유지)
+        const newSpan = document.createElement('span');
+        newSpan.style.fontSize = fontInfo.size;
+        newSpan.style.fontWeight = fontInfo.weight;
+        newSpan.style.lineHeight = '1.8';
+        newSpan.textContent = cleanText;
+        
+        range.insertNode(newSpan);
+        range.selectNode(newSpan);
+        
+        console.log('텍스트 span 생성:', fontInfo.size);
+      }
+      
+      selection.removeAllRanges();
+      selection.addRange(range);
+      
+      console.log('선택 텍스트 폰트 적용됨:', fontInfo.size, '텍스트:', cleanText);
+      
+      handleContentChange();
+      return;
+    }
+
+    // 커서만 있는 경우 - 다음에 타이핑할 텍스트에 스타일 적용
+    const isHeaderSize = fontInfo.size === '24px' || fontInfo.size === '19px';
+    const range = selection.getRangeAt(0) || document.createRange();
+    
+    if (isHeaderSize) {
+      // 헤더는 div로 생성
+      const div = document.createElement('div');
+      div.style.fontSize = fontInfo.size;
+      div.style.fontWeight = fontInfo.weight;
+      div.style.lineHeight = '1.8';
+      div.style.margin = '8px 0';
+      const pxSize = parseInt(fontInfo.size);
+      div.style.minHeight = `${pxSize * 1.8}px`;
+      div.textContent = '\u200B';
+      
+      range.insertNode(div);
+      range.setStart(div, 0);
+      range.collapse(true);
+      
+      console.log('커서 위치에 헤더 div 설정:', fontInfo.size);
+    } else {
+      // 일반/강조는 span으로 생성
       const span = document.createElement('span');
       span.style.fontSize = fontInfo.size;
       span.style.fontWeight = fontInfo.weight;
       span.style.lineHeight = '1.8';
+      span.textContent = '\u200B';
       
-      try {
-        range.surroundContents(span);
-        handleContentChange();
-      } catch (e) {
-        // 복잡한 선택 영역의 경우 execCommand 사용
-        document.execCommand('fontSize', false, '7');
-        const elements = editorRef.current.querySelectorAll('font[size="7"]');
-        elements.forEach(element => {
-          const newSpan = document.createElement('span');
-          newSpan.style.fontSize = fontInfo.size;
-          newSpan.style.fontWeight = fontInfo.weight;
-          newSpan.style.lineHeight = '1.8';
-          newSpan.innerHTML = element.innerHTML;
-          element.parentNode?.replaceChild(newSpan, element);
-        });
-        handleContentChange();
-      }
+      range.insertNode(span);
+      range.setStartAfter(span);
+      range.collapse(true);
+      
+      console.log('커서 위치에 텍스트 span 설정:', fontInfo.size);
     }
+    
+    selection.removeAllRanges();
+    selection.addRange(range);
+    
+    // 포커스 유지
+    setTimeout(() => {
+      if (editorRef.current) {
+        editorRef.current.focus();
+      }
+    }, 0);
+    
+    handleContentChange();
   };
 
   // 원본 복원
@@ -318,6 +480,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
               }}
               onInput={handleContentChange}
               onKeyDown={handleKeyDown}
+              onClick={handleClick}
               suppressContentEditableWarning={true}
             />
             
