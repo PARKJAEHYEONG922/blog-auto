@@ -82,9 +82,249 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       </div>`;
   };
 
+  // AI 생성 콘텐츠 모바일 최적화 처리
+  const cleanAIGeneratedContent = (content: string): string => {
+    try {
+      let cleanedContent = content.trim();
+      
+      // 코드 블록(```) 제거
+      if (cleanedContent.startsWith('```') && cleanedContent.endsWith('```')) {
+        cleanedContent = cleanedContent.slice(3, -3).trim();
+      }
+      
+      // 연속된 이미지들 정규화 (모바일에서 보기 좋게)
+      // (이미지) (이미지) → (이미지)(이미지)
+      cleanedContent = cleanedContent.replace(/\(이미지\)\s*[,\s]*\s*\(이미지\)/g, '(이미지)(이미지)');
+      // [이미지] [이미지] → [이미지][이미지]  
+      cleanedContent = cleanedContent.replace(/\[이미지\]\s*[,\s]*\s*\[이미지\]/g, '[이미지][이미지]');
+      
+      // 3개 이상 연속된 이미지들도 처리
+      cleanedContent = cleanedContent.replace(/(\(이미지\)+)\s*[,\s]*\s*\(이미지\)/g, '$1(이미지)');
+      cleanedContent = cleanedContent.replace(/(\[이미지\]+)\s*[,\s]*\s*\[이미지\]/g, '$1[이미지]');
+      
+      // 이미지 그룹 앞뒤 텍스트와 분리 (모바일 가독성)
+      cleanedContent = cleanedContent.replace(/([^\n\r])(\(이미지\)+)/g, '$1\n$2');
+      cleanedContent = cleanedContent.replace(/([^\n\r])(\[이미지\]+)/g, '$1\n$2');
+      cleanedContent = cleanedContent.replace(/(\(이미지\)+)([^\n\r])/g, '$1\n$2');
+      cleanedContent = cleanedContent.replace(/(\[이미지\]+)([^\n\r])/g, '$1\n$2');
+      
+      // 불필요한 구조 설명 제거
+      const patternsToRemove = [
+        /\[서론 - 3초의 법칙으로 핵심 답변 즉시 제시\]/gi,
+        /\[본문은 다양한 형식으로 구성하세요\]/gi,
+        /\[결론 - 요약 및 독자 행동 유도\]/gi,
+        /\[메인키워드와 보조키워드를 활용하여 글 내용에 적합한 태그.*?\]/gi,
+        /\[상위 블로그 인기 태그 참고:.*?\]/gi
+      ];
+      
+      for (const pattern of patternsToRemove) {
+        cleanedContent = cleanedContent.replace(pattern, '');
+      }
+      
+      // 해시태그 정리
+      cleanedContent = cleanHashtags(cleanedContent);
+      
+      // 모바일 최적화: 25자 기준 줄바꿈 적용
+      cleanedContent = applyMobileOptimization(cleanedContent);
+      
+      // 연속된 공백과 줄바꿈 정리
+      cleanedContent = cleanedContent.replace(/\n\s*\n\s*\n/g, '\n\n');
+      cleanedContent = cleanedContent.trim();
+      
+      return cleanedContent;
+    } catch (error) {
+      console.warn('콘텐츠 정리 중 오류:', error);
+      return content;
+    }
+  };
+
+  // 해시태그 정리: 중복 제거하고 한 줄로 정리
+  const cleanHashtags = (content: string): string => {
+    try {
+      // 모든 해시태그 찾기
+      const hashtags = content.match(/#\w+/g) || [];
+      
+      if (hashtags.length === 0) {
+        return content;
+      }
+      
+      // 중복 제거하되 순서 유지
+      const seen = new Set<string>();
+      const uniqueHashtags: string[] = [];
+      
+      for (const tag of hashtags) {
+        if (!seen.has(tag.toLowerCase())) {
+          seen.add(tag.toLowerCase());
+          uniqueHashtags.push(tag);
+        }
+      }
+      
+      // 원본에서 해시태그 부분 제거
+      const contentWithoutTags = content.replace(/#\w+/g, '').trim();
+      
+      // 정리된 태그들을 마지막에 한 줄로 추가
+      if (uniqueHashtags.length > 0) {
+        const tagsLine = uniqueHashtags.join(' ');
+        return `${contentWithoutTags}\n\n${tagsLine}`;
+      }
+      
+      return contentWithoutTags;
+    } catch (error) {
+      console.warn('해시태그 정리 중 오류:', error);
+      return content;
+    }
+  };
+
+  // 25자 기준 줄바꿈 (모바일 최적화)
+  const splitTextByLength = (text: string, targetLength: number = 25): string[] => {
+    if (text.length <= targetLength + 3) {
+      return [text];
+    }
+    
+    const result: string[] = [];
+    let current = text;
+    
+    while (current.length > targetLength + 3) {
+      // 25±3자 범위에서 가장 적절한 공백 찾기
+      let bestPos = targetLength;
+      
+      // targetLength-3 ~ targetLength+5 범위에서 공백 찾기
+      for (let i = Math.max(targetLength - 3, 10); i < Math.min(targetLength + 6, current.length); i++) {
+        if (current[i] === ' ') {
+          bestPos = i;
+          break;
+        }
+      }
+      
+      // 공백을 찾았으면 그 위치에서 분리
+      if (bestPos < current.length && current[bestPos] === ' ') {
+        result.push(current.substring(0, bestPos).trim());
+        current = current.substring(bestPos).trim();
+      } else {
+        // 공백이 없으면 targetLength에서 강제 분리
+        result.push(current.substring(0, targetLength));
+        current = current.substring(targetLength);
+      }
+    }
+    
+    // 남은 텍스트 추가
+    if (current.trim()) {
+      result.push(current.trim());
+    }
+    
+    return result;
+  };
+
+  // 구조화된 콘텐츠인지 판별 (리스트, 단계별 설명 등은 줄바꿈하지 않음)
+  const isStructuredContent = (line: string): boolean => {
+    try {
+      const lineStrip = line.trim();
+      
+      // 해시태그 줄 (# 기호가 여러 개 있는 경우 - 줄바꿈 제외)
+      if (lineStrip.includes('#') && lineStrip.split(' ').filter(part => part.startsWith('#')).length >= 2) {
+        return true;
+      }
+      
+      // 마크다운 소제목 (## 또는 ###로 시작 - 줄바꿈 제외)
+      if (lineStrip.startsWith('## ') || lineStrip.startsWith('### ')) {
+        return true;
+      }
+      
+      // 체크리스트/불릿 포인트 패턴 (다양한 형태)
+      const bulletPatterns = [
+        '✓ ', '✔ ', '✔️ ', '☑ ', '☑️ ', '✅ ',  // 체크마크
+        '- ', '• ', '◦ ', '▪ ', '▫ ', '‣ ',     // 불릿
+        '→ ', '➤ ', '► ', '▶ ', '🔸 ', '🔹 ',    // 화살표/도형
+        '★ ', '⭐ ', '🌟 ', '💡 ', '📌 ', '🎯 '   // 기타 강조
+      ];
+      
+      for (const pattern of bulletPatterns) {
+        if (lineStrip.startsWith(pattern)) {
+          return true;
+        }
+      }
+      
+      // 번호 목록 패턴 (숫자, 로마자, 한글 등)
+      // 1. 2. 3. 또는 1) 2) 3) 패턴
+      if (lineStrip.length > 0 && /^\d+[.)]\s/.test(lineStrip)) {
+        return true;
+      }
+      
+      // 로마자 패턴 (a. b. c. 또는 A. B. C.)
+      if (lineStrip.length >= 3 && /^[a-zA-Z][.)]\s/.test(lineStrip)) {
+        return true;
+      }
+      
+      // 한글 자모 패턴 (가. 나. 다. 또는 ㄱ. ㄴ. ㄷ.)
+      const koreanChars = 'ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ가나다라마바사아자차카타파하';
+      if (lineStrip.length >= 3 && lineStrip[1] === '.' && koreanChars.includes(lineStrip[0])) {
+        return true;
+      }
+      
+      // 단계별 패턴 (**1단계:**, **2단계:** 등)
+      if (lineStrip.includes('단계:') || lineStrip.includes('**단계')) {
+        return true;
+      }
+      
+      // 표 형태나 구조화된 데이터 (: 기호가 많이 있는 경우)
+      if ((lineStrip.match(/:/g) || []).length >= 2) {
+        return true;
+      }
+      
+      // 마크다운 표 형태 (| 기호로 구분)
+      if (lineStrip.startsWith('|') && lineStrip.endsWith('|') && (lineStrip.match(/\|/g) || []).length >= 3) {
+        return true;
+      }
+      
+      // 표 구분선 (---|---|--- 형태)
+      if (lineStrip.includes('---') && lineStrip.includes('|')) {
+        return true;
+      }
+      
+      // 짧은 줄 (30자 이하)
+      if (lineStrip.length <= 30) {
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('구조화된 콘텐츠 판별 오류:', error);
+      return false;
+    }
+  };
+
+  // 모바일 최적화 텍스트 포맷팅 적용
+  const applyMobileOptimization = (content: string): string => {
+    const lines = content.split('\n');
+    const optimizedLines: string[] = [];
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      
+      // 빈 줄이나 구조화된 콘텐츠는 그대로 유지
+      if (!trimmed || isStructuredContent(trimmed)) {
+        optimizedLines.push(line);
+        continue;
+      }
+      
+      // 긴 줄인 경우 25자 기준으로 분할
+      if (trimmed.length > 30) {
+        const splitLines = splitTextByLength(trimmed, 25);
+        optimizedLines.push(...splitLines);
+      } else {
+        optimizedLines.push(line);
+      }
+    }
+    
+    return optimizedLines.join('\n');
+  };
+
   // 마크다운을 네이버 블로그 호환 HTML로 변환
   const processMarkdown = (content: string): string => {
-    const lines = content.split('\n');
+    // 먼저 모바일 최적화 처리
+    const cleanedContent = cleanAIGeneratedContent(content);
+    
+    const lines = cleanedContent.split('\n');
     const result: string[] = [];
     let i = 0;
     
