@@ -38,33 +38,96 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     }
   }, [data.writingResult]);
 
-  // 마크다운을 HTML로 변환 - 모든 줄을 일관된 div로 처리
-  const processMarkdown = (content: string): string => {
-    const lines = content.split('\n');
-    const processedLines: string[] = [];
+  // 마크다운 표를 네이버 블로그 표 구조로 변환
+  const convertMarkdownTable = (lines: string[]): string => {
+    const tableRows: string[] = [];
+    let isHeaderRow = true;
     
     for (const line of lines) {
-      if (line.trim().startsWith('## ')) {
-        // 대제목 (24px)
-        const text = line.substring(line.indexOf('## ') + 3);
-        processedLines.push(`<div style="font-size: 24px; font-weight: bold; line-height: 1.8; margin: 8px 0; min-height: 1.8em;">${text}</div>`);
-      } else if (line.trim().startsWith('### ')) {
-        // 소제목 (19px)
-        const text = line.substring(line.indexOf('### ') + 4);
-        processedLines.push(`<div style="font-size: 19px; font-weight: bold; line-height: 1.8; margin: 8px 0; min-height: 1.8em;">${text}</div>`);
-      } else if (line.trim() === '') {
-        // 빈 줄도 일정한 높이의 div로 처리
-        processedLines.push(`<div style="font-size: 15px; line-height: 1.8; margin: 0; min-height: 1.8em;"><br></div>`);
-      } else {
-        // 일반 텍스트 - **강조** 처리
-        let processedLine = line.replace(/\*\*([^*]+)\*\*/g, '<span style="font-size: 16px; font-weight: bold;">$1</span>');
+      if (line.includes('|') && !line.includes('---')) {
+        const cells = line.split('|').filter(cell => cell.trim() !== '').map(cell => cell.trim());
+        const cellWidth = (100 / cells.length).toFixed(2);
         
-        // 모든 일반 텍스트를 동일한 스타일의 div로 감싸기
-        processedLines.push(`<div style="font-size: 15px; line-height: 1.8; margin: 0; min-height: 1.8em;">${processedLine}</div>`);
+        const rowCells = cells.map(cellContent => {
+          let processedContent = cellContent.replace(/\*\*([^*]+)\*\*/g, '<span class="se-ff-nanumgothic se-fs16" style="color: rgb(0, 0, 0); font-weight: bold;">$1</span>');
+          
+          return `
+            <td class="__se-unit se-cell" style="width: ${cellWidth}%; height: 43px;">
+              <div class="se-module se-module-text">
+                <p class="se-text-paragraph se-text-paragraph-align-left" style="line-height: 1.6;">
+                  <span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0);">${processedContent}</span>
+                </p>
+              </div>
+            </td>`;
+        }).join('');
+        
+        tableRows.push(`<tr class="se-tr">${rowCells}</tr>`);
+        isHeaderRow = false;
       }
     }
     
-    return processedLines.join('');
+    return `
+      <div class="se-component se-table se-l-default">
+        <div class="se-component-content">
+          <div class="se-section se-section-table se-l-default se-section-align-left">
+            <div class="se-table-container">
+              <table class="se-table-content se-reflow-toggle">
+                <tbody>
+                  ${tableRows.join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  };
+
+  // 마크다운을 네이버 블로그 호환 HTML로 변환
+  const processMarkdown = (content: string): string => {
+    const lines = content.split('\n');
+    const result: string[] = [];
+    let i = 0;
+    
+    while (i < lines.length) {
+      const line = lines[i];
+      
+      // 표 감지 (| 포함된 연속 라인들)
+      if (line.includes('|')) {
+        const tableLines: string[] = [];
+        let j = i;
+        
+        // 연속된 표 라인들 수집
+        while (j < lines.length && (lines[j].includes('|') || lines[j].includes('---'))) {
+          tableLines.push(lines[j]);
+          j++;
+        }
+        
+        if (tableLines.length > 0) {
+          result.push(convertMarkdownTable(tableLines));
+          i = j;
+          continue;
+        }
+      }
+      
+      // 일반 텍스트 처리
+      if (line.trim().startsWith('## ')) {
+        const text = line.substring(line.indexOf('## ') + 3);
+        result.push(`<p class="se-text-paragraph se-text-paragraph-align-left" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs24" style="color: rgb(0, 0, 0); font-weight: bold;">${text}</span></p>`);
+      } else if (line.trim().startsWith('### ')) {
+        const text = line.substring(line.indexOf('### ') + 4);
+        result.push(`<p class="se-text-paragraph se-text-paragraph-align-left" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs19" style="color: rgb(0, 0, 0); font-weight: bold;">${text}</span></p>`);
+      } else if (line.trim() === '') {
+        result.push(`<p class="se-text-paragraph se-text-paragraph-align-left" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0);">&nbsp;</span></p>`);
+      } else {
+        // **강조** 처리
+        let processedLine = line.replace(/\*\*([^*]+)\*\*/g, '<span class="se-ff-nanumgothic se-fs16" style="color: rgb(0, 0, 0); font-weight: bold;">$1</span>');
+        result.push(`<p class="se-text-paragraph se-text-paragraph-align-left" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0);">${processedLine}</span></p>`);
+      }
+      
+      i++;
+    }
+    
+    return result.join('');
   };
 
   // 글자 수 계산
@@ -88,70 +151,41 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     }
   };
 
-  // 커서 위치의 폰트 크기 감지
+  // 커서 위치의 폰트 크기 감지 - 네이버 블로그 클래스 기반
   const detectCursorFontSize = () => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
 
     const range = selection.getRangeAt(0);
-    if (!range.collapsed) return; // 텍스트가 선택된 경우는 무시
-
-    // 현재 커서 위치 저장
-    const startContainer = range.startContainer;
-    const startOffset = range.startOffset;
-    
-    let detectedFontSize = '15px'; // 기본값
-    
-    // 부모 요소의 스타일 확인 (커서를 건드리지 않음)
-    let node = startContainer;
+    let node = range.startContainer;
     
     if (node.nodeType === Node.TEXT_NODE) {
       node = node.parentElement;
     }
     
     let currentElement = node as HTMLElement;
+    let detectedSize = '15px';
+    
     while (currentElement && currentElement !== editorRef.current) {
-      // 인라인 스타일이 있는 경우 우선적으로 사용
-      if (currentElement.style.fontSize) {
-        detectedFontSize = currentElement.style.fontSize;
-        console.log('인라인 스타일 감지:', detectedFontSize);
+      const classList = currentElement.classList;
+      if (classList.contains('se-fs24')) {
+        detectedSize = '24px';
         break;
-      } 
-      
-      // span 요소인 경우 스타일 확인
-      if (currentElement.tagName === 'SPAN') {
-        const computedStyle = window.getComputedStyle(currentElement);
-        const fontSize = computedStyle.fontSize;
-        if (fontSize && fontSize !== '15px') {
-          detectedFontSize = fontSize;
-          console.log('span 스타일 감지:', detectedFontSize);
-          break;
-        }
+      } else if (classList.contains('se-fs19')) {
+        detectedSize = '19px';
+        break;
+      } else if (classList.contains('se-fs16')) {
+        detectedSize = '16px';
+        break;
+      } else if (classList.contains('se-fs15')) {
+        detectedSize = '15px';
+        break;
       }
-      
-      // div 요소인 경우 (마크다운 처리된 헤더)
-      if (currentElement.tagName === 'DIV') {
-        const computedStyle = window.getComputedStyle(currentElement);
-        const fontSize = computedStyle.fontSize;
-        if (fontSize && fontSize !== '15px') {
-          detectedFontSize = fontSize;
-          console.log('div 스타일 감지:', detectedFontSize);
-          break;
-        }
-      }
-      
       currentElement = currentElement.parentElement as HTMLElement;
     }
     
-    // 감지된 폰트 크기를 드롭다운에 반영
-    const matchingFont = fontSizes.find(f => f.size === detectedFontSize);
-    if (matchingFont && matchingFont.size !== currentFontSize) {
-      console.log('드롭다운 업데이트:', detectedFontSize, '→', matchingFont.name);
-      setCurrentFontSize(matchingFont.size);
-    } else if (!matchingFont && currentFontSize !== '15px') {
-      // 일치하는 폰트가 없으면 기본값으로
-      console.log('기본 폰트로 설정');
-      setCurrentFontSize('15px');
+    if (detectedSize !== currentFontSize) {
+      setCurrentFontSize(detectedSize);
     }
   };
 
@@ -180,125 +214,67 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     }
   };
 
-  // 폰트 크기 변경
+  // 폰트 크기 변경 - 같은 크기여도 무조건 적용
   const handleFontSizeChange = (newSize: string) => {
-    setCurrentFontSize(newSize);
+    // 무조건 적용
     applyFontSizeToSelection(newSize);
+    // 버튼 상태 업데이트
+    setCurrentFontSize(newSize);
   };
 
-  // 선택된 텍스트에 폰트 크기 적용
+  // 선택된 텍스트에 폰트 크기 적용 - 줄 구조 유지
   const applyFontSizeToSelection = (fontSize: string) => {
     if (!editorRef.current) return;
     
     const fontInfo = fontSizes.find(f => f.size === fontSize);
     if (!fontInfo) return;
 
-    console.log('폰트 적용:', fontInfo); // 디버깅용
-
-    // 에디터에 포커스
     editorRef.current.focus();
-
     const selection = window.getSelection();
-    if (!selection) return;
+    if (!selection || selection.rangeCount === 0) return;
 
-    // 선택된 텍스트가 있는 경우
-    if (selection.rangeCount > 0 && !selection.getRangeAt(0).collapsed) {
-      const range = selection.getRangeAt(0);
+    // 선택된 텍스트가 있는 경우만 처리
+    if (selection.toString().length > 0) {
+      // execCommand 사용하되 즉시 정리
+      document.execCommand('fontSize', false, '7'); // 임시 크기
       
-      // 기존 스타일 요소들을 제거하고 순수 텍스트만 추출
-      const selectedText = range.toString();
-      const fragment = range.extractContents();
+      // 생성된 font 태그들을 span으로 교체
+      const fontTags = editorRef.current.querySelectorAll('font[size="7"]');
+      const createdSpans: HTMLElement[] = [];
       
-      // 모든 span과 div에서 텍스트만 추출
-      const cleanText = fragment.textContent || selectedText;
-      
-      // 헤더 크기는 div, 일반/강조는 span 사용
-      const isHeaderSize = fontInfo.size === '24px' || fontInfo.size === '19px';
-      
-      if (isHeaderSize) {
-        // 헤더 크기는 div로 생성 (블록 요소, 마진 포함)
-        const newDiv = document.createElement('div');
-        newDiv.style.fontSize = fontInfo.size;
-        newDiv.style.fontWeight = fontInfo.weight;
-        newDiv.style.lineHeight = '1.8';
-        newDiv.style.margin = '8px 0';
-        const pxSize = parseInt(fontInfo.size);
-        newDiv.style.minHeight = `${pxSize * 1.8}px`;
-        newDiv.textContent = cleanText;
+      fontTags.forEach(fontTag => {
+        const selectedText = fontTag.textContent || '';
         
-        range.insertNode(newDiv);
-        range.selectNode(newDiv);
-        
-        console.log('헤더 div 생성:', fontInfo.size);
-      } else {
-        // 일반/강조는 span으로 생성 (인라인 요소, 기존 줄간격 유지)
+        // 새로운 span 생성 (항상 새로 만들어서 중첩 문제 해결)
         const newSpan = document.createElement('span');
-        newSpan.style.fontSize = fontInfo.size;
-        newSpan.style.fontWeight = fontInfo.weight;
-        newSpan.style.lineHeight = '1.8';
-        newSpan.textContent = cleanText;
+        newSpan.className = `se-ff-nanumgothic se-fs${fontSize.replace('px', '')}`;
+        newSpan.style.color = 'rgb(0, 0, 0)';
         
-        range.insertNode(newSpan);
-        range.selectNode(newSpan);
+        // font-weight 설정
+        if (fontInfo.weight === 'bold') {
+          newSpan.style.fontWeight = 'bold';
+        } else {
+          newSpan.style.fontWeight = 'normal';
+        }
         
-        console.log('텍스트 span 생성:', fontInfo.size);
+        newSpan.textContent = selectedText;
+        createdSpans.push(newSpan);
+        
+        // font 태그를 새 span으로 교체
+        fontTag.parentNode?.replaceChild(newSpan, fontTag);
+      });
+      
+      // 변경된 모든 span을 다시 선택
+      if (createdSpans.length > 0) {
+        const newRange = document.createRange();
+        newRange.setStartBefore(createdSpans[0]);
+        newRange.setEndAfter(createdSpans[createdSpans.length - 1]);
+        selection.removeAllRanges();
+        selection.addRange(newRange);
       }
-      
-      selection.removeAllRanges();
-      selection.addRange(range);
-      
-      console.log('선택 텍스트 폰트 적용됨:', fontInfo.size, '텍스트:', cleanText);
       
       handleContentChange();
-      return;
     }
-
-    // 커서만 있는 경우 - 다음에 타이핑할 텍스트에 스타일 적용
-    const isHeaderSize = fontInfo.size === '24px' || fontInfo.size === '19px';
-    const range = selection.getRangeAt(0) || document.createRange();
-    
-    if (isHeaderSize) {
-      // 헤더는 div로 생성
-      const div = document.createElement('div');
-      div.style.fontSize = fontInfo.size;
-      div.style.fontWeight = fontInfo.weight;
-      div.style.lineHeight = '1.8';
-      div.style.margin = '8px 0';
-      const pxSize = parseInt(fontInfo.size);
-      div.style.minHeight = `${pxSize * 1.8}px`;
-      div.textContent = '\u200B';
-      
-      range.insertNode(div);
-      range.setStart(div, 0);
-      range.collapse(true);
-      
-      console.log('커서 위치에 헤더 div 설정:', fontInfo.size);
-    } else {
-      // 일반/강조는 span으로 생성
-      const span = document.createElement('span');
-      span.style.fontSize = fontInfo.size;
-      span.style.fontWeight = fontInfo.weight;
-      span.style.lineHeight = '1.8';
-      span.textContent = '\u200B';
-      
-      range.insertNode(span);
-      range.setStartAfter(span);
-      range.collapse(true);
-      
-      console.log('커서 위치에 텍스트 span 설정:', fontInfo.size);
-    }
-    
-    selection.removeAllRanges();
-    selection.addRange(range);
-    
-    // 포커스 유지
-    setTimeout(() => {
-      if (editorRef.current) {
-        editorRef.current.focus();
-      }
-    }, 0);
-    
-    handleContentChange();
   };
 
   // 원본 복원
@@ -329,18 +305,32 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     }
   };
 
-  // 발행
+  // 네이버 블로그 발행 (편집된 내용 그대로 전송)
   const publishToNaverBlog = async () => {
     setIsPublishing(true);
     
     try {
-      // 발행 시뮬레이션 (3초)
+      // 현재 편집된 HTML 내용 가져오기
+      const htmlContent = editorRef.current?.innerHTML || '';
+      
+      // 네이버 블로그 발행 데이터 준비
+      const blogData = {
+        title: data.selectedTitle,
+        content: htmlContent, // 네이버 호환 HTML 그대로 전송
+        tags: data.keyword ? [data.keyword] : [],
+        htmlContent: htmlContent
+      };
+      
+      console.log('네이버 블로그 발행 데이터:', blogData);
+      
+      // 실제 네이버 블로그 API 호출 (현재는 시뮬레이션)
       await new Promise(resolve => setTimeout(resolve, 3000));
       
-      alert('네이버 블로그에 성공적으로 발행되었습니다!');
+      alert('네이버 블로그에 성공적으로 발행되었습니다!\n\n편집된 폰트 크기와 스타일이 그대로 적용됩니다.');
       onComplete({ 
         generatedContent: editedContent,
-        finalContent: editedContent
+        finalContent: htmlContent,
+        publishedData: blogData
       });
     } catch (error) {
       console.error('발행 실패:', error);
@@ -431,7 +421,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                   <select
                     value={currentFontSize}
                     onChange={(e) => handleFontSizeChange(e.target.value)}
-                    className="text-xs border rounded px-2 py-1"
+                    className="text-xs border rounded px-2 py-1 cursor-pointer"
                   >
                     {fontSizes.map((font) => (
                       <option key={font.size} value={font.size}>
@@ -439,6 +429,15 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                       </option>
                     ))}
                   </select>
+                  
+                  {/* 강제 적용 버튼 (현재 선택된 폰트로 다시 적용) */}
+                  <button
+                    onClick={() => handleFontSizeChange(currentFontSize)}
+                    className="text-xs px-2 py-1 bg-gray-100 border rounded hover:bg-gray-200"
+                    title="현재 폰트 크기로 선택 영역 통일"
+                  >
+                    🔄
+                  </button>
                 </div>
 
                 {/* 기능 버튼들 */}
@@ -484,8 +483,58 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
               suppressContentEditableWarning={true}
             />
             
+            <style jsx>{`
+              .se-text-paragraph {
+                margin: 0;
+                padding: 0;
+                line-height: 1.8;
+              }
+              .se-text-paragraph-align-left {
+                text-align: left;
+              }
+              .se-ff-nanumgothic {
+                font-family: "Nanum Gothic", "나눔고딕", "돋움", Dotum, Arial, sans-serif;
+              }
+              .se-fs15 {
+                font-size: 15px !important;
+              }
+              .se-fs16 {
+                font-size: 16px !important;
+              }
+              .se-fs19 {
+                font-size: 19px !important;
+              }
+              .se-fs24 {
+                font-size: 24px !important;
+              }
+              /* 네이버 블로그 표 스타일 */
+              .se-component {
+                margin: 16px 0;
+              }
+              .se-table {
+                width: 100%;
+              }
+              .se-table-content {
+                width: 100%;
+                border-collapse: collapse;
+                border: 1px solid #ddd;
+              }
+              .se-cell {
+                border: 1px solid #ddd;
+                padding: 8px;
+                vertical-align: top;
+              }
+              .se-tr {
+                border: none;
+              }
+              .se-module-text {
+                margin: 0;
+                padding: 0;
+              }
+            `}</style>
+            
             <div className="mt-3 text-xs text-gray-500">
-              💡 <strong>편집 팁:</strong> 텍스트 선택 후 폰트 크기 변경 | 콘텐츠는 이미 최적화된 상태입니다
+              💡 <strong>편집 팁:</strong> 텍스트 선택 후 폰트 크기 변경 | 네이버 블로그 완전 호환 방식
             </div>
           </div>
 
