@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { WorkflowData, BlogWritingResult } from '../App';
+import { WorkflowData } from '../App';
+import { ImagePrompt, BlogWritingResult } from '../services/blog-writing-service';
+import { LLMClientFactory } from '../services/llm-client-factory';
 
 interface Step3Props {
   data: WorkflowData;
@@ -14,6 +16,44 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
   const [charCount, setCharCount] = useState(0);
   const [charCountWithSpaces, setCharCountWithSpaces] = useState(0);
   const [currentFontSize, setCurrentFontSize] = useState('15px');
+  
+  // 이미지 관리 상태
+  const [imageFiles, setImageFiles] = useState<{ [key: number]: File | null }>({});
+  const [imageUrls, setImageUrls] = useState<{ [key: number]: string }>({});
+  const [imageStatus, setImageStatus] = useState<{ [key: number]: 'empty' | 'uploading' | 'completed' | 'generating' }>({});
+  
+  // 이미지 생성 제어 상태
+  const [isGeneratingAll, setIsGeneratingAll] = useState(false);
+  const [shouldStopGeneration, setShouldStopGeneration] = useState(false);
+  
+  // 이미지 AI 클라이언트 상태
+  const [hasImageClient, setHasImageClient] = useState(false);
+  const [imageClientInfo, setImageClientInfo] = useState('미설정');
+  
+  // 이미지 생성 옵션 상태
+  const [imageQuality, setImageQuality] = useState<'low' | 'medium' | 'high'>('high');
+  const [imageSize, setImageSize] = useState<'1024x1024' | '1024x1536' | '1536x1024'>('1024x1024');
+  
+  // 이미지 AI 클라이언트 상태 체크
+  useEffect(() => {
+    const checkImageClient = () => {
+      const hasClient = LLMClientFactory.hasImageClient();
+      setHasImageClient(hasClient);
+      
+      if (hasClient) {
+        const modelStatus = LLMClientFactory.getCachedModelStatus();
+        setImageClientInfo(modelStatus.image || '설정됨');
+      } else {
+        setImageClientInfo('미설정');
+      }
+    };
+    
+    checkImageClient();
+    // 주기적으로 체크 (설정 변경 감지를 위해)
+    const interval = setInterval(checkImageClient, 2000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // 폰트 크기 옵션
   const fontSizes = [
@@ -49,7 +89,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
         const cellWidth = (100 / cells.length).toFixed(2);
         
         const rowCells = cells.map(cellContent => {
-          let processedContent = cellContent.replace(/\*\*([^*]+)\*\*/g, '<span class="se-ff-nanumgothic se-fs16" style="color: rgb(0, 0, 0); font-weight: bold;">$1</span>');
+          const processedContent = cellContent.replace(/\*\*([^*]+)\*\*/g, '<span class="se-ff-nanumgothic se-fs16" style="color: rgb(0, 0, 0); font-weight: bold;">$1</span>');
           
           return `
             <td class="__se-unit se-cell" style="width: ${cellWidth}%; height: 43px;">
@@ -545,6 +585,140 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     }
   };
 
+  // 이미지 업로드 처리
+  const handleImageUpload = (imageIndex: number, file: File | null) => {
+    if (!file) return;
+
+    setImageStatus(prev => ({ ...prev, [imageIndex]: 'uploading' }));
+
+    // 파일을 URL로 변환하여 미리보기
+    const url = URL.createObjectURL(file);
+    setImageFiles(prev => ({ ...prev, [imageIndex]: file }));
+    setImageUrls(prev => ({ ...prev, [imageIndex]: url }));
+    
+    // 업로드 시뮬레이션 (실제로는 서버에 업로드)
+    setTimeout(() => {
+      setImageStatus(prev => ({ ...prev, [imageIndex]: 'completed' }));
+    }, 1500);
+  };
+
+  // AI 이미지 생성 (정지 기능 포함)
+  const generateAIImage = async (imageIndex: number, prompt: string, isPartOfBatch = false) => {
+    setImageStatus(prev => ({ ...prev, [imageIndex]: 'generating' }));
+
+    try {
+      console.log(`🎨 AI 이미지 생성 시작 - 프롬프트: ${prompt}`);
+      
+      // 이미지 생성 클라이언트 확인
+      if (!LLMClientFactory.hasImageClient()) {
+        throw new Error('이미지 생성 AI가 설정되지 않았습니다. 설정에서 이미지 AI를 먼저 설정해주세요.');
+      }
+
+      const imageClient = LLMClientFactory.getImageClient();
+      
+      // 저장된 이미지 설정 가져오기
+      const cachedSettings = LLMClientFactory.getCachedSettings();
+      const imageSettings = cachedSettings?.settings?.image;
+      
+      // Step3에서 설정한 이미지 생성 옵션 사용
+      const imageOptions = {
+        quality: imageQuality,
+        size: imageSize
+      };
+      
+      console.log(`🎛️ 이미지 생성 옵션:`, imageOptions);
+      
+      // 실제 이미지 생성 API 호출
+      const generatedImageUrl = await imageClient.generateImage(prompt, imageOptions);
+      
+      // 정지 요청 확인 (배치 모드일 때만)
+      if (shouldStopGeneration && isPartOfBatch) {
+        console.log(`이미지 ${imageIndex} 생성 중단됨`);
+        setImageStatus(prev => ({ ...prev, [imageIndex]: 'empty' }));
+        return;
+      }
+      
+      if (generatedImageUrl && generatedImageUrl.trim()) {
+        setImageUrls(prev => ({ ...prev, [imageIndex]: generatedImageUrl }));
+        setImageStatus(prev => ({ ...prev, [imageIndex]: 'completed' }));
+        console.log(`✅ 이미지 ${imageIndex} 생성 완료: ${generatedImageUrl}`);
+      } else {
+        throw new Error('빈 이미지 URL이 반환되었습니다.');
+      }
+      
+    } catch (error) {
+      console.error('❌ AI 이미지 생성 실패:', error);
+      setImageStatus(prev => ({ ...prev, [imageIndex]: 'empty' }));
+      
+      if (!isPartOfBatch) {
+        const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
+        alert(`이미지 생성에 실패했습니다: ${errorMessage}`);
+      }
+    }
+  };
+
+  // 이미지 제거
+  const removeImage = (imageIndex: number) => {
+    // URL 메모리 해제
+    const url = imageUrls[imageIndex];
+    if (url && url.startsWith('blob:')) {
+      URL.revokeObjectURL(url);
+    }
+    
+    setImageFiles(prev => {
+      const newFiles = { ...prev };
+      delete newFiles[imageIndex];
+      return newFiles;
+    });
+    setImageUrls(prev => {
+      const newUrls = { ...prev };
+      delete newUrls[imageIndex];
+      return newUrls;
+    });
+    setImageStatus(prev => ({ ...prev, [imageIndex]: 'empty' }));
+  };
+
+  // 빈 이미지 모두 AI로 생성 (정지 기능 포함)
+  const generateAllMissingImages = async () => {
+    const imagePrompts = data.writingResult?.imagePrompts || [];
+    const imageRegex = /[\(\[\*_]이미지[\)\]\*_]/g;
+    const imageCount = (editedContent.match(imageRegex) || []).length;
+    
+    setIsGeneratingAll(true);
+    setShouldStopGeneration(false);
+    
+    try {
+      for (let i = 1; i <= imageCount; i++) {
+        // 정지 요청이 있으면 중단
+        if (shouldStopGeneration) {
+          console.log('일괄 이미지 생성이 사용자에 의해 중단되었습니다.');
+          break;
+        }
+        
+        const currentStatus = imageStatus[i];
+        const imagePrompt = imagePrompts.find(p => p.index === i);
+        
+        if (currentStatus !== 'completed' && imagePrompt) {
+          await generateAIImage(i, imagePrompt.prompt, true); // isPartOfBatch = true
+          
+          // 정지 요청이 없으면 다음 이미지 생성 전 1초 대기
+          if (!shouldStopGeneration) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+      }
+    } finally {
+      setIsGeneratingAll(false);
+      setShouldStopGeneration(false);
+    }
+  };
+
+  // 이미지 생성 정지
+  const stopImageGeneration = () => {
+    setShouldStopGeneration(true);
+    console.log('이미지 생성 정지 요청됨');
+  };
+
   // 네이버 블로그 발행 (편집된 내용 그대로 전송)
   const publishToNaverBlog = async () => {
     setIsPublishing(true);
@@ -568,9 +742,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       
       alert('네이버 블로그에 성공적으로 발행되었습니다!\n\n편집된 폰트 크기와 스타일이 그대로 적용됩니다.');
       onComplete({ 
-        generatedContent: editedContent,
-        finalContent: htmlContent,
-        publishedData: blogData
+        generatedContent: editedContent
       });
     } catch (error) {
       console.error('발행 실패:', error);
@@ -627,7 +799,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
               <h2 className="section-title" style={{fontSize: '16px'}}>작업 요약</h2>
             </div>
             
-            <div className="grid md:grid-cols-3 gap-4 text-sm">
+            <div className="grid md:grid-cols-4 gap-4 text-sm">
               <div className="p-3 bg-blue-50 rounded-lg">
                 <div className="text-blue-700 font-medium">📝 선택된 제목</div>
                 <div className="text-blue-600">{data.selectedTitle}</div>
@@ -640,6 +812,14 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                 <div className="text-purple-700 font-medium">📊 글자 수</div>
                 <div className="text-purple-600">
                   {charCount.toLocaleString()}자 / 공백포함: {charCountWithSpaces.toLocaleString()}자
+                </div>
+              </div>
+              <div className="p-3 bg-cyan-50 rounded-lg">
+                <div className="text-cyan-700 font-medium">🤖 이미지 AI</div>
+                <div className={`text-cyan-600 text-sm ${
+                  hasImageClient ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {hasImageClient ? `✅ ${imageClientInfo}` : '❌ 미설정'}
                 </div>
               </div>
             </div>
@@ -723,7 +903,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
               suppressContentEditableWarning={true}
             />
             
-            <style jsx>{`
+            <style>{`
               .se-text-paragraph {
                 margin: 0;
                 padding: 0;
@@ -781,36 +961,253 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
           {/* 이미지 섹션 */}
           {(() => {
             // 다양한 형태의 이미지 태그 개수 계산
-            // (이미지), [이미지], *이미지*, _이미지_ 등 모든 형태 감지
             const imageRegex = /[\(\[\*_]이미지[\)\]\*_]/g;
             const imageCount = (editedContent.match(imageRegex) || []).length;
+            const imagePrompts = data.writingResult?.imagePrompts || [];
             
             if (imageCount > 0) {
-              // 더미 이미지 URL 생성
-              const dummyImages = Array.from({ length: imageCount }, (_, idx) => 
-                `https://via.placeholder.com/600x400/4F46E5/FFFFFF?text=Image+${idx + 1}`
-              );
-              
               return (
                 <div className="section-card" style={{padding: '20px', marginBottom: '16px'}}>
                   <div className="section-header" style={{marginBottom: '16px'}}>
                     <div className="section-icon purple" style={{width: '32px', height: '32px', fontSize: '16px'}}>🖼️</div>
-                    <h2 className="section-title" style={{fontSize: '16px'}}>생성된 이미지 ({imageCount}개)</h2>
+                    <h2 className="section-title" style={{fontSize: '16px'}}>이미지 관리 ({imageCount}개)</h2>
                   </div>
                   
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {dummyImages.map((img, idx) => (
-                      <div key={idx} className="border rounded-lg overflow-hidden">
-                        <img 
-                          src={img} 
-                          alt={`Generated image ${idx + 1}`}
-                          className="w-full h-24 object-cover"
-                        />
-                        <div className="p-2 text-xs text-gray-600 text-center">
-                          이미지 {idx + 1}
+                  <div className="space-y-4">
+                    {Array.from({ length: imageCount }, (_, idx) => {
+                      const imageIndex = idx + 1;
+                      const imagePrompt = imagePrompts.find(p => p.index === imageIndex);
+                      const status = imageStatus[imageIndex] || 'empty';
+                      const imageUrl = imageUrls[imageIndex];
+                      
+                      return (
+                        <div key={idx} className="border rounded-lg p-4 bg-white">
+                          <div className="flex gap-4">
+                            {/* 이미지 미리보기 영역 */}
+                            <div className="flex-shrink-0 w-40 h-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50 relative overflow-hidden">
+                              {status === 'uploading' && (
+                                <div className="text-center">
+                                  <div className="ultra-spinner mx-auto mb-2" style={{width: '24px', height: '24px'}}></div>
+                                  <div className="text-xs text-gray-600">업로드 중...</div>
+                                </div>
+                              )}
+                              {status === 'generating' && (
+                                <div className="text-center">
+                                  <div className="ultra-spinner mx-auto mb-2" style={{width: '24px', height: '24px'}}></div>
+                                  <div className="text-xs text-gray-600">AI 생성 중...</div>
+                                </div>
+                              )}
+                              {status === 'completed' && imageUrl && (
+                                <img 
+                                  src={imageUrl} 
+                                  alt={`이미지 ${imageIndex}`}
+                                  className="w-full h-full object-cover"
+                                />
+                              )}
+                              {status === 'empty' && (
+                                <div className="text-center text-gray-400">
+                                  <div className="text-2xl mb-1">📷</div>
+                                  <div className="text-xs">이미지 {imageIndex}</div>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* 이미지 정보 및 컨트롤 */}
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="font-semibold text-slate-900">📸 이미지 {imageIndex}</span>
+                                {imagePrompt && (
+                                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                    📍 {imagePrompt.position}
+                                  </span>
+                                )}
+                              </div>
+                              
+                              {/* AI 프롬프트 정보 */}
+                              {imagePrompt && (
+                                <div className="mb-3">
+                                  <div className="text-xs text-slate-600 mb-1">
+                                    <strong>컨텍스트:</strong> {imagePrompt.context}
+                                  </div>
+                                  <div className="bg-slate-50 rounded p-2 border border-slate-200">
+                                    <div className="text-xs font-medium text-slate-700 mb-1">💡 AI 프롬프트:</div>
+                                    <div className="text-xs text-slate-800">{imagePrompt.prompt}</div>
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* 버튼 영역 */}
+                              <div className="flex gap-2">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => handleImageUpload(imageIndex, e.target.files?.[0] || null)}
+                                  className="hidden"
+                                  id={`image-upload-${imageIndex}`}
+                                />
+                                <label
+                                  htmlFor={`image-upload-${imageIndex}`}
+                                  className="px-3 py-1 bg-blue-500 text-white text-xs rounded cursor-pointer hover:bg-blue-600 transition-colors"
+                                >
+                                  📁 이미지 업로드
+                                </label>
+                                
+                                {imagePrompt && (
+                                  <button
+                                    onClick={() => generateAIImage(imageIndex, imagePrompt.prompt)}
+                                    disabled={!hasImageClient || status === 'generating' || isGeneratingAll}
+                                    className="px-3 py-1 bg-purple-500 text-white text-xs rounded hover:bg-purple-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                    title={!hasImageClient ? '이미지 생성 AI가 설정되지 않았습니다' : ''}
+                                  >
+                                    🎨 AI 이미지생성
+                                  </button>
+                                )}
+                                
+                                {status === 'completed' && (
+                                  <button
+                                    onClick={() => removeImage(imageIndex)}
+                                    className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
+                                  >
+                                    🗑️ 제거
+                                  </button>
+                                )}
+                              </div>
+                              
+                              {/* 상태 표시 */}
+                              <div className="mt-2 text-xs">
+                                {status === 'empty' && <span className="text-gray-500">⚪ 대기중</span>}
+                                {status === 'uploading' && <span className="text-blue-500">🔄 업로드 중...</span>}
+                                {status === 'generating' && <span className="text-purple-500">🎨 AI 생성 중...</span>}
+                                {status === 'completed' && <span className="text-green-500">✅ 완료</span>}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* 진행률 표시 */}
+                  <div className="mt-4 bg-slate-50 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-slate-700">이미지 준비 현황</span>
+                      <span className="text-sm text-slate-600">
+                        {Object.values(imageStatus).filter(s => s === 'completed').length} / {imageCount} 완료
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                        style={{
+                          width: `${(Object.values(imageStatus).filter(s => s === 'completed').length / imageCount) * 100}%`
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                  
+                  {/* 이미지 AI 상태 및 생성 옵션 */}
+                  <div className="mt-4 p-3 bg-slate-50 rounded-lg border">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-slate-700">🤖 이미지 생성 AI 상태</span>
+                      <span className={`text-sm px-2 py-1 rounded ${
+                        hasImageClient 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {hasImageClient ? '✅ 연결됨' : '❌ 미설정'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-600 mb-3">
+                      현재 설정: {imageClientInfo}
+                      {!hasImageClient && (
+                        <span className="ml-2 text-red-600 font-medium">
+                          (설정 → AI 설정에서 이미지 생성 AI를 설정해주세요)
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* 이미지 생성 옵션 */}
+                    {hasImageClient && (
+                      <div className="border-t border-slate-200 pt-3">
+                        <div className="text-sm font-medium text-slate-700 mb-2">🎛️ 이미지 생성 옵션</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {/* 품질 설정 */}
+                          <div>
+                            <label className="text-xs font-medium text-slate-600 mb-1 block">품질</label>
+                            <select
+                              value={imageQuality}
+                              onChange={(e) => setImageQuality(e.target.value as 'low' | 'medium' | 'high')}
+                              className="w-full text-xs border rounded px-2 py-1"
+                            >
+                              <option value="low">저품질 (빠름)</option>
+                              <option value="medium">중품질 (균형)</option>
+                              <option value="high">고품질 (권장)</option>
+                            </select>
+                          </div>
+                          
+                          {/* 해상도 설정 */}
+                          <div>
+                            <label className="text-xs font-medium text-slate-600 mb-1 block">해상도</label>
+                            <select
+                              value={imageSize}
+                              onChange={(e) => setImageSize(e.target.value as '1024x1024' | '1024x1536' | '1536x1024')}
+                              className="w-full text-xs border rounded px-2 py-1"
+                            >
+                              <option value="1024x1024">정사각형 (1024×1024)</option>
+                              <option value="1024x1536">세로형 (1024×1536)</option>
+                              <option value="1536x1024">가로형 (1536×1024)</option>
+                            </select>
+                          </div>
+                        </div>
+                        
+                        {/* 예상 비용 표시 */}
+                        <div className="mt-2 text-xs text-slate-500">
+                          💰 예상 비용: {(() => {
+                            if (imageClientInfo.includes('runware')) {
+                              return '$0.0006/이미지 (초저가)';
+                            } else if (imageClientInfo.includes('openai') || imageClientInfo.includes('gpt')) {
+                              const cost = imageQuality === 'low' ? '$0.040' : imageQuality === 'medium' ? '$0.060' : '$0.080';
+                              return `${cost}/이미지`;
+                            } else if (imageClientInfo.includes('gemini')) {
+                              return '무료 (할당량 내)';
+                            }
+                            return '비용 정보 없음';
+                          })()}
                         </div>
                       </div>
-                    ))}
+                    )}
+                  </div>
+                  
+                  {/* 일괄 처리 버튼 */}
+                  <div className="mt-4 flex gap-2">
+                    {!isGeneratingAll ? (
+                      <button
+                        onClick={generateAllMissingImages}
+                        disabled={!hasImageClient || imagePrompts.length === 0 || Object.values(imageStatus).some(s => s === 'generating')}
+                        className="px-4 py-2 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        title={!hasImageClient ? '이미지 생성 AI가 설정되지 않았습니다' : ''}
+                      >
+                        🎨 빈 이미지 모두 AI로 생성
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          disabled
+                          className="px-4 py-2 bg-purple-500 text-white text-sm rounded cursor-not-allowed opacity-75"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="ultra-spinner" style={{width: '16px', height: '16px'}}></div>
+                            <span>🎨 AI 이미지 생성 중...</span>
+                          </div>
+                        </button>
+                        <button
+                          onClick={stopImageGeneration}
+                          className="px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors"
+                        >
+                          ⏹️ 생성 정지
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               );

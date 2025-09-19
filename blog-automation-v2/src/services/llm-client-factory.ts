@@ -1,6 +1,6 @@
 // LLM 클라이언트 팩토리
 export interface LLMConfig {
-  provider: 'openai' | 'claude' | 'gemini';
+  provider: 'openai' | 'claude' | 'gemini' | 'runware';
   model: string;
   apiKey: string;
 }
@@ -39,7 +39,7 @@ export abstract class BaseLLMClient {
   }
 
   abstract generateText(messages: LLMMessage[], options?: { tools?: LLMTool[] }): Promise<LLMResponse>;
-  abstract generateImage(prompt: string): Promise<string>; // 이미지 URL 반환
+  abstract generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string>; // 이미지 URL 반환
 }
 
 export class OpenAIClient extends BaseLLMClient {
@@ -82,7 +82,7 @@ export class OpenAIClient extends BaseLLMClient {
     }
   }
 
-  async generateImage(prompt: string): Promise<string> {
+  async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
     try {
       const response = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST',
@@ -91,10 +91,11 @@ export class OpenAIClient extends BaseLLMClient {
           'Authorization': `Bearer ${this.config.apiKey}`
         },
         body: JSON.stringify({
-          model: 'dall-e-3',
+          model: 'gpt-image-1',
           prompt: prompt,
-          n: 1,
-          size: '1024x1024'
+          quality: options?.quality || 'high', // 'low', 'medium', 'high' 중 선택 (기본값: high)
+          size: options?.size || '1024x1024', // '1024x1024', '1024x1536', '1536x1024' 중 선택
+          response_format: 'url'
         })
       });
 
@@ -261,7 +262,7 @@ export class ClaudeClient extends BaseLLMClient {
     }
   }
 
-  async generateImage(prompt: string): Promise<string> {
+  async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
     throw new Error('Claude는 이미지 생성을 지원하지 않습니다.');
   }
 }
@@ -320,8 +321,127 @@ export class GeminiClient extends BaseLLMClient {
     }
   }
 
-  async generateImage(prompt: string): Promise<string> {
-    throw new Error('Gemini는 현재 이미지 생성을 지원하지 않습니다.');
+  async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
+    try {
+      // Gemini 2.5 Flash Image 모델 사용 (2025년 8월 출시)
+      // 참고: Gemini는 현재 1024x1024 고정, 품질 설정 미지원
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${this.config.apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: `Create an image: ${prompt}`
+              }]
+            }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 8000
+            }
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Gemini Image API 오류: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      // Gemini의 이미지 생성 응답에서 이미지 URL 추출
+      // 실제 응답 구조는 API 문서에 따라 조정 필요
+      const imageUrl = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      
+      if (imageUrl) {
+        // Base64 데이터를 data URL로 변환
+        return `data:image/png;base64,${imageUrl}`;
+      } else {
+        throw new Error('Gemini에서 이미지 URL을 추출할 수 없습니다.');
+      }
+      
+    } catch (error) {
+      console.error('Gemini Image API 호출 실패:', error);
+      throw error;
+    }
+  }
+}
+
+export class RunwareClient extends BaseLLMClient {
+  async generateText(messages: LLMMessage[], options?: { tools?: LLMTool[] }): Promise<LLMResponse> {
+    throw new Error('Runware는 텍스트 생성을 지원하지 않습니다. 이미지 생성 전용입니다.');
+  }
+
+  async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
+    try {
+      console.log(`🚀 Runware 이미지 생성 시작 - 프롬프트: ${prompt}`);
+      
+      // 해상도 옵션을 width, height로 변환
+      let width = 1024;
+      let height = 1024;
+      
+      if (options?.size) {
+        const [w, h] = options.size.split('x').map(Number);
+        width = w;
+        height = h;
+      }
+      
+      // 품질에 따른 steps 설정 (Runware는 steps로 품질 조절)
+      let steps = 20; // 기본값
+      if (options?.quality === 'low') steps = 10;
+      else if (options?.quality === 'medium') steps = 15;
+      else if (options?.quality === 'high') steps = 25;
+
+      // UUID 생성 (간단한 방법)
+      const taskUUID = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+
+      const response = await fetch('https://api.runware.ai/v1', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.config.apiKey}`
+        },
+        body: JSON.stringify([
+          {
+            taskType: 'imageInference',
+            taskUUID: taskUUID,
+            positivePrompt: prompt,
+            width: width,
+            height: height,
+            model: 'civitai:102438@133677', // 기본 Stable Diffusion 모델
+            numberResults: 1,
+            steps: steps,
+            CFGScale: 7,
+            seed: Math.floor(Math.random() * 1000000)
+          }
+        ])
+      });
+
+      if (!response.ok) {
+        throw new Error(`Runware API 오류: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      // 응답에서 이미지 URL 추출
+      if (data.data && data.data[0] && data.data[0].imageURL) {
+        console.log(`✅ Runware 이미지 생성 완료: ${data.data[0].imageURL}`);
+        return data.data[0].imageURL;
+      } else {
+        throw new Error('Runware에서 이미지 URL을 추출할 수 없습니다.');
+      }
+      
+    } catch (error) {
+      console.error('Runware API 호출 실패:', error);
+      throw error;
+    }
   }
 }
 
@@ -342,6 +462,8 @@ export class LLMClientFactory {
         return new ClaudeClient(config);
       case 'gemini':
         return new GeminiClient(config);
+      case 'runware':
+        return new RunwareClient(config);
       default:
         throw new Error(`지원되지 않는 LLM 공급업체: ${config.provider}`);
     }

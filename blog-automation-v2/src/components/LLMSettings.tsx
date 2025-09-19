@@ -23,6 +23,7 @@ interface ProviderApiKeys {
   claude: string;
   openai: string;
   gemini: string;
+  runware: string;
   naver: string; // 네이버 검색 API 키 추가
 }
 
@@ -178,6 +179,7 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
           claude: '',
           openai: '',
           gemini: '',
+          runware: '',
           naver: ''
         };
         
@@ -260,7 +262,8 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
   const providers = [
     { id: 'claude', name: 'Claude', icon: '🟠', color: 'orange' },
     { id: 'openai', name: 'OpenAI', icon: '🔵', color: 'blue' },
-    { id: 'gemini', name: 'Gemini', icon: '🟢', color: 'green' }
+    { id: 'gemini', name: 'Gemini', icon: '🟢', color: 'green' },
+    { id: 'runware', name: 'Runware', icon: '⚡', color: 'purple' }
   ];
 
   const modelsByProvider = {
@@ -288,6 +291,12 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
       ],
       image: [
         { id: 'gemini-2.5-flash-image-preview', name: 'Gemini 2.5 Flash Image', description: '이미지 생성 및 편집', tier: 'enterprise' }
+      ]
+    },
+    runware: {
+      image: [
+        { id: 'civitai:102438@133677', name: 'Stable Diffusion XL', description: '가장 안정적인 기본 모델', tier: 'basic' },
+        { id: 'flux-1-schnell', name: 'FLUX.1 Schnell', description: '고속 생성 모델 (권장)', tier: 'premium' }
       ]
     }
   };
@@ -1046,6 +1055,10 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
                           if (activeTab === 'image' && provider.id === 'claude') {
                             return false;
                           }
+                          // 정보처리/글쓰기 탭에서는 Runware 제외 (텍스트 생성 불가)
+                          if ((activeTab === 'information' || activeTab === 'writing') && provider.id === 'runware') {
+                            return false;
+                          }
                           return true;
                         })
                         .map((provider) => (
@@ -1083,11 +1096,128 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
                     </div>
                   )}
 
-                  {/* 3단계: API 키 입력 */}
+                  {/* 3단계: 이미지 생성 옵션 (이미지 탭일 때만 표시) */}
+                  {activeTab === 'image' && settings[activeTab].provider && (
+                    <div className="mb-6">
+                      <label className="ultra-label" style={{fontSize: '13px', marginBottom: '8px'}}>
+                        3단계: 이미지 생성 옵션
+                      </label>
+                          
+                          {settings[activeTab].provider === 'openai' && (
+                            <div className="space-y-4">
+                              {/* 품질 선택 */}
+                              <div>
+                                <label className="text-xs font-medium text-gray-700 mb-2 block">품질 설정</label>
+                                <select
+                                  value={settings[activeTab].quality || 'high'}
+                                  onChange={(e) => updateSetting(activeTab, 'quality', e.target.value)}
+                                  className="ultra-select w-full" style={{padding: '8px 12px', fontSize: '13px'}}
+                                >
+                                  <option value="low">저품질 - $0.01/이미지 (빠른 생성)</option>
+                                  <option value="medium">중품질 - $0.04/이미지 (균형)</option>
+                                  <option value="high">고품질 - $0.17/이미지 (최고 품질, 권장)</option>
+                                </select>
+                              </div>
+                              
+                              {/* 해상도 선택 */}
+                              <div>
+                                <label className="text-xs font-medium text-gray-700 mb-2 block">해상도 설정</label>
+                                <select
+                                  value={settings[activeTab].size || '1024x1024'}
+                                  onChange={(e) => updateSetting(activeTab, 'size', e.target.value)}
+                                  className="ultra-select w-full" style={{padding: '8px 12px', fontSize: '13px'}}
+                                >
+                                  <option value="1024x1024">1024x1024 (정사각형)</option>
+                                  <option value="1024x1536">1024x1536 (세로형)</option>
+                                  <option value="1536x1024">1536x1024 (가로형)</option>
+                                </select>
+                              </div>
+                              
+                              {/* 예상 비용 표시 */}
+                              <div className="bg-blue-50 p-3 rounded border">
+                                <div className="text-xs text-blue-700">
+                                  <strong>💰 예상 비용:</strong>{' '}
+                                  {settings[activeTab].quality === 'low' && '$0.01'}
+                                  {settings[activeTab].quality === 'medium' && '$0.04'}
+                                  {(settings[activeTab].quality === 'high' || !settings[activeTab].quality) && '$0.17'}
+                                  /이미지 ({settings[activeTab].size || '1024x1024'})
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {settings[activeTab].provider === 'gemini' && (
+                            <div className="bg-green-50 p-3 rounded border">
+                              <div className="text-sm text-green-700 space-y-1">
+                                <div><strong>품질:</strong> 자동 최적화 (선택 불가)</div>
+                                <div><strong>해상도:</strong> 1024x1024 고정</div>
+                                <div><strong>💰 비용:</strong> $0.039/이미지 (고정)</div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {settings[activeTab].provider === 'runware' && (
+                            <div className="space-y-4">
+                              {/* 품질 선택 */}
+                              <div>
+                                <label className="text-xs font-medium text-gray-700 mb-2 block">품질 설정 (Steps)</label>
+                                <select
+                                  value={settings[activeTab].quality || 'medium'}
+                                  onChange={(e) => updateSetting(activeTab, 'quality', e.target.value)}
+                                  className="ultra-select w-full" style={{padding: '8px 12px', fontSize: '13px'}}
+                                >
+                                  <option value="low">저품질 - 10 steps (빠른 생성)</option>
+                                  <option value="medium">중품질 - 15 steps (권장)</option>
+                                  <option value="high">고품질 - 25 steps (최고 품질)</option>
+                                </select>
+                              </div>
+                              
+                              {/* 해상도 선택 */}
+                              <div>
+                                <label className="text-xs font-medium text-gray-700 mb-2 block">해상도 설정</label>
+                                <select
+                                  value={settings[activeTab].size || '1024x1024'}
+                                  onChange={(e) => updateSetting(activeTab, 'size', e.target.value)}
+                                  className="ultra-select w-full" style={{padding: '8px 12px', fontSize: '13px'}}
+                                >
+                                  <option value="1024x1024">1024x1024 (정사각형)</option>
+                                  <option value="1024x1536">1024x1536 (세로형)</option>
+                                  <option value="1536x1024">1536x1024 (가로형)</option>
+                                  <option value="512x768">512x768 (초저가 세로형)</option>
+                                  <option value="768x512">768x512 (초저가 가로형)</option>
+                                </select>
+                              </div>
+                              
+                              {/* 예상 비용 표시 */}
+                              <div className="bg-purple-50 p-3 rounded border border-purple-200">
+                                <div className="text-xs text-purple-700">
+                                  <strong>⚡ 예상 비용:</strong> $0.0006~$0.002/이미지 (초저가!)<br/>
+                                  <strong>📐 해상도:</strong> {settings[activeTab].size || '1024x1024'}<br/>
+                                  <strong>🎛️ 품질:</strong> {
+                                    settings[activeTab].quality === 'low' ? '10 steps (빠름)' :
+                                    settings[activeTab].quality === 'high' ? '25 steps (최고)' :
+                                    '15 steps (권장)'
+                                  }
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {settings[activeTab].provider === 'claude' && (
+                            <div className="bg-orange-50 p-3 rounded border border-orange-200">
+                              <div className="text-sm text-orange-700">
+                                ⚠️ Claude는 이미지 생성을 지원하지 않습니다.
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                  {/* 4단계: API 키 입력 */}
                   {settings[activeTab].provider && (
                     <div className="mb-6">
                       <label className="ultra-label" style={{fontSize: '13px', marginBottom: '8px'}}>
-                        3단계: API 키 입력
+                        4단계: API 키 입력
                       </label>
                       <div className="mb-4">
                         <input
@@ -1254,7 +1384,129 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
                             <li>6. "테스트 및 적용" 버튼 클릭</li>
                           </>
                         )}
+                        {settings[activeTab].provider === 'runware' && (
+                          <>
+                            <li>1. <a href="#" onClick={(e) => { e.preventDefault(); (window as any).electronAPI?.openExternal('https://my.runware.ai/signup'); }} className="underline cursor-pointer">Runware</a> 회원가입</li>
+                            <li>2. 이메일 인증 완료 후 로그인</li>
+                            <li>3. 대시보드에서 "API Keys" 메뉴 선택</li>
+                            <li>4. "Generate New API Key" 버튼 클릭</li>
+                            <li>5. API 키를 복사해서 위에 입력</li>
+                            <li>6. "테스트 및 적용" 버튼 클릭</li>
+                            <li className="text-purple-600 font-medium">💡 신규 가입 시 무료 크레딧 제공!</li>
+                          </>
+                        )}
                       </ol>
+                    </div>
+                  )}
+
+                  {/* 이미지 생성 모델 가격 정보 */}
+                  {activeTab === 'image' && settings[activeTab].provider && (
+                    <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        💰 이미지 생성 모델 가격 정보 (2025년 9월 기준)
+                      </h4>
+                      
+                      {settings[activeTab].provider === 'openai' && (
+                        <div className="space-y-3">
+                          <div className="bg-blue-50 p-3 rounded border-l-4 border-blue-400">
+                            <h5 className="font-medium text-blue-800 mb-2">🤖 OpenAI GPT-Image-1</h5>
+                            <div className="text-sm text-blue-700 space-y-2">
+                              <div className="bg-blue-100 p-2 rounded text-xs">
+                                <strong>지원 해상도:</strong> 1024x1024 (정사각형), 1024x1536 (세로), 1536x1024 (가로)
+                              </div>
+                              <div className="grid grid-cols-1 gap-2">
+                                <div>
+                                  <span className="font-medium">저품질 (Low):</span> $0.01/이미지 - 빠른 생성
+                                </div>
+                                <div>
+                                  <span className="font-medium">중품질 (Medium):</span> $0.04/이미지 - 균형잡힌 품질
+                                </div>
+                                <div>
+                                  <span className="font-medium">고품질 (High):</span> $0.17/이미지 - 최고 품질 (기본값)
+                                </div>
+                              </div>
+                            </div>
+                            <div className="mt-2 text-xs text-blue-600 bg-blue-100 p-2 rounded">
+                              ✨ <strong>특징:</strong> GPT-4o 기반, 정확한 텍스트 렌더링, 이미지 편집 지원<br/>
+                              🎛️ <strong>품질 선택:</strong> API 호출 시 저품질/중품질/고품질 선택 가능
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {settings[activeTab].provider === 'gemini' && (
+                        <div className="space-y-3">
+                          <div className="bg-green-50 p-3 rounded border-l-4 border-green-400">
+                            <h5 className="font-medium text-green-800 mb-2">🎨 Gemini 2.5 Flash Image (Nano-Banana)</h5>
+                            <div className="text-sm text-green-700 space-y-1">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <span className="font-medium">가격:</span> $0.039/이미지 (약 ₩52)
+                                </div>
+                                <div>
+                                  <span className="font-medium">해상도:</span> 1024x1024px
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4 mt-1">
+                                <div>
+                                  <span className="font-medium">토큰:</span> 1290 토큰/이미지
+                                </div>
+                                <div>
+                                  <span className="font-medium">OpenAI 대비:</span> <span className="text-green-600 font-bold">95% 저렴</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="mt-2 text-xs text-green-600 bg-green-100 p-2 rounded">
+                              ✨ <strong>특징:</strong> 캐릭터 일관성, 다중 이미지 블렌딩, 자연어 편집, 초저지연<br/>
+                              📏 <strong>해상도:</strong> 1024x1024 고정 (품질 설정 미지원)
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {settings[activeTab].provider === 'runware' && (
+                        <div className="space-y-3">
+                          <div className="bg-purple-50 p-3 rounded border-l-4 border-purple-400">
+                            <h5 className="font-medium text-purple-800 mb-2">⚡ Runware API (초저가!)</h5>
+                            <div className="text-sm text-purple-700 space-y-1">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <span className="font-medium">가격:</span> $0.0006~$0.002/이미지
+                                </div>
+                                <div>
+                                  <span className="font-medium">속도:</span> 초고속 생성
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4 mt-1">
+                                <div>
+                                  <span className="font-medium">모델:</span> SDXL, FLUX, CivitAI
+                                </div>
+                                <div>
+                                  <span className="font-medium">OpenAI 대비:</span> <span className="text-purple-600 font-bold">99% 저렴!</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="mt-2 text-xs text-purple-600 bg-purple-100 p-2 rounded">
+                              ⚡ <strong>특징:</strong> 업계 최저가, 초고속 Sonic Inference Engine, 다양한 모델 지원<br/>
+                              🎛️ <strong>품질 선택:</strong> Steps로 품질 조절 (10~25 steps)
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {settings[activeTab].provider === 'claude' && (
+                        <div className="bg-orange-50 p-3 rounded border-l-4 border-orange-400">
+                          <h5 className="font-medium text-orange-800 mb-2">⚠️ Claude</h5>
+                          <div className="text-sm text-orange-700">
+                            Claude는 현재 이미지 생성을 지원하지 않습니다.<br />
+                            이미지 생성이 필요한 경우 OpenAI, Gemini 또는 Runware를 선택해주세요.
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-3 text-xs text-gray-500 italic">
+                        💡 가격은 2025년 9월 기준이며, 실제 요금은 각 제공업체의 최신 요금표를 확인해주세요.
+                      </div>
                     </div>
                   )}
                 </div>

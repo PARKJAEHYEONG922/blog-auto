@@ -32,6 +32,10 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
     data.writingResult || null
   );
   
+  // 이미지 프롬프트 생성 상태 관리
+  const [isGeneratingImagePrompts, setIsGeneratingImagePrompts] = useState(false);
+  const [imagePromptsGenerated, setImagePromptsGenerated] = useState(false);
+  
   
   // 참고 검색어 관리 - 저장된 searchKeyword가 있으면 우선 사용
   const [searchKeyword, setSearchKeyword] = useState(() => {
@@ -264,8 +268,11 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
           isOpen: true,
           type: 'success',
           title: '글쓰기 완료',
-          message: '블로그 글이 성공적으로 생성되었습니다!'
+          message: '블로그 글이 성공적으로 생성되었습니다! 이제 이미지 프롬프트를 생성합니다.'
         });
+        
+        // 글쓰기 완료 후 자동으로 이미지 프롬프트 생성 시작
+        setTimeout(() => generateImagePrompts(result.content || ''), 1000);
       } else {
         setDialog({
           isOpen: true,
@@ -285,6 +292,46 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
       });
     } finally {
       setIsWriting(false);
+    }
+  };
+
+  // 이미지 프롬프트 생성 함수
+  const generateImagePrompts = async (blogContent: string) => {
+    if (!blogContent) return;
+
+    setIsGeneratingImagePrompts(true);
+    setImagePromptsGenerated(false);
+
+    try {
+      console.log('🎨 이미지 프롬프트 생성 시작');
+      
+      const imagePromptResult = await BlogWritingService.generateImagePrompts(blogContent);
+      
+      if (imagePromptResult.success && writingResult) {
+        // 기존 글쓰기 결과에 이미지 프롬프트 추가
+        const updatedResult = {
+          ...writingResult,
+          imagePrompts: imagePromptResult.imagePrompts || [],
+          usage: writingResult.usage ? {
+            promptTokens: (writingResult.usage.promptTokens || 0) + (imagePromptResult.usage?.promptTokens || 0),
+            completionTokens: (writingResult.usage.completionTokens || 0) + (imagePromptResult.usage?.completionTokens || 0),
+            totalTokens: (writingResult.usage.totalTokens || 0) + (imagePromptResult.usage?.totalTokens || 0)
+          } : imagePromptResult.usage
+        };
+        
+        setWritingResult(updatedResult);
+        setImagePromptsGenerated(true);
+        
+        console.log('✅ 이미지 프롬프트 생성 완료:', imagePromptResult.imagePrompts?.length || 0, '개');
+      } else {
+        console.error('❌ 이미지 프롬프트 생성 실패:', imagePromptResult.error);
+        // 실패해도 글쓰기 결과는 유지
+      }
+
+    } catch (error) {
+      console.error('❌ 이미지 프롬프트 생성 중 오류:', error);
+    } finally {
+      setIsGeneratingImagePrompts(false);
     }
   };
 
@@ -1009,7 +1056,11 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                               📋 복사하기
                             </button>
                             <button
-                              onClick={() => setWritingResult(null)}
+                              onClick={() => {
+                                setWritingResult(null);
+                                setIsGeneratingImagePrompts(false);
+                                setImagePromptsGenerated(false);
+                              }}
                               className="px-3 py-1 bg-gray-500 text-white text-sm rounded hover:bg-gray-600 transition-colors"
                             >
                               🔄 다시 쓰기
@@ -1024,6 +1075,7 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                             })()}
                           </div>
                         </div>
+                        
                       </div>
                     ) : (
                       <div className="bg-red-50 rounded-lg p-4 border border-red-200">
@@ -1042,6 +1094,76 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                         </button>
                       </div>
                     )}
+                  </div>
+                )}
+                
+                {/* 이미지 프롬프트 생성 카드 - 글쓰기 완료 후 표시 */}
+                {writingResult && writingResult.success && (
+                  <div className="space-y-4 mt-4">
+                    <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-purple-500 text-lg">🎨</span>
+                        <h4 className="font-semibold text-purple-800">이미지 프롬프트 생성</h4>
+                        {isGeneratingImagePrompts && (
+                          <div className="ultra-spinner ml-2" style={{width: '16px', height: '16px'}}></div>
+                        )}
+                      </div>
+                      
+                      {!isGeneratingImagePrompts && !writingResult.imagePrompts?.length && (
+                        <div className="text-purple-600 text-sm">
+                          ⏳ 잠시 후 이미지 프롬프트 생성이 시작됩니다...
+                        </div>
+                      )}
+                      
+                      {isGeneratingImagePrompts && (
+                        <div className="flex items-center gap-3 text-purple-600">
+                          <div className="text-sm">
+                            🔄 AI가 글 내용을 분석하여 이미지 프롬프트를 생성하고 있습니다...
+                          </div>
+                        </div>
+                      )}
+                      
+                      {!isGeneratingImagePrompts && writingResult.imagePrompts && writingResult.imagePrompts.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-green-500 text-lg">✅</span>
+                            <span className="font-medium text-green-800">
+                              이미지 프롬프트 생성 완료 ({writingResult.imagePrompts.length}개)
+                            </span>
+                          </div>
+                          <div className="space-y-3 max-h-64 overflow-y-auto">
+                            {writingResult.imagePrompts.map((imagePrompt, idx) => (
+                              <div key={idx} className="bg-white rounded-lg p-3 border border-purple-200">
+                                <div className="flex items-start gap-3">
+                                  <div className="flex-shrink-0 w-8 h-8 bg-purple-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                                    {imagePrompt.index}
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="font-medium text-sm text-purple-900">
+                                        📍 {imagePrompt.position}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-slate-600 mb-2">
+                                      {imagePrompt.context}
+                                    </p>
+                                    <div className="bg-slate-50 rounded p-2 border border-slate-200">
+                                      <span className="text-xs font-medium text-slate-700">AI 프롬프트:</span>
+                                      <p className="text-xs text-slate-800 mt-1">
+                                        {imagePrompt.prompt}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="mt-3 text-xs text-purple-600">
+                            💡 이 프롬프트들은 3단계에서 이미지 생성에 활용됩니다
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

@@ -10,9 +10,17 @@ export interface BlogWritingRequest extends RequiredKeywordInfo, SelectedTitleIn
   crawledBlogs?: BlogContent[]; // 크롤링된 블로그 데이터 (태그 추출용)
 }
 
+export interface ImagePrompt {
+  index: number;
+  position: string;
+  context: string;
+  prompt: string;
+}
+
 export interface BlogWritingResult {
   success: boolean;
   content?: string;
+  imagePrompts?: ImagePrompt[];
   error?: string;
   usage?: {
     promptTokens: number;
@@ -260,6 +268,105 @@ ${commonTagsSection}
 
 
   /**
+   * 이미지 프롬프트 생성용 요청 생성
+   */
+  private static generateImagePromptRequest(blogContent: string): string {
+    return `다음 블로그 글에서 (이미지) 태그들을 찾아서 각각에 맞는 DALL-E 이미지 생성 프롬프트를 JSON으로 생성해주세요:
+
+=== 블로그 글 내용 ===
+${blogContent}
+=== 글 내용 끝 ===
+
+각 (이미지) 태그 위치의 전후 문맥을 분석하여 해당 위치에 적합한 영어 프롬프트를 작성해주세요.
+
+다음 JSON 형식으로 출력해주세요:
+{
+  "imagePrompts": [
+    {
+      "index": 1,
+      "position": "이미지가 들어갈 위치의 문맥 설명 (예: 재료 준비 단계)",
+      "context": "해당 이미지 주변 글 내용 요약",
+      "prompt": "DALL-E용 영어 프롬프트 (구체적이고 시각적으로 작성)"
+    }
+  ]
+}
+
+프롬프트 작성 지침:
+- 영어로 작성
+- 구체적이고 시각적인 묘사
+- 블로그 글의 내용과 일관성 유지
+- 한국적 요소가 필요한 경우 "Korean style" 등으로 명시
+- 음식/요리 관련시 "Korean food photography style" 추가
+
+글에 (이미지) 태그가 몇 개 있든 모든 이미지에 대해 프롬프트를 생성해주세요.`;
+  }
+
+  /**
+   * 이미지 프롬프트 생성
+   */
+  static async generateImagePrompts(blogContent: string): Promise<{ success: boolean; imagePrompts?: ImagePrompt[]; error?: string; usage?: any }> {
+    try {
+      console.log('🎨 이미지 프롬프트 생성 시작');
+
+      if (!LLMClientFactory.hasWritingClient()) {
+        throw new Error('글쓰기 AI가 설정되지 않았습니다.');
+      }
+
+      const writingClient = LLMClientFactory.getWritingClient();
+      const prompt = this.generateImagePromptRequest(blogContent);
+
+      console.log('📝 이미지 프롬프트 요청 생성 완료');
+
+      const response = await writingClient.generateText([
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]);
+
+      if (!response.content || response.content.trim().length === 0) {
+        throw new Error('AI가 빈 응답을 반환했습니다.');
+      }
+
+      // JSON 파싱
+      let imagePromptsData;
+      try {
+        const cleanedResponse = response.content.trim();
+        // 마크다운 코드 블록 제거
+        const jsonContent = cleanedResponse.startsWith('```json') 
+          ? cleanedResponse.replace(/^```json\n?/, '').replace(/\n?```$/, '')
+          : cleanedResponse.startsWith('```')
+          ? cleanedResponse.replace(/^```\n?/, '').replace(/\n?```$/, '')
+          : cleanedResponse;
+        
+        imagePromptsData = JSON.parse(jsonContent);
+      } catch (parseError) {
+        console.error('JSON 파싱 실패:', parseError);
+        console.log('원본 응답:', response.content);
+        throw new Error('AI 응답을 파싱할 수 없습니다.');
+      }
+
+      const imagePrompts = imagePromptsData.imagePrompts || [];
+      
+      console.log('✅ 이미지 프롬프트 생성 완료:', imagePrompts.length + '개');
+      console.log('📊 토큰 사용량:', response.usage);
+
+      return {
+        success: true,
+        imagePrompts,
+        usage: response.usage
+      };
+
+    } catch (error) {
+      console.error('❌ 이미지 프롬프트 생성 실패:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.'
+      };
+    }
+  }
+
+  /**
    * 블로그 글쓰기 실행
    */
   static async generateBlogContent(request: BlogWritingRequest): Promise<BlogWritingResult> {
@@ -292,9 +399,12 @@ ${commonTagsSection}
       console.log('✅ 블로그 글쓰기 완료');
       console.log('📊 토큰 사용량:', response.usage);
 
+      const blogContent = response.content.trim();
+
       return {
         success: true,
-        content: response.content.trim(),
+        content: blogContent,
+        imagePrompts: [], // 이미지 프롬프트는 별도로 생성
         usage: response.usage
       };
 
