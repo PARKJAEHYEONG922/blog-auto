@@ -32,7 +32,28 @@ export interface WorkflowData {
 }
 
 const App: React.FC = () => {
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(() => {
+    // 더미 데이터가 있으면 적절한 Step으로 이동
+    try {
+      const savedData = localStorage.getItem('workflow-data');
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        if (parsed.writingResult && parsed.writingResult.success) {
+          console.log('🚀 더미 데이터 감지 - Step3으로 이동');
+          return 3; // 글쓰기 결과가 있으면 Step3로
+        } else if (parsed.collectedData && parsed.collectedData.success) {
+          console.log('🚀 더미 데이터 감지 - Step2로 이동');
+          return 2; // 수집 데이터가 있으면 Step2로
+        } else if (parsed.platform && parsed.selectedTitle) {
+          console.log('🚀 더미 데이터 감지 - Step2로 이동');
+          return 2; // 기본 설정이 있으면 Step2로
+        }
+      }
+    } catch (error) {
+      console.error('Step 결정 실패:', error);
+    }
+    return 1; // 기본값
+  });
   const [showSettings, setShowSettings] = useState(false);
   const [isBackFromStep2, setIsBackFromStep2] = useState(false);
   
@@ -73,20 +94,35 @@ const App: React.FC = () => {
     initializeAndRefresh();
   }, []); // 빈 의존성 배열로 한번만 실행
 
-  const [workflowData, setWorkflowData] = useState<WorkflowData>({
-    platform: '',
-    keyword: '',
-    subKeywords: [],
-    contentType: '',
-    reviewType: '',
-    tone: '',
-    customPrompt: '',
-    blogDescription: '',
-    selectedTitle: '',
-    generatedTitles: [],
-    titlesWithSearch: [],
-    collectedData: null,
-    generatedContent: ''
+  const [workflowData, setWorkflowData] = useState<WorkflowData>(() => {
+    // localStorage에서 더미 데이터 불러오기
+    try {
+      const savedData = localStorage.getItem('workflow-data');
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        console.log('🔄 더미 데이터 불러옴:', parsed);
+        return parsed;
+      }
+    } catch (error) {
+      console.error('더미 데이터 불러오기 실패:', error);
+    }
+    
+    // 기본값
+    return {
+      platform: '',
+      keyword: '',
+      subKeywords: [],
+      contentType: '',
+      reviewType: '',
+      tone: '',
+      customPrompt: '',
+      blogDescription: '',
+      selectedTitle: '',
+      generatedTitles: [],
+      titlesWithSearch: [],
+      collectedData: null,
+      generatedContent: ''
+    };
   });
 
   // 초기화 로직은 모두 AppInitContext로 이동

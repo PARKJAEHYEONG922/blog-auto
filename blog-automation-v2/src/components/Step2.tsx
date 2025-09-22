@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { WorkflowData } from '../App';
 import { DataCollectionEngine, DataCollectionResult, AnalysisProgress } from '../services/data-collection-engine';
 import { BlogWritingService, BlogWritingResult } from '../services/blog-writing-service';
@@ -36,7 +36,10 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
   
   // 이미지 프롬프트 생성 상태 관리
   const [isGeneratingImagePrompts, setIsGeneratingImagePrompts] = useState(false);
-  const [imagePromptsGenerated, setImagePromptsGenerated] = useState(false);
+  const [imagePromptsGenerated, setImagePromptsGenerated] = useState(() => {
+    // 글쓰기 결과에 이미지 프롬프트가 있으면 이미 생성된 것으로 처리
+    return !!(data.writingResult?.imagePrompts && data.writingResult.imagePrompts.length > 0);
+  });
   const [imagePromptError, setImagePromptError] = useState<string | null>(null);
   
   
@@ -52,6 +55,15 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
     );
     return selectedTitleData?.searchQuery || data.keyword;
   });
+  
+  // 데이터 변경 시 이미지 프롬프트 생성 상태 업데이트
+  useEffect(() => {
+    if (data.writingResult?.imagePrompts && data.writingResult.imagePrompts.length > 0) {
+      console.log('🎨 이미지 프롬프트가 이미 존재함 - 생성 완료 상태로 설정');
+      setImagePromptsGenerated(true);
+      setImagePromptError(null);
+    }
+  }, [data.writingResult?.imagePrompts]);
   
   // 다이얼로그 상태 관리
   const [dialog, setDialog] = useState<{
@@ -536,6 +548,34 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                           platform: "네이버블로그"
                         }
                       ],
+                      allYoutubeVideos: [
+                        {
+                          videoId: "test123",
+                          title: "민생지원금 2차 완벽 가이드 - 신청부터 받기까지",
+                          channelTitle: "경제정보TV",
+                          publishedAt: "2024-09-15T00:00:00Z",
+                          viewCount: 125000,
+                          duration: 480,
+                          priority: 95
+                        },
+                        {
+                          videoId: "test456",
+                          title: "민생지원금 2차 신청 실수하면 안되는 포인트 5가지",
+                          channelTitle: "재정정보채널",
+                          publishedAt: "2024-09-14T00:00:00Z",
+                          viewCount: 89000,
+                          duration: 360,
+                          priority: 88
+                        }
+                      ],
+                      selectedYoutubeVideos: [
+                        {
+                          videoId: "test123",
+                          title: "민생지원금 2차 완벽 가이드 - 신청부터 받기까지",
+                          channelTitle: "경제정보TV",
+                          relevanceReason: "민생지원금 2차 신청 방법에 대한 완벽한 가이드를 제공하여 제목과 정확히 일치"
+                        }
+                      ],
                       youtube: [
                         {
                           videoId: "test123",
@@ -594,7 +634,10 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                         blog_suggestions: ["신청 과정 상세 설명"]
                       },
                       summary: {
-                        processingTime: 12500
+                        totalSources: 5,
+                        dataQuality: 'high' as const,
+                        processingTime: 12500,
+                        recommendations: ["실제 신청 화면 캡처 추가", "소득 기준 자세한 설명"]
                       }
                     };
                     
@@ -657,6 +700,26 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
 민생지원금 2차는 경제적 부담을 덜어주는 소중한 기회입니다. 복잡한 절차 없이 간단한 온라인 신청으로 13만원의 혜택을 받을 수 있으니, 자격 요건을 확인하고 지금 바로 신청하시기 바랍니다!
 
 #민생지원금2차 #민생지원금신청 #소비쿠폰 #정부지원금 #생활지원금`,
+                      imagePrompts: [
+                        {
+                          index: 1,
+                          position: "지급 대상 자격 체크리스트 섹션",
+                          context: "민생지원금 신청 자격을 확인하는 모습",
+                          prompt: "Korean person checking eligibility criteria for government financial support on smartphone, documents and calculator on desk, clean home office setting"
+                        },
+                        {
+                          index: 2,
+                          position: "온라인 신청 상세 과정 섹션",
+                          context: "카드사 앱에서 신청하는 화면",
+                          prompt: "Mobile phone screen showing Korean government support application interface, clean modern app design, user-friendly application process"
+                        },
+                        {
+                          index: 3,
+                          position: "마무리 섹션",
+                          context: "혜택을 받는 모습을 보여주는 이미지",
+                          prompt: "Happy Korean family receiving government financial support, positive atmosphere, showing gratitude and relief, warm lighting"
+                        }
+                      ],
                       usage: {
                         totalTokens: 15420,
                         promptTokens: 8240,
@@ -1195,7 +1258,7 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                             </div>
                           </div>
                           <button
-                            onClick={() => writingResult?.blogContent && generateImagePrompts(writingResult.blogContent)}
+                            onClick={() => writingResult?.content && generateImagePrompts(writingResult.content)}
                             className="px-4 py-2 bg-purple-500 text-white text-sm rounded-lg hover:bg-purple-600 transition-colors flex items-center gap-2"
                           >
                             <span>🔄</span>
@@ -1626,7 +1689,7 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                               </p>
                               <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
                                 <span className="px-2 py-1 bg-red-100 text-red-700 rounded">
-                                  {video.channelTitle || video.channelName}
+                                  {video.channelTitle}
                                 </span>
                                 <span className="text-slate-400">
                                   조회수: {video.viewCount ? (video.viewCount >= 10000 ? `${(video.viewCount / 10000).toFixed(1)}만회` : `${video.viewCount.toLocaleString()}회`) : 'N/A'}
