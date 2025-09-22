@@ -40,7 +40,7 @@ export abstract class BaseLLMClient {
   }
 
   abstract generateText(messages: LLMMessage[], options?: { tools?: LLMTool[] }): Promise<LLMResponse>;
-  abstract generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string>; // 이미지 URL 반환
+  abstract generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '512x768' | '768x512' | '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string>; // 이미지 URL 반환
 }
 
 export class OpenAIClient extends BaseLLMClient {
@@ -83,48 +83,79 @@ export class OpenAIClient extends BaseLLMClient {
     }
   }
 
-  async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
-    try {
-      console.log(`🔵 OpenAI gpt-image-1 이미지 생성 시작`);
-      
-      const response = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'gpt-image-1',
-          prompt: prompt,
-          size: options?.size || '1024x1024', // '1024x1024', '1024x1536', '1536x1024' 중 선택
-          n: 1
-          // gpt-image-1은 항상 base64로 반환하므로 response_format 불필요
-          // quality 파라미터도 gpt-image-1에서는 지원하지 않음
-        })
-      });
+  async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '512x768' | '768x512' | '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
+    const maxRetries = 2;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔵 OpenAI gpt-image-1 이미지 생성 시작 (${attempt}/${maxRetries})`);
+        
+        // OpenAI는 제한된 해상도만 지원
+        const requestSize = options?.size || '1024x1024';
+        
+        const response = await fetch('https://api.openai.com/v1/images/generations', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.config.apiKey}`
+          },
+          body: JSON.stringify({
+            model: 'gpt-image-1',
+            prompt: prompt,
+            size: requestSize, // '1024x1024', '1024x1536', '1536x1024' 중 선택
+            n: 1
+            // gpt-image-1은 항상 base64로 반환하므로 response_format 불필요
+            // quality 파라미터도 gpt-image-1에서는 지원하지 않음
+          })
+        });
 
-      console.log(`📊 OpenAI 응답 상태: ${response.status}`);
+        console.log(`📊 OpenAI 응답 상태: ${response.status}`);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`❌ OpenAI 오류 응답:`, errorText);
-        throw new Error(`OpenAI Image API 오류: ${response.status} ${response.statusText}`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`❌ OpenAI 오류 응답 (${attempt}/${maxRetries}):`, errorText);
+          
+          if (attempt === maxRetries) {
+            throw new Error(`OpenAI Image API 오류: ${response.status} ${response.statusText}`);
+          }
+          
+          // 재시도 전 잠시 대기 (500ms * attempt)
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+          continue;
+        }
+
+        const data = await response.json();
+        console.log(`✅ OpenAI 응답 수신 완료`);
+        
+        // gpt-image-1은 base64 형태로 반환
+        const base64Image = data.data?.[0]?.b64_json;
+        if (base64Image) {
+          return `data:image/png;base64,${base64Image}`;
+        } else {
+          console.error('OpenAI 응답 구조:', JSON.stringify(data, null, 2));
+          
+          if (attempt === maxRetries) {
+            throw new Error('OpenAI에서 이미지 데이터를 받지 못했습니다.');
+          }
+          
+          // 재시도 전 잠시 대기
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+          continue;
+        }
+        
+      } catch (error) {
+        console.error(`OpenAI Image API 호출 실패 (${attempt}/${maxRetries}):`, error);
+        
+        if (attempt === maxRetries) {
+          throw error;
+        }
+        
+        // 재시도 전 잠시 대기 (500ms * attempt)
+        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
       }
-
-      const data = await response.json();
-      console.log(`✅ OpenAI 응답 수신 완료`);
-      
-      // gpt-image-1은 base64 형태로 반환
-      const base64Image = data.data?.[0]?.b64_json;
-      if (base64Image) {
-        return `data:image/png;base64,${base64Image}`;
-      } else {
-        throw new Error('OpenAI에서 이미지 데이터를 받지 못했습니다.');
-      }
-    } catch (error) {
-      console.error('OpenAI Image API 호출 실패:', error);
-      throw error;
     }
+    
+    throw new Error('OpenAI 이미지 생성에 실패했습니다.');
   }
 }
 
@@ -278,7 +309,7 @@ export class ClaudeClient extends BaseLLMClient {
     }
   }
 
-  async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
+  async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '512x768' | '768x512' | '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
     throw new Error('Claude는 이미지 생성을 지원하지 않습니다.');
   }
 }
@@ -337,54 +368,92 @@ export class GeminiClient extends BaseLLMClient {
     }
   }
 
-  async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
-    try {
-      console.log(`🟡 Gemini 2.5 Flash Image 이미지 생성 시작`);
-      
-      // Gemini 2.5 Flash Image Preview 모델 사용 (2025년 8월 출시)
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${this.config.apiKey}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: prompt // 직접 프롬프트 사용 (Create an image: 접두어 불필요)
+  async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '512x768' | '768x512' | '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
+    const maxRetries = 2;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🟡 Gemini 2.5 Flash Image 이미지 생성 시작 (${attempt}/${maxRetries})`);
+        
+        // Gemini 2.5 Flash Image Preview 모델 사용 (2025년 8월 출시)
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${this.config.apiKey}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              contents: [{
+                parts: [{
+                  text: prompt // 직접 프롬프트 사용 (Create an image: 접두어 불필요)
+                }]
               }]
-            }]
-          })
+            })
+          }
+        );
+
+        console.log(`📊 Gemini 응답 상태: ${response.status}`);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`❌ Gemini 오류 응답 (${attempt}/${maxRetries}):`, errorText);
+          
+          if (attempt === maxRetries) {
+            throw new Error(`Gemini Image API 오류: ${response.status} ${response.statusText}`);
+          }
+          
+          // 재시도 전 잠시 대기 (500ms * attempt)
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+          continue;
         }
-      );
 
-      console.log(`📊 Gemini 응답 상태: ${response.status}`);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`❌ Gemini 오류 응답:`, errorText);
-        throw new Error(`Gemini Image API 오류: ${response.status} ${response.statusText}`);
+        const data = await response.json();
+        console.log(`✅ Gemini 응답 수신 완료`);
+        
+        // Gemini 2.5 Flash Image의 실제 응답 구조에 따른 이미지 데이터 추출
+        const parts = data.candidates?.[0]?.content?.parts;
+        let imageData = null;
+        
+        if (parts && Array.isArray(parts)) {
+          // parts 배열에서 inlineData가 있는 요소 찾기
+          for (const part of parts) {
+            if (part.inlineData && part.inlineData.data) {
+              imageData = part.inlineData.data;
+              break;
+            }
+          }
+        }
+        
+        if (imageData) {
+          console.log('✅ Gemini 이미지 데이터 추출 성공');
+          // Base64 데이터를 data URL로 변환
+          return `data:image/png;base64,${imageData}`;
+        } else {
+          console.error('Gemini 응답 구조:', JSON.stringify(data, null, 2));
+          
+          if (attempt === maxRetries) {
+            throw new Error('Gemini에서 이미지 데이터를 추출할 수 없습니다.');
+          }
+          
+          // 재시도 전 잠시 대기
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+          continue;
+        }
+        
+      } catch (error) {
+        console.error(`Gemini Image API 호출 실패 (${attempt}/${maxRetries}):`, error);
+        
+        if (attempt === maxRetries) {
+          throw error;
+        }
+        
+        // 재시도 전 잠시 대기 (500ms * attempt)
+        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
       }
-
-      const data = await response.json();
-      console.log(`✅ Gemini 응답 수신 완료`);
-      
-      // Gemini 2.5 Flash Image의 실제 응답 구조에 따른 이미지 데이터 추출
-      const imageData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      
-      if (imageData) {
-        // Base64 데이터를 data URL로 변환
-        return `data:image/png;base64,${imageData}`;
-      } else {
-        console.error('Gemini 응답 구조:', JSON.stringify(data, null, 2));
-        throw new Error('Gemini에서 이미지 데이터를 추출할 수 없습니다.');
-      }
-      
-    } catch (error) {
-      console.error('Gemini Image API 호출 실패:', error);
-      throw error;
     }
+    
+    throw new Error('Gemini 이미지 생성에 실패했습니다.');
   }
 }
 
@@ -411,103 +480,130 @@ export class RunwareClient extends BaseLLMClient {
     throw new Error('Runware는 텍스트 생성을 지원하지 않습니다. 이미지 생성 전용입니다.');
   }
 
-  async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
-    try {
-      console.log(`🚀 Runware 이미지 생성 시작 - 프롬프트: ${prompt}`);
-      
-      // 해상도 옵션을 width, height로 변환
-      let width = 1024;
-      let height = 1024;
-      
-      if (options?.size) {
-        const [w, h] = options.size.split('x').map(Number);
-        width = w;
-        height = h;
-      }
-      
-      // 품질에 따른 steps 설정 (Runware는 steps로 품질 조절)
-      let steps = 20; // 기본값
-      if (options?.quality === 'low') steps = 10;
-      else if (options?.quality === 'medium') steps = 15;
-      else if (options?.quality === 'high') steps = 25;
+  async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '512x768' | '768x512' | '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
+    const maxRetries = 2;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🚀 Runware 이미지 생성 시작 (${attempt}/${maxRetries}) - 프롬프트: ${prompt}`);
+        
+        // 해상도 옵션을 width, height로 변환
+        let width = 1024;
+        let height = 1024;
+        
+        if (options?.size) {
+          const [w, h] = options.size.split('x').map(Number);
+          width = w;
+          height = h;
+        }
+        
+        // 품질에 따른 steps 설정 (Runware는 steps로 품질 조절)
+        let steps = 20; // 기본값
+        if (options?.quality === 'low') steps = 10;
+        else if (options?.quality === 'medium') steps = 15;
+        else if (options?.quality === 'high') steps = 25;
 
-      // 스타일에 따른 실제 모델 선택
-      let actualModel = this.config.model;
-      console.log(`🔍 Runware 설정 확인:`, {
-        configModel: this.config.model,
-        configStyle: this.config.style,
-        availableStyleModels: Object.keys(runwareStyleModels)
-      });
-      
-      if (this.config.style && runwareStyleModels[this.config.model as keyof typeof runwareStyleModels]) {
-        const styleModels = runwareStyleModels[this.config.model as keyof typeof runwareStyleModels];
-        actualModel = styleModels[this.config.style as keyof typeof styleModels] || this.config.model;
-        console.log(`🎨 Runware 스타일 매핑: ${this.config.model} + ${this.config.style} → ${actualModel}`);
-      } else {
-        console.log(`⚠️ 스타일 매핑 실패 - 기본 모델 사용: ${actualModel}`);
-      }
+        // 스타일에 따른 실제 모델 선택
+        let actualModel = this.config.model;
+        console.log(`🔍 Runware 설정 확인:`, {
+          configModel: this.config.model,
+          configStyle: this.config.style,
+          availableStyleModels: Object.keys(runwareStyleModels)
+        });
+        
+        if (this.config.style && runwareStyleModels[this.config.model as keyof typeof runwareStyleModels]) {
+          const styleModels = runwareStyleModels[this.config.model as keyof typeof runwareStyleModels];
+          actualModel = styleModels[this.config.style as keyof typeof styleModels] || this.config.model;
+          console.log(`🎨 Runware 스타일 매핑: ${this.config.model} + ${this.config.style} → ${actualModel}`);
+        } else {
+          console.log(`⚠️ 스타일 매핑 실패 - 기본 모델 사용: ${actualModel}`);
+        }
 
-      // UUID 생성 (간단한 방법)
-      const taskUUID = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
+        // UUID 생성 (간단한 방법)
+        const taskUUID = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+          const r = Math.random() * 16 | 0;
+          const v = c === 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
 
-      const response = await fetch('https://api.runware.ai/v1', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`
-        },
-        body: JSON.stringify([
-          {
+        const response = await fetch('https://api.runware.ai/v1', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.config.apiKey}`
+          },
+          body: JSON.stringify([
+            {
+              taskType: 'imageInference',
+              taskUUID: taskUUID,
+              positivePrompt: prompt,
+              width: width,
+              height: height,
+              model: actualModel, // 스타일에 따라 매핑된 실제 모델 사용
+              numberResults: 1,
+              steps: steps,
+              CFGScale: 7,
+              seed: Math.floor(Math.random() * 1000000)
+            }
+          ])
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`❌ Runware API 상세 오류 (${attempt}/${maxRetries}):`, errorText);
+          console.error(`📝 요청 데이터:`, JSON.stringify({
             taskType: 'imageInference',
             taskUUID: taskUUID,
             positivePrompt: prompt,
             width: width,
             height: height,
-            model: actualModel, // 스타일에 따라 매핑된 실제 모델 사용
+            model: actualModel,
             numberResults: 1,
             steps: steps,
             CFGScale: 7,
             seed: Math.floor(Math.random() * 1000000)
+          }, null, 2));
+          
+          if (attempt === maxRetries) {
+            throw new Error(`Runware API 오류: ${response.status} ${response.statusText} - ${errorText}`);
           }
-        ])
-      });
+          
+          // 재시도 전 잠시 대기 (500ms * attempt)
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+          continue;
+        }
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`❌ Runware API 상세 오류:`, errorText);
-        console.error(`📝 요청 데이터:`, JSON.stringify({
-          taskType: 'imageInference',
-          taskUUID: taskUUID,
-          positivePrompt: prompt,
-          width: width,
-          height: height,
-          model: actualModel,
-          numberResults: 1,
-          steps: steps,
-          CFGScale: 7,
-          seed: Math.floor(Math.random() * 1000000)
-        }, null, 2));
-        throw new Error(`Runware API 오류: ${response.status} ${response.statusText} - ${errorText}`);
+        const data = await response.json();
+        
+        // 응답에서 이미지 URL 추출
+        if (data.data && data.data[0] && data.data[0].imageURL) {
+          console.log(`✅ Runware 이미지 생성 완료: ${data.data[0].imageURL}`);
+          return data.data[0].imageURL;
+        } else {
+          console.error('Runware 응답 구조:', JSON.stringify(data, null, 2));
+          
+          if (attempt === maxRetries) {
+            throw new Error('Runware에서 이미지 URL을 추출할 수 없습니다.');
+          }
+          
+          // 재시도 전 잠시 대기
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+          continue;
+        }
+        
+      } catch (error) {
+        console.error(`Runware API 호출 실패 (${attempt}/${maxRetries}):`, error);
+        
+        if (attempt === maxRetries) {
+          throw error;
+        }
+        
+        // 재시도 전 잠시 대기 (500ms * attempt)
+        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
       }
-
-      const data = await response.json();
-      
-      // 응답에서 이미지 URL 추출
-      if (data.data && data.data[0] && data.data[0].imageURL) {
-        console.log(`✅ Runware 이미지 생성 완료: ${data.data[0].imageURL}`);
-        return data.data[0].imageURL;
-      } else {
-        throw new Error('Runware에서 이미지 URL을 추출할 수 없습니다.');
-      }
-      
-    } catch (error) {
-      console.error('Runware API 호출 실패:', error);
-      throw error;
     }
+    
+    throw new Error('Runware 이미지 생성에 실패했습니다.');
   }
 }
 
