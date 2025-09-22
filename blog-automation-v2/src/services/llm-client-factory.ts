@@ -3,6 +3,7 @@ export interface LLMConfig {
   provider: 'openai' | 'claude' | 'gemini' | 'runware';
   model: string;
   apiKey: string;
+  style?: string;
 }
 
 export interface LLMResponse {
@@ -397,11 +398,11 @@ const runwareStyleModels = {
     dreamy: 'civitai:1125067@1250712' // CyberRealistic (몽환적)
   },
   'flux-base': {
-    realistic: 'flux-1-schnell', // FLUX 기본 (사실적)
-    photographic: 'flux-1-dev', // FLUX Dev (사진)
-    illustration: 'flux-1-schnell', // FLUX 기본 (일러스트)
-    anime: 'flux-1-schnell', // FLUX 기본 (애니메이션)
-    dreamy: 'flux-1-pro' // FLUX Pro (몽환적)
+    realistic: 'civitai:618692@691639', // FLUX.1 Schnell
+    photographic: 'civitai:618692@691639', // FLUX.1 Schnell
+    illustration: 'civitai:618692@691639', // FLUX.1 Schnell
+    anime: 'civitai:618692@691639', // FLUX.1 Schnell
+    dreamy: 'civitai:618692@691639' // FLUX.1 Schnell
   }
 };
 
@@ -644,9 +645,12 @@ export class LLMClientFactory {
     }
     this.cachedSettings.image[key] = value;
     
-    // 실제 설정 파일에도 저장
+    // 실제 설정 파일에도 저장 (올바른 구조로)
     if ((window as any).electronAPI && typeof (window as any).electronAPI.saveSettings === 'function') {
-      (window as any).electronAPI.saveSettings(this.cachedSettings);
+      (window as any).electronAPI.saveSettings({
+        settings: this.cachedSettings,
+        testingStatus: this.cachedTestingStatus
+      });
     }
   }
 
@@ -682,9 +686,14 @@ export class LLMClientFactory {
       const savedData = await (window as any).electronAPI.loadSettings();
       console.log('✅ 저장된 LLM 설정 로드됨:', savedData);
       
-      if (savedData && savedData.settings) {
-        const settings = savedData.settings;
-        const testingStatus = savedData.testingStatus || {};
+      if (savedData) {
+        // 새로운 구조: 직접 설정들이 들어있음
+        const settings = savedData.settings || savedData; // 구 버전 호환성 유지
+        const testingStatus = savedData.testingStatus || {
+          information: { success: true },
+          writing: { success: true },
+          image: { success: true }
+        };
         
         // 설정과 테스트 상태 캐시
         this.cachedSettings = settings;
