@@ -3,6 +3,7 @@ import { WorkflowData } from '../App';
 import { ImagePrompt, BlogWritingResult } from '../services/blog-writing-service';
 import { LLMClientFactory } from '../services/llm-client-factory';
 import SimpleDialog from './SimpleDialog';
+import PublishFactory from './publish/PublishFactory';
 
 interface Step3Props {
   data: WorkflowData;
@@ -93,9 +94,91 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
   
   // 이미지 생성 옵션 상태 - API 설정에서 가져오기
   const [imageQuality, setImageQuality] = useState<'low' | 'medium' | 'high'>('high');
-  const [imageSize, setImageSize] = useState<'1024x1024' | '1024x1536' | '1536x1024'>('1536x1024');
+  const [imageSize, setImageSize] = useState<'512x768' | '768x512' | '1024x1024' | '1024x1536' | '1536x1024'>('1024x1024');
   const [imageStyle, setImageStyle] = useState<'realistic' | 'anime' | 'dreamy' | 'illustration' | 'photographic'>('realistic');
+  const [currentImageProvider, setCurrentImageProvider] = useState<string>('');
   
+  
+  // 공급자 변경 시 해상도 호환성 체크
+  useEffect(() => {
+    if (currentImageProvider === 'openai') {
+      // OpenAI는 제한된 해상도만 지원
+      const openaiSizes = ['1024x1024', '1024x1536', '1536x1024'];
+      if (!openaiSizes.includes(imageSize)) {
+        console.log(`OpenAI는 ${imageSize}를 지원하지 않아 1024x1024로 변경합니다.`);
+        setImageSize('1024x1024');
+        LLMClientFactory.updateImageSetting('size', '1024x1024');
+      }
+    }
+    // Runware는 모든 해상도 지원하므로 별도 처리 불필요
+  }, [currentImageProvider, imageSize]);
+  
+  // 이미지 저장 함수
+  const downloadImage = async (imageUrl: string, imageIndex: number) => {
+    try {
+      console.log('💾 이미지 다운로드 시작:', imageUrl);
+      
+      // 이미지를 Blob으로 변환
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      
+      // 파일명 생성 (현재 시간 + 이미지 인덱스)
+      const now = new Date();
+      const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const filename = `blog-image-${imageIndex}-${timestamp}.png`;
+      
+      // Electron API가 있는 경우 (데스크톱 앱)
+      if ((window as any).electronAPI && typeof (window as any).electronAPI.saveFile === 'function') {
+        // Blob을 ArrayBuffer로 변환
+        const arrayBuffer = await blob.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        
+        // Electron의 save dialog를 통해 저장
+        const result = await (window as any).electronAPI.saveFile({
+          defaultPath: filename,
+          filters: [
+            { name: 'PNG 이미지', extensions: ['png'] },
+            { name: '모든 파일', extensions: ['*'] }
+          ],
+          data: Array.from(uint8Array)
+        });
+        
+        if (result.success) {
+          console.log('✅ 이미지 저장 성공:', result.filePath);
+          // 성공 메시지 표시 (기존 dialog 재활용)
+          setErrorDialog({
+            isOpen: true,
+            title: '💾 저장 완료',
+            message: `이미지가 저장되었습니다:\n${result.filePath}`,
+            onClose: () => setErrorDialog({ isOpen: false, title: '', message: '', onClose: () => {} })
+          });
+        } else {
+          throw new Error(result.error || '저장이 취소되었습니다.');
+        }
+      } else {
+        // 웹 브라우저의 경우 기본 다운로드
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        console.log('✅ 웹 다운로드 시작:', filename);
+      }
+    } catch (error) {
+      console.error('❌ 이미지 저장 실패:', error);
+      setErrorDialog({
+        isOpen: true,
+        title: '💾 저장 실패',
+        message: `이미지 저장에 실패했습니다:\n${error.message}`,
+        onClose: () => setErrorDialog({ isOpen: false, title: '', message: '', onClose: () => {} })
+      });
+    }
+  };
+
   // 이미지 AI 클라이언트 상태 체크 및 옵션 동기화
   useEffect(() => {
     const checkImageClient = () => {
@@ -111,12 +194,35 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
         const imageSettings = cachedSettings?.settings?.image;
         
         if (imageSettings) {
+          // 현재 이미지 AI 공급자 저장
+          setCurrentImageProvider(imageSettings.provider || '');
+          
           // API 설정의 옵션을 Step3에 반영
           if (imageSettings.quality) {
             setImageQuality(imageSettings.quality as 'low' | 'medium' | 'high');
           }
           if (imageSettings.size) {
-            setImageSize(imageSettings.size as '1024x1024' | '1024x1536' | '1536x1024');
+            // 공급자별 지원 해상도 체크
+            if (imageSettings.provider === 'openai') {
+              // OpenAI는 제한된 해상도만 지원
+              const openaiSizes = ['1024x1024', '1024x1536', '1536x1024'];
+              if (openaiSizes.includes(imageSettings.size)) {
+                setImageSize(imageSettings.size as any);
+              } else {
+                setImageSize('1024x1024');
+              }
+            } else if (imageSettings.provider === 'runware') {
+              // Runware 해상도 - API 설정과 동일
+              const runwareSizes = ['512x768', '768x512', '1024x1024', '1024x1536', '1536x1024'];
+              if (runwareSizes.includes(imageSettings.size)) {
+                setImageSize(imageSettings.size as any);
+              } else {
+                setImageSize('1024x1024');
+              }
+            } else {
+              // 기타는 기본값 (1024x1024는 모든 공급자가 지원)
+              setImageSize('1024x1024');
+            }
           }
           if (imageSettings.style) {
             setImageStyle(imageSettings.style as 'realistic' | 'anime' | 'dreamy' | 'illustration' | 'photographic');
@@ -1110,38 +1216,6 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     console.log('이미지 생성 정지 요청됨');
   };
 
-  // 네이버 블로그 발행 (편집된 내용 그대로 전송)
-  const publishToNaverBlog = async () => {
-    setIsPublishing(true);
-    
-    try {
-      // 현재 편집된 HTML 내용 가져오기
-      const htmlContent = editorRef.current?.innerHTML || '';
-      
-      // 네이버 블로그 발행 데이터 준비
-      const blogData = {
-        title: data.selectedTitle,
-        content: htmlContent, // 네이버 호환 HTML 그대로 전송
-        tags: data.keyword ? [data.keyword] : [],
-        htmlContent: htmlContent
-      };
-      
-      console.log('네이버 블로그 발행 데이터:', blogData);
-      
-      // 실제 네이버 블로그 API 호출 (현재는 시뮬레이션)
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      alert('네이버 블로그에 성공적으로 발행되었습니다!\n\n편집된 폰트 크기와 스타일이 그대로 적용됩니다.');
-      onComplete({ 
-        generatedContent: editedContent
-      });
-    } catch (error) {
-      console.error('발행 실패:', error);
-      alert('발행에 실패했습니다. 다시 시도해주세요.');
-    } finally {
-      setIsPublishing(false);
-    }
-  };
 
   const writingResult = data.writingResult as BlogWritingResult;
   const hasContent = writingResult && writingResult.success;
@@ -1576,16 +1650,33 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                             <select
                               value={imageSize}
                               onChange={(e) => {
-                                const newSize = e.target.value as '1024x1024' | '1024x1536' | '1536x1024';
+                                const newSize = e.target.value as '512x768' | '768x512' | '1024x1024' | '1024x1536' | '1536x1024';
                                 setImageSize(newSize);
                                 // API 설정에도 반영
                                 LLMClientFactory.updateImageSetting('size', newSize);
                               }}
                               className="w-full text-xs border rounded px-2 py-1"
                             >
-                              <option value="1024x1024">정사각형 (1024×1024)</option>
-                              <option value="1024x1536">세로형 (1024×1536)</option>
-                              <option value="1536x1024">가로형 (1536×1024)</option>
+                              {/* 공급자별 해상도 옵션 - 지원하는 것만 표시 */}
+                              {currentImageProvider === 'runware' ? (
+                                <>
+                                  <option value="1024x1024">1024x1024 (정사각형)</option>
+                                  <option value="1024x1536">1024x1536 (세로형)</option>
+                                  <option value="1536x1024">1536x1024 (가로형)</option>
+                                  <option value="512x768">512x768 (초저가 세로형)</option>
+                                  <option value="768x512">768x512 (초저가 가로형)</option>
+                                </>
+                              ) : currentImageProvider === 'openai' ? (
+                                <>
+                                  <option value="1024x1024">정사각형 (1024×1024)</option>
+                                  <option value="1024x1536">세로형 (1024×1536)</option>
+                                  <option value="1536x1024">가로형 (1536×1024)</option>
+                                </>
+                              ) : (
+                                <>
+                                  <option value="1024x1024">정사각형 (1024×1024)</option>
+                                </>
+                              )}
                             </select>
                           </div>
                           
@@ -1620,13 +1711,13 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                               const cost = imageQuality === 'low' ? '$0.040' : imageQuality === 'medium' ? '$0.060' : '$0.080';
                               return `${cost}/이미지`;
                             } else if (imageClientInfo.includes('gemini')) {
-                              return '무료 (할당량 내)';
+                              return '$0.039/이미지';
                             }
                             return '비용 정보 없음';
                           })()}
                         </div>
                         <div className="mt-1 text-xs text-blue-600">
-                          💡 더 선명한 이미지를 원하면 해상도를 1536x1024로, 품질을 고품질로 설정하세요
+                          💡 더 선명한 이미지를 원하면 품질을 고품질로 설정하세요
                         </div>
                       </div>
                     )}
@@ -1669,34 +1760,14 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
             return null;
           })()}
 
-          {/* 발행 */}
-          <div className="section-card" style={{padding: '20px', marginBottom: '16px'}}>
-            <div className="section-header" style={{marginBottom: '16px'}}>
-              <div className="section-icon red" style={{width: '32px', height: '32px', fontSize: '16px'}}>🚀</div>
-              <h2 className="section-title" style={{fontSize: '16px'}}>네이버 블로그 발행</h2>
-            </div>
-            
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0">
-                  <div className="text-yellow-600 text-xl">⚠️</div>
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-medium text-yellow-800 mb-1">발행 전 확인</h4>
-                  <p className="text-sm text-yellow-700 mb-3">
-                    편집된 콘텐츠를 검토하신 후 네이버 블로그에 자동으로 발행됩니다.
-                  </p>
-                  <button
-                    onClick={publishToNaverBlog}
-                    disabled={isPublishing}
-                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                  >
-                    {isPublishing ? '🚀 발행 중...' : '📤 네이버 블로그 작성하기'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* 발행 - PublishFactory 사용 */}
+          <PublishFactory
+            platform={data.platform}
+            data={data}
+            editedContent={editedContent}
+            imageUrls={imageUrls}
+            onComplete={onComplete}
+          />
 
           {/* 네비게이션 */}
           <div className="flex justify-between pt-4">
@@ -1787,8 +1858,18 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
               );
             })()}
             
+            {/* 하단 정보 및 저장 버튼 */}
             <div className="absolute bottom-4 left-4 bg-black bg-opacity-75 text-white px-3 py-2 rounded-lg">
               📸 이미지 {previewModal.imageIndex}
+            </div>
+            
+            <div className="absolute bottom-4 right-4">
+              <button
+                onClick={() => downloadImage(previewModal.imageUrl, previewModal.imageIndex)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+              >
+                💾 저장
+              </button>
             </div>
           </div>
         </div>

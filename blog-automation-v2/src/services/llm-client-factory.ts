@@ -45,42 +45,67 @@ export abstract class BaseLLMClient {
 
 export class OpenAIClient extends BaseLLMClient {
   async generateText(messages: LLMMessage[], options?: { tools?: LLMTool[] }): Promise<LLMResponse> {
-    try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`
-        },
-        body: JSON.stringify({
-          model: this.config.model,
-          messages: messages.map(msg => ({
-            role: msg.role,
-            content: msg.content
-          })),
-          temperature: 0.7,
-          max_tokens: 2000
-        })
-      });
+    const maxRetries = 2;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔵 OpenAI ${this.config.model} 텍스트 생성 시작 (${attempt}/${maxRetries})`);
+        
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.config.apiKey}`
+          },
+          body: JSON.stringify({
+            model: this.config.model,
+            messages: messages.map(msg => ({
+              role: msg.role,
+              content: msg.content
+            })),
+            temperature: 0.7,
+            max_tokens: 2000
+          })
+        });
 
-      if (!response.ok) {
-        throw new Error(`OpenAI API 오류: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      return {
-        content: data.choices[0]?.message?.content || '',
-        usage: {
-          promptTokens: data.usage?.prompt_tokens || 0,
-          completionTokens: data.usage?.completion_tokens || 0,
-          totalTokens: data.usage?.total_tokens || 0
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`❌ OpenAI 오류 응답 (${attempt}/${maxRetries}):`, errorText);
+          
+          if (attempt === maxRetries) {
+            throw new Error(`OpenAI API 오류: ${response.status} ${response.statusText}`);
+          }
+          
+          // 재시도 전 잠시 대기 (500ms * attempt)
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+          continue;
         }
-      };
-    } catch (error) {
-      console.error('OpenAI API 호출 실패:', error);
-      throw error;
+
+        const data = await response.json();
+        console.log(`✅ OpenAI 응답 수신 완료`);
+        
+        return {
+          content: data.choices[0]?.message?.content || '',
+          usage: {
+            promptTokens: data.usage?.prompt_tokens || 0,
+            completionTokens: data.usage?.completion_tokens || 0,
+            totalTokens: data.usage?.total_tokens || 0
+          }
+        };
+        
+      } catch (error) {
+        console.error(`OpenAI API 호출 실패 (${attempt}/${maxRetries}):`, error);
+        
+        if (attempt === maxRetries) {
+          throw error;
+        }
+        
+        // 재시도 전 잠시 대기 (500ms * attempt)
+        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+      }
     }
+    
+    throw new Error('OpenAI 텍스트 생성에 실패했습니다.');
   }
 
   async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '512x768' | '768x512' | '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
@@ -316,56 +341,81 @@ export class ClaudeClient extends BaseLLMClient {
 
 export class GeminiClient extends BaseLLMClient {
   async generateText(messages: LLMMessage[], options?: { tools?: LLMTool[] }): Promise<LLMResponse> {
-    try {
-      // 메시지를 Gemini 형식으로 변환
-      let textContent = '';
-      for (const message of messages) {
-        if (message.role === 'system') {
-          textContent += `System: ${message.content}\n\n`;
-        } else if (message.role === 'user') {
-          textContent += `User: ${message.content}`;
+    const maxRetries = 2;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🟡 Gemini ${this.config.model} 텍스트 생성 시작 (${attempt}/${maxRetries})`);
+        
+        // 메시지를 Gemini 형식으로 변환
+        let textContent = '';
+        for (const message of messages) {
+          if (message.role === 'system') {
+            textContent += `System: ${message.content}\n\n`;
+          } else if (message.role === 'user') {
+            textContent += `User: ${message.content}`;
+          }
         }
+
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${this.config.model}:generateContent?key=${this.config.apiKey}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              contents: [{
+                parts: [{
+                  text: textContent
+                }]
+              }],
+              generationConfig: {
+                maxOutputTokens: 8000,
+                temperature: 0.7
+              }
+            })
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`❌ Gemini 오류 응답 (${attempt}/${maxRetries}):`, errorText);
+          
+          if (attempt === maxRetries) {
+            throw new Error(`Gemini API 오류: ${response.status} ${response.statusText}`);
+          }
+          
+          // 재시도 전 잠시 대기 (500ms * attempt)
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+          continue;
+        }
+
+        const data = await response.json();
+        console.log(`✅ Gemini 응답 수신 완료`);
+        
+        return {
+          content: data.candidates[0]?.content?.parts[0]?.text || '',
+          usage: {
+            promptTokens: data.usageMetadata?.promptTokenCount || 0,
+            completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
+            totalTokens: data.usageMetadata?.totalTokenCount || 0
+          }
+        };
+        
+      } catch (error) {
+        console.error(`Gemini API 호출 실패 (${attempt}/${maxRetries}):`, error);
+        
+        if (attempt === maxRetries) {
+          throw error;
+        }
+        
+        // 재시도 전 잠시 대기 (500ms * attempt)
+        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
       }
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${this.config.model}:generateContent?key=${this.config.apiKey}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: textContent
-              }]
-            }],
-            generationConfig: {
-              maxOutputTokens: 8000,
-              temperature: 0.7
-            }
-          })
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Gemini API 오류: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      return {
-        content: data.candidates[0]?.content?.parts[0]?.text || '',
-        usage: {
-          promptTokens: data.usageMetadata?.promptTokenCount || 0,
-          completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
-          totalTokens: data.usageMetadata?.totalTokenCount || 0
-        }
-      };
-    } catch (error) {
-      console.error('Gemini API 호출 실패:', error);
-      throw error;
     }
+    
+    throw new Error('Gemini 텍스트 생성에 실패했습니다.');
   }
 
   async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '512x768' | '768x512' | '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
