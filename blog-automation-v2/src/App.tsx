@@ -72,6 +72,7 @@ const App: React.FC = () => {
 
     initializeAndRefresh();
   }, []); // 빈 의존성 배열로 한번만 실행
+
   const [workflowData, setWorkflowData] = useState<WorkflowData>({
     platform: '',
     keyword: '',
@@ -89,6 +90,8 @@ const App: React.FC = () => {
   });
 
   // 초기화 로직은 모두 AppInitContext로 이동
+
+
 
   const updateWorkflowData = (updates: Partial<WorkflowData>) => {
     setWorkflowData(prev => {

@@ -66,9 +66,18 @@ export interface DataCollectionResult {
   crawledBlogs: BlogContent[]; // 크롤링된 블로그 본문 데이터
   contentSummary?: BlogAnalysisResult; // 블로그 콘텐츠 분석 결과 (JSON)
   contentSummaryRaw?: string; // 블로그 콘텐츠 분석 원본 텍스트 (호환성용)
+  
+  // 유튜브 데이터 구조
+  allYoutubeVideos: PrioritizedVideo[]; // 전체 50개 유튜브 영상 (API 수집)
+  selectedYoutubeVideos: SelectedYouTubeVideo[]; // AI가 선별한 상위 10개
+  youtube: CollectedYouTubeData[]; // 최종 자막 추출된 3개
   youtubeAnalysis?: YouTubeAnalysisResult; // YouTube 자막 분석 결과 (JSON)
   youtubeAnalysisRaw?: string; // YouTube 자막 분석 원본 텍스트 (호환성용)
-  youtube: CollectedYouTubeData[];
+  
+  // 수집 통계
+  totalBlogsCollected?: number; // 실제 수집된 블로그 개수
+  totalYoutubeCollected?: number; // 실제 수집된 유튜브 개수
+  
   summary: {
     totalSources: number;
     dataQuality: 'high' | 'medium' | 'low';
@@ -99,6 +108,74 @@ export class DataCollectionEngine {
 
   constructor(progressCallback?: (progress: AnalysisProgress[]) => void) {
     this.progressCallback = progressCallback;
+  }
+
+  // 유튜브 원시 자막 데이터 파싱 함수
+  private parseYouTubeRawSubtitles(rawText: string): string {
+    try {
+      console.log(`🔍 [data-collection-engine] 원시 데이터 파싱 시작 (${rawText.length}자)`);
+      
+      const subtitleTexts: string[] = [];
+      
+      // 방법 1: 간단한 split 방식으로 segs utf8 찾기
+      const segments = rawText.split('segs utf8');
+      console.log(`🔍 [data-collection-engine] segs utf8로 분할: ${segments.length}개 세그먼트`);
+      
+      for (let i = 1; i < segments.length; i++) { // 첫 번째는 메타데이터이므로 제외
+        let segment = segments[i].trim();
+        
+        // 다음 tStartMs까지만 자르기
+        const nextTimestamp = segment.indexOf('tStartMs');
+        if (nextTimestamp > 0) {
+          segment = segment.substring(0, nextTimestamp);
+        }
+        
+        // 앞뒤 공백, 쉼표 제거
+        segment = segment.replace(/^[\s,]+|[\s,]+$/g, '');
+        
+        if (segment && segment.length > 1) {
+          subtitleTexts.push(segment);
+          console.log(`🔍 [data-collection-engine] 세그먼트 ${i}: "${segment}"`);
+        }
+      }
+      
+      // 방법 2: 세그먼트가 없으면 한국어 텍스트 직접 추출
+      if (subtitleTexts.length === 0) {
+        console.log(`🔍 [data-collection-engine] 대체 방법: 한국어 텍스트 직접 추출`);
+        
+        // 한국어 문장 패턴 추출 (더 넓은 범위)
+        const koreanPattern = /[가-힣][가-힣\s\d?!.,()~]+[가-힣?!.]/g;
+        const matches = rawText.match(koreanPattern);
+        
+        if (matches) {
+          console.log(`🔍 [data-collection-engine] 한국어 패턴 ${matches.length}개 발견`);
+          for (const match of matches) {
+            const cleaned = match.trim();
+            // 메타데이터 키워드가 포함되지 않은 것만
+            if (cleaned.length > 3 && 
+                !cleaned.includes('wireMagic') && 
+                !cleaned.includes('tStartMs') &&
+                !cleaned.includes('dDurationMs') &&
+                !cleaned.includes('pb3')) {
+              subtitleTexts.push(cleaned);
+              console.log(`🔍 [data-collection-engine] 한국어 텍스트: "${cleaned}"`);
+            }
+          }
+        }
+      }
+      
+      // 결과 조합
+      const result = subtitleTexts.join(' ').replace(/\s+/g, ' ').trim();
+      
+      console.log(`📝 [data-collection-engine] 최종 결과: ${subtitleTexts.length}개 세그먼트, ${result.length}자`);
+      console.log(`📝 [data-collection-engine] 최종 텍스트: ${result.substring(0, 150)}...`);
+      
+      return result;
+      
+    } catch (error) {
+      console.error('❌ [data-collection-engine] 원시 자막 데이터 파싱 실패:', error);
+      return rawText; // 실패 시 원본 반환
+    }
   }
 
   async collectAndAnalyze(request: DataCollectionRequest): Promise<DataCollectionResult> {
@@ -152,11 +229,29 @@ export class DataCollectionEngine {
         crawledBlogs, // 크롤링된 블로그 본문 데이터
         contentSummary: contentSummaryResult, // 블로그 콘텐츠 분석 결과 (JSON)
         contentSummaryRaw, // 블로그 콘텐츠 분석 원본 텍스트
+        
+        // 유튜브 데이터 구조 완성
+        allYoutubeVideos: youtube.map(video => ({
+          videoId: video.videoId,
+          title: video.title,
+          channelTitle: video.channelName,
+          publishedAt: video.publishedAt,
+          viewCount: video.viewCount,
+          duration: video.duration,
+          subscriberCount: video.subscriberCount,
+          priority: video.priority
+        })), // 전체 50개 유튜브 영상 (API 수집)
+        selectedYoutubeVideos: selectedBlogs.selectedVideos, // AI가 선별한 상위 10개
+        youtube: enrichedYouTube, // 최종 자막 추출된 3개
         youtubeAnalysis: youtubeAnalysisResult, // YouTube 자막 분석 결과 (JSON)
         youtubeAnalysisRaw, // YouTube 자막 분석 원본 텍스트
-        youtube: enrichedYouTube, // AI가 선별한 상위 3개 YouTube (자막 추출 완료)
+        
+        // 수집 통계
+        totalBlogsCollected: blogs.length, // 실제 수집된 블로그 개수
+        totalYoutubeCollected: youtube.length, // 실제 수집된 유튜브 개수
+        
         summary: {
-          totalSources: blogs.length + enrichedYouTube.length,
+          totalSources: blogs.length + youtube.length, // 실제 수집된 전체 개수
           dataQuality: crawledBlogs.filter(b => b.success).length >= 2 ? 'high' : crawledBlogs.filter(b => b.success).length >= 1 ? 'medium' : 'low',
           processingTime,
           recommendations: [
@@ -556,16 +651,11 @@ export class DataCollectionEngine {
           // 자막 텍스트 정리 (JSON 형태나 이상한 데이터 제거)
           let cleanSubtitleText = fullSubtitleText;
           
-          // JSON 형태의 데이터인 경우 정리
-          if (cleanSubtitleText.includes('"wireMagic"') || cleanSubtitleText.includes('"pens"')) {
-            console.warn(`⚠️ JSON 형태의 자막 데이터 발견, 정리 중...`);
-            // JSON 부분 제거하고 실제 텍스트만 추출 시도
-            const textMatches = cleanSubtitleText.match(/[가-힣a-zA-Z0-9\s.,!?]+/g);
-            if (textMatches && textMatches.length > 0) {
-              cleanSubtitleText = textMatches.join(' ').trim();
-            } else {
-              cleanSubtitleText = '자막 추출 실패 (데이터 형식 오류)';
-            }
+          // 유튜브 원시 자막 데이터 파싱
+          if (cleanSubtitleText.includes('wireMagic') || cleanSubtitleText.includes('tStartMs') || cleanSubtitleText.includes('segs utf8')) {
+            console.warn(`⚠️ 유튜브 원시 자막 데이터 발견, 파싱 중... (${cleanSubtitleText.length}자)`);
+            cleanSubtitleText = this.parseYouTubeRawSubtitles(cleanSubtitleText);
+            console.log(`✅ 원시 자막 파싱 완료: ${cleanSubtitleText.length}자`);
           }
           
           // 너무 짧은 경우 처리

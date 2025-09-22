@@ -11,6 +11,8 @@ interface LLMConfig {
   provider: string;
   model: string;
   apiKey: string;
+  quality?: string;
+  size?: string;
 }
 
 interface LLMSettings {
@@ -57,6 +59,7 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
     claude: '',
     openai: '',
     gemini: '',
+    runware: '',
     naver: ''
   });
 

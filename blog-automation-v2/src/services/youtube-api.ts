@@ -78,8 +78,8 @@ export class YouTubeAPI {
   
   // 자막 추출 빈도 제어를 위한 대기 시간 관리
   private lastSubtitleRequest: number = 0;
-  private subtitleDelayMs: number = 3000; // 기본 3초
-  private maxDelayMs: number = 30000; // 최대 30초
+  private subtitleDelayMs: number = 5000; // 기본 5초 (증가)
+  private maxDelayMs: number = 60000; // 최대 60초 (증가)
   private consecutiveErrors: number = 0;
 
   async loadConfig(): Promise<void> {
@@ -389,10 +389,14 @@ export class YouTubeAPI {
     const blockedKeywords = [
       'automated queries',
       'Sorry...',
+      'We\'re sorry',
       'protect our users',
       "can't process your request",
       'network may be sending',
-      'verdana, arial, sans-serif'
+      'verdana, arial, sans-serif',
+      'GoogleSorry',
+      'Google Help for more information',
+      'Google Home'
     ];
     
     return blockedKeywords.some(keyword => 
@@ -403,12 +407,14 @@ export class YouTubeAPI {
   // 대기 시간 계산 (에러 횟수에 따라 지수적 증가)
   private calculateDelay(): number {
     if (this.consecutiveErrors === 0) {
-      return this.subtitleDelayMs; // 기본 3초
+      return this.subtitleDelayMs; // 기본 5초
     }
     
-    // 지수적 백오프: 3초 -> 6초 -> 12초 -> 24초 -> 30초(최대)
-    const exponentialDelay = this.subtitleDelayMs * Math.pow(2, this.consecutiveErrors);
-    return Math.min(exponentialDelay, this.maxDelayMs);
+    // 지수적 백오프: 5초 -> 10초 -> 20초 -> 40초 -> 60초(최대) + 랜덤 지터
+    const baseDelay = this.subtitleDelayMs * Math.pow(2, this.consecutiveErrors);
+    const jitter = Math.random() * 2000; // 0~2초 랜덤 추가
+    const delayWithJitter = baseDelay + jitter;
+    return Math.min(delayWithJitter, this.maxDelayMs);
   }
 
   // 요청 전 대기 처리

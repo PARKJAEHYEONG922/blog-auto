@@ -31,10 +31,13 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
   const [writingResult, setWritingResult] = useState<BlogWritingResult | null>(
     data.writingResult || null
   );
+  const [retryCount, setRetryCount] = useState(0);
+  const [maxRetries] = useState(2); // 최대 재시도 횟수
   
   // 이미지 프롬프트 생성 상태 관리
   const [isGeneratingImagePrompts, setIsGeneratingImagePrompts] = useState(false);
   const [imagePromptsGenerated, setImagePromptsGenerated] = useState(false);
+  const [imagePromptError, setImagePromptError] = useState<string | null>(null);
   
   
   // 참고 검색어 관리 - 저장된 searchKeyword가 있으면 우선 사용
@@ -217,6 +220,37 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
     }
   };
 
+  // 자동 재시도 함수
+  const handleWritingError = async (error: string) => {
+    console.error('❌ 글쓰기 실패:', error);
+    
+    if (retryCount < maxRetries) {
+      const nextRetry = retryCount + 1;
+      setRetryCount(nextRetry);
+      
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: `글쓰기 실패 (${nextRetry}/${maxRetries + 1})`,
+        message: `글쓰기가 실패했습니다. 5초 후 자동으로 재시도합니다.\n\n오류: ${error}`,
+        onConfirm: () => {
+          setTimeout(() => {
+            startWriting();
+          }, 5000);
+        }
+      });
+    } else {
+      // 최대 재시도 횟수 초과
+      setDialog({
+        isOpen: true,
+        type: 'error',
+        title: '글쓰기 최종 실패',
+        message: `${maxRetries + 1}회 시도 후에도 글쓰기가 실패했습니다.\n\n최종 오류: ${error}\n\n수동으로 재시도하거나 설정을 확인해주세요.`
+      });
+      setRetryCount(0); // 재시도 카운터 리셋
+    }
+  };
+
   // 글쓰기 실행
   const startWriting = async () => {
     if (!collectedData) {
@@ -272,64 +306,70 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
         });
         
         // 글쓰기 완료 후 자동으로 이미지 프롬프트 생성 시작
-        setTimeout(() => generateImagePrompts(result.content || ''), 1000);
+        setTimeout(() => {
+          // 현재 글쓰기 결과를 함께 전달
+          if (result.content) {
+            generateImagePrompts(result.content, result);
+          }
+        }, 1000);
       } else {
-        setDialog({
-          isOpen: true,
-          type: 'error',
-          title: '글쓰기 실패',
-          message: `글쓰기 중 오류가 발생했습니다:\n${result.error}`
-        });
+        // 실패 시 자동 재시도 로직 호출
+        await handleWritingError(result.error || '알 수 없는 오류');
       }
 
     } catch (error) {
-      console.error('❌ 글쓰기 실패:', error);
-      setDialog({
-        isOpen: true,
-        type: 'error',
-        title: '글쓰기 오류',
-        message: `글쓰기 중 예상치 못한 오류가 발생했습니다:\n${error.message || error}`
-      });
+      // 예외 발생 시 자동 재시도 로직 호출
+      await handleWritingError(error.message || error.toString());
     } finally {
       setIsWriting(false);
     }
   };
 
   // 이미지 프롬프트 생성 함수
-  const generateImagePrompts = async (blogContent: string) => {
+  const generateImagePrompts = async (blogContent: string, currentWritingResult?: BlogWritingResult) => {
     if (!blogContent) return;
 
     setIsGeneratingImagePrompts(true);
     setImagePromptsGenerated(false);
+    setImagePromptError(null); // 이전 에러 초기화
 
     try {
       console.log('🎨 이미지 프롬프트 생성 시작');
       
       const imagePromptResult = await BlogWritingService.generateImagePrompts(blogContent);
       
-      if (imagePromptResult.success && writingResult) {
-        // 기존 글쓰기 결과에 이미지 프롬프트 추가
-        const updatedResult = {
-          ...writingResult,
-          imagePrompts: imagePromptResult.imagePrompts || [],
-          usage: writingResult.usage ? {
-            promptTokens: (writingResult.usage.promptTokens || 0) + (imagePromptResult.usage?.promptTokens || 0),
-            completionTokens: (writingResult.usage.completionTokens || 0) + (imagePromptResult.usage?.completionTokens || 0),
-            totalTokens: (writingResult.usage.totalTokens || 0) + (imagePromptResult.usage?.totalTokens || 0)
-          } : imagePromptResult.usage
-        };
+      if (imagePromptResult.success) {
+        // 현재 글쓰기 결과 또는 상태에서 가져오기
+        const currentResult = currentWritingResult || writingResult;
         
-        setWritingResult(updatedResult);
-        setImagePromptsGenerated(true);
-        
-        console.log('✅ 이미지 프롬프트 생성 완료:', imagePromptResult.imagePrompts?.length || 0, '개');
+        if (currentResult) {
+          // 기존 글쓰기 결과에 이미지 프롬프트 추가
+          const updatedResult = {
+            ...currentResult,
+            imagePrompts: imagePromptResult.imagePrompts || [],
+            usage: currentResult.usage ? {
+              promptTokens: (currentResult.usage.promptTokens || 0) + (imagePromptResult.usage?.promptTokens || 0),
+              completionTokens: (currentResult.usage.completionTokens || 0) + (imagePromptResult.usage?.completionTokens || 0),
+              totalTokens: (currentResult.usage.totalTokens || 0) + (imagePromptResult.usage?.totalTokens || 0)
+            } : imagePromptResult.usage
+          };
+          
+          setWritingResult(updatedResult);
+          setImagePromptsGenerated(true);
+          
+          console.log('✅ 이미지 프롬프트 생성 완료:', imagePromptResult.imagePrompts?.length || 0, '개');
+        } else {
+          console.error('❌ 글쓰기 결과가 없어 이미지 프롬프트를 추가할 수 없습니다.');
+          setImagePromptError('글쓰기 결과가 없어 이미지 프롬프트를 추가할 수 없습니다.');
+        }
       } else {
         console.error('❌ 이미지 프롬프트 생성 실패:', imagePromptResult.error);
-        // 실패해도 글쓰기 결과는 유지
+        setImagePromptError(imagePromptResult.error || '이미지 프롬프트 생성에 실패했습니다.');
       }
 
     } catch (error) {
       console.error('❌ 이미지 프롬프트 생성 중 오류:', error);
+      setImagePromptError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.');
     } finally {
       setIsGeneratingImagePrompts(false);
     }
@@ -703,15 +743,18 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                   <div className="grid grid-cols-3 gap-6 text-center">
                     <div>
                       <div className="text-2xl font-bold text-blue-600">
-                        {collectedData.blogs.length + collectedData.youtube.length}
+                        {collectedData.crawledBlogs.filter(b => b.success).length + collectedData.youtube.length}
                       </div>
                       <div className="text-xs text-slate-600">총 데이터소스</div>
                       <div className="text-xs text-slate-400 mt-1">
-                        블로그 {collectedData.blogs.length} + 유튜브 {collectedData.youtube.length}
+                        블로그 {collectedData.crawledBlogs.filter(b => b.success).length}개 + 유튜브 {collectedData.youtube.length}개
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        최종 분석 완료
                       </div>
                     </div>
                     <div>
-                      <div className="text-2xl font-bold text-green-600">{collectedData.blogs.length}</div>
+                      <div className="text-2xl font-bold text-green-600">{collectedData.crawledBlogs.filter(b => b.success).length}</div>
                       <div className="text-xs text-slate-600 mb-2">블로그 분석</div>
                       <button
                         onClick={() => setShowBlogDetails(true)}
@@ -1086,12 +1129,39 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                         <p className="text-red-700 text-sm mb-3">
                           {writingResult.error}
                         </p>
-                        <button
-                          onClick={() => setWritingResult(null)}
-                          className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors"
-                        >
-                          🔄 다시 시도
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setWritingResult(null);
+                              setRetryCount(0); // 재시도 카운터 리셋
+                              // 실패 후 재시도 시 바로 글쓰기 시작
+                              setTimeout(() => startWriting(), 100);
+                            }}
+                            className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors"
+                          >
+                            🔄 즉시 재시도
+                          </button>
+                          <button
+                            onClick={() => {
+                              // 분석 데이터와 이전 설정은 유지하고 글쓰기 결과만 초기화
+                              setWritingResult(null);
+                              setRetryCount(0); // 재시도 카운터 리셋
+                              setIsGeneratingImagePrompts(false);
+                              setImagePromptsGenerated(false);
+                              setImagePromptError(null);
+                              
+                              // 글쓰기 다시 시작
+                              setTimeout(() => {
+                                if (collectedData) {
+                                  startWriting();
+                                }
+                              }, 500);
+                            }}
+                            className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors"
+                          >
+                            🔄 정보유지 재시도
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1109,9 +1179,28 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                         )}
                       </div>
                       
-                      {!isGeneratingImagePrompts && !writingResult.imagePrompts?.length && (
+                      {!isGeneratingImagePrompts && !writingResult.imagePrompts?.length && !imagePromptError && (
                         <div className="text-purple-600 text-sm">
                           ⏳ 잠시 후 이미지 프롬프트 생성이 시작됩니다...
+                        </div>
+                      )}
+                      
+                      {!isGeneratingImagePrompts && imagePromptError && (
+                        <div className="space-y-3">
+                          <div className="flex items-start gap-2 text-red-600 text-sm">
+                            <span className="text-red-500 text-lg">❌</span>
+                            <div>
+                              <div className="font-medium">이미지 프롬프트 생성 실패</div>
+                              <div className="text-xs mt-1 text-red-500">{imagePromptError}</div>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => writingResult?.blogContent && generateImagePrompts(writingResult.blogContent)}
+                            className="px-4 py-2 bg-purple-500 text-white text-sm rounded-lg hover:bg-purple-600 transition-colors flex items-center gap-2"
+                          >
+                            <span>🔄</span>
+                            <span>다시 시도</span>
+                          </button>
                         </div>
                       )}
                       
@@ -1399,50 +1488,56 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
               
-              {/* 선별된 유튜브 영상 */}
-              {collectedData.youtube.length > 0 && (
+              {/* 자막 추출된 유튜브 영상 - 맨 위에 펼쳐진 상태 */}
+              {collectedData.youtube && collectedData.youtube.filter(video => video.summary && video.summary.length > 100).length > 0 && (
                 <div className="section-card" style={{padding: '16px'}}>
                   <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                    <span>🎯</span>
-                    <span>AI가 선별한 유튜브 영상 ({collectedData.youtube.length}개)</span>
+                    <span>🎬</span>
+                    <span>자막 추출된 유튜브 영상 ({collectedData.youtube.filter(video => video.summary && video.summary.length > 100).length}개 성공)</span>
                   </h4>
                   <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {collectedData.youtube.map((video, idx: number) => (
-                      <div key={idx} className="border border-slate-200 rounded-lg p-4 bg-red-50 border-red-200">
+                    {collectedData.youtube.filter(video => video.summary && video.summary.length > 100).map((video, idx: number) => (
+                      <div key={idx} className="border rounded-lg p-3 bg-red-50 border-red-200">
                         <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                          <div className="flex-shrink-0 w-8 h-8 text-white rounded-full flex items-center justify-center text-sm font-bold bg-red-500">
                             {idx + 1}
                           </div>
                           <div className="flex-1">
-                            <p className="font-medium text-sm text-slate-900 leading-relaxed mb-2">{video.title}</p>
-                            <div className="grid grid-cols-2 gap-3 mb-2 text-xs">
-                              <div>
-                                <span className="font-medium text-red-700">채널:</span>
-                                <span className="text-red-600 ml-1">{video.channelName}</span>
+                            <p className="font-medium text-sm text-slate-900 leading-relaxed mb-2">
+                              {video.title}
+                            </p>
+                            
+                            <div className="mt-2">
+                              <div className="grid grid-cols-4 gap-3 mb-2 text-xs">
+                                <div>
+                                  <span className="font-medium text-red-700">채널:</span>
+                                  <span className="text-red-600 ml-1">{video.channelName}</span>
+                                </div>
+                                <div>
+                                  <span className="font-medium text-red-700">길이:</span>
+                                  <span className="text-red-600 ml-1">{Math.floor(video.duration / 60)}분</span>
+                                </div>
+                                <div>
+                                  <span className="font-medium text-red-700">조회수:</span>
+                                  <span className="text-red-600 ml-1">{video.viewCount ? (video.viewCount >= 10000 ? `${(video.viewCount / 10000).toFixed(1)}만회` : `${video.viewCount.toLocaleString()}회`) : 'N/A'}</span>
+                                </div>
+                                <div>
+                                  <span className="font-medium text-red-700">자막:</span>
+                                  <span className="text-red-600 ml-1">{video.summary ? `${video.summary.length.toLocaleString()}자` : '없음'}</span>
+                                </div>
                               </div>
-                              <div>
-                                <span className="font-medium text-red-700">길이:</span>
-                                <span className="text-red-600 ml-1">{Math.floor(video.duration / 60)}분</span>
-                              </div>
-                              <div>
-                                <span className="font-medium text-red-700">조회수:</span>
-                                <span className="text-red-600 ml-1">{video.viewCount ? (video.viewCount >= 10000 ? `${(video.viewCount / 10000).toFixed(1)}만회` : `${video.viewCount.toLocaleString()}회`) : 'N/A'}</span>
-                              </div>
-                              <div>
-                                <span className="font-medium text-red-700">자막:</span>
-                                <span className="text-red-600 ml-1">{video.summary && video.summary.length > 100 ? `${video.summary.length.toLocaleString()}자` : '없음'}</span>
-                              </div>
+                              {video.summary && (
+                                <div className="mt-2 p-2 bg-white border border-red-200 rounded text-xs">
+                                  <span className="font-medium text-red-700">자막 미리보기:</span>
+                                  <p className="text-slate-600 mt-1">
+                                    {video.summary.substring(0, 300)}
+                                    {video.summary.length > 300 && '...'}
+                                  </p>
+                                </div>
+                              )}
                             </div>
-                            {video.summary && (
-                              <div className="mt-2 p-2 bg-white border border-red-200 rounded text-xs">
-                                <span className="font-medium text-red-700">자막 내용:</span>
-                                <p className="text-slate-600 mt-1">
-                                  {video.summary.substring(0, 500)}
-                                  {video.summary.length > 500 && '...'}
-                                </p>
-                              </div>
-                            )}
-                            <div className="mt-2 text-xs">
+                            
+                            <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
                               <a 
                                 href={`https://www.youtube.com/watch?v=${video.videoId}`}
                                 target="_blank" 
@@ -1457,6 +1552,100 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* AI가 선별한 유튜브 영상 - 접힌 상태 */}
+              {collectedData.selectedYoutubeVideos && collectedData.selectedYoutubeVideos.length > 0 && (
+                <div className="section-card" style={{padding: '16px'}}>
+                  <details>
+                    <summary className="font-semibold text-slate-900 mb-3 flex items-center gap-2 cursor-pointer">
+                      <span>🤖</span>
+                      <span>AI가 선별한 유튜브 영상 ({collectedData.selectedYoutubeVideos.length}개)</span>
+                    </summary>
+                    <div className="space-y-3 max-h-96 overflow-y-auto mt-3">
+                      {collectedData.selectedYoutubeVideos.map((video, idx: number) => (
+                      <div key={idx} className="border border-slate-200 rounded-lg p-3 bg-green-50 border-green-200">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                            {idx + 1}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-sm text-slate-900 leading-relaxed">
+                              {video.title}
+                            </p>
+                            <p className="text-xs text-green-600 mt-1">
+                              💡 {video.relevanceReason}
+                            </p>
+                            <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
+                              <span className="px-2 py-1 bg-red-100 text-red-700 rounded">
+                                {video.channelName}
+                              </span>
+                              <span className="text-slate-400">
+                                조회수: {video.viewCount >= 10000 ? `${(video.viewCount / 10000).toFixed(1)}만회` : `${video.viewCount.toLocaleString()}회`}
+                              </span>
+                              <span className="text-slate-400">
+                                {Math.floor(video.duration / 60)}분
+                              </span>
+                              <a 
+                                href={`https://www.youtube.com/watch?v=${video.videoId}`}
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-red-500 hover:text-red-700 underline"
+                              >
+                                🔗 YouTube에서 보기
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      ))}
+                    </div>
+                  </details>
+                </div>
+              )}
+
+              {/* 전체 유튜브 수집 결과 - 접힌 상태 */}
+              {collectedData.allYoutubeVideos && collectedData.allYoutubeVideos.length > 0 && (
+                <div className="section-card" style={{padding: '16px'}}>
+                  <details>
+                    <summary className="font-semibold text-slate-900 mb-3 flex items-center gap-2 cursor-pointer">
+                      <span>📋</span>
+                      <span>전체 유튜브 수집 결과 ({collectedData.allYoutubeVideos.length}개)</span>
+                    </summary>
+                    <div className="space-y-3 max-h-96 overflow-y-auto mt-3">
+                      {collectedData.allYoutubeVideos.map((video, idx: number) => (
+                        <div key={idx} className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                          <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                              {idx + 1}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium text-sm text-slate-900 leading-relaxed">
+                                {video.title}
+                              </p>
+                              <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
+                                <span className="px-2 py-1 bg-red-100 text-red-700 rounded">
+                                  {video.channelTitle || video.channelName}
+                                </span>
+                                <span className="text-slate-400">
+                                  조회수: {video.viewCount ? (video.viewCount >= 10000 ? `${(video.viewCount / 10000).toFixed(1)}만회` : `${video.viewCount.toLocaleString()}회`) : 'N/A'}
+                                </span>
+                                <a 
+                                  href={`https://www.youtube.com/watch?v=${video.videoId}`}
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-red-500 hover:text-red-700 underline"
+                                >
+                                  🔗 YouTube에서 보기
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
                 </div>
               )}
             </div>
