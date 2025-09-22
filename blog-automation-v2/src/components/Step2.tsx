@@ -572,7 +572,10 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                         {
                           videoId: "test123",
                           title: "민생지원금 2차 완벽 가이드 - 신청부터 받기까지",
-                          channelTitle: "경제정보TV",
+                          channelName: "경제정보TV",
+                          viewCount: 125000,
+                          duration: 480,
+                          priority: 95,
                           relevanceReason: "민생지원금 2차 신청 방법에 대한 완벽한 가이드를 제공하여 제목과 정확히 일치"
                         }
                       ],
@@ -581,16 +584,20 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                           videoId: "test123",
                           title: "민생지원금 2차 완벽 가이드 - 신청부터 받기까지",
                           channelName: "경제정보TV",
+                          publishedAt: "2024-09-15T00:00:00Z",
                           duration: 480,
                           viewCount: 125000,
+                          priority: 95,
                           summary: "민생지원금 2차 신청 방법에 대해 자세히 설명드리겠습니다. 이번에는 소득 기준이 완화되어 더 많은 분들이 혜택을 받을 수 있게 되었습니다."
                         },
                         {
                           videoId: "test456",
                           title: "민생지원금 2차 신청 실수하면 안되는 포인트 5가지",
                           channelName: "재정정보채널",
+                          publishedAt: "2024-09-14T00:00:00Z",
                           duration: 360,
                           viewCount: 89000,
+                          priority: 88,
                           summary: "민생지원금 2차 신청할 때 놓치기 쉬운 중요한 포인트들을 알려드리겠습니다."
                         }
                       ],

@@ -41,6 +41,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // YouTube 자막 추출 (메인 프로세스에서 실행)
   extractYouTubeSubtitles: (videoId: string, language?: string) => 
     ipcRenderer.invoke('youtube:extractSubtitles', videoId, language),
+    
+  // Playwright 기본 브라우저 제어 API
+  playwrightInitialize: () => 
+    ipcRenderer.invoke('playwright-initialize'),
+  playwrightNavigate: (url: string) => 
+    ipcRenderer.invoke('playwright-navigate', url),
+  playwrightGetUrl: () => 
+    ipcRenderer.invoke('playwright-get-url'),
+  playwrightClick: (selector: string) => 
+    ipcRenderer.invoke('playwright-click', selector),
+  playwrightFill: (selector: string, value: string) => 
+    ipcRenderer.invoke('playwright-fill', selector, value),
+  playwrightWaitSelector: (selector: string, timeout?: number) => 
+    ipcRenderer.invoke('playwright-wait-selector', selector, timeout),
+  playwrightWaitTimeout: (milliseconds: number) => 
+    ipcRenderer.invoke('playwright-wait-timeout', milliseconds),
+  playwrightEvaluate: (script: string) => 
+    ipcRenderer.invoke('playwright-evaluate', script),
+  playwrightClickInFrames: (selector: string, frameUrlPattern?: string) => 
+    ipcRenderer.invoke('playwright-click-in-frames', selector, frameUrlPattern),
+  playwrightEvaluateInFrames: (script: string, frameUrlPattern?: string) => 
+    ipcRenderer.invoke('playwright-evaluate-in-frames', script, frameUrlPattern),
+  playwrightCleanup: () => 
+    ipcRenderer.invoke('playwright-cleanup'),
 });
 
 // TypeScript 타입 정의
@@ -61,6 +85,17 @@ declare global {
       openExternal: (url: string) => Promise<void>;
       extractYouTubeSubtitles: (videoId: string, language?: string) => Promise<{ success: boolean; data?: any; message?: string }>;
       testYouTubeSubtitleExtraction: (testVideoId?: string) => Promise<{ success: boolean; data?: any; message?: string }>;
+      playwrightInitialize: () => Promise<{ success: boolean; error?: string }>;
+      playwrightNavigate: (url: string) => Promise<{ success: boolean; error?: string }>;
+      playwrightGetUrl: () => Promise<{ success: boolean; url?: string; error?: string }>;
+      playwrightClick: (selector: string) => Promise<{ success: boolean; error?: string }>;
+      playwrightFill: (selector: string, value: string) => Promise<{ success: boolean; error?: string }>;
+      playwrightWaitSelector: (selector: string, timeout?: number) => Promise<{ success: boolean; error?: string }>;
+      playwrightWaitTimeout: (milliseconds: number) => Promise<{ success: boolean; error?: string }>;
+      playwrightEvaluate: (script: string) => Promise<{ success: boolean; result?: any; error?: string }>;
+      playwrightClickInFrames: (selector: string, frameUrlPattern?: string) => Promise<{ success: boolean; error?: string }>;
+      playwrightEvaluateInFrames: (script: string, frameUrlPattern?: string) => Promise<{ success: boolean; result?: any; error?: string }>;
+      playwrightCleanup: () => Promise<{ success: boolean; error?: string }>;
     };
   }
 }

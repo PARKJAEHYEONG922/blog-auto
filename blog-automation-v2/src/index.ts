@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 const YTDlpWrap = require('yt-dlp-wrap').default;
+import { registerPlaywrightHandlers } from './main/playwright-handler';
 
 // 설정 파일 경로
 const getConfigPath = (filename: string) => {
@@ -566,6 +567,7 @@ const createWindow = (): void => {
 // Some APIs can only be used after this event occurs.
 app.on('ready', () => {
   setupIpcHandlers();
+  registerPlaywrightHandlers();
   createWindow();
 });
 

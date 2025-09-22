@@ -145,12 +145,12 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
         
         if (result.success) {
           console.log('✅ 이미지 저장 성공:', result.filePath);
-          // 성공 메시지 표시 (기존 dialog 재활용)
-          setErrorDialog({
+          // 성공 메시지 표시
+          setDialog({
             isOpen: true,
+            type: 'success',
             title: '💾 저장 완료',
-            message: `이미지가 저장되었습니다:\n${result.filePath}`,
-            onClose: () => setErrorDialog({ isOpen: false, title: '', message: '', onClose: () => {} })
+            message: `이미지가 저장되었습니다:\n${result.filePath}`
           });
         } else {
           throw new Error(result.error || '저장이 취소되었습니다.');
@@ -170,11 +170,11 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       }
     } catch (error) {
       console.error('❌ 이미지 저장 실패:', error);
-      setErrorDialog({
+      setDialog({
         isOpen: true,
+        type: 'error',
         title: '💾 저장 실패',
-        message: `이미지 저장에 실패했습니다:\n${error.message}`,
-        onClose: () => setErrorDialog({ isOpen: false, title: '', message: '', onClose: () => {} })
+        message: `이미지 저장에 실패했습니다:\n${(error as Error).message}`
       });
     }
   };
@@ -1471,7 +1471,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                                     src={imageUrl} 
                                     alt={`이미지 ${imageIndex}`}
                                     className="w-full h-full object-contain"
-                                    style={{ imageRendering: 'high-quality' }}
+                                    style={{ imageRendering: 'auto' }}
                                   />
                                   {/* 호버 시 확대 아이콘 */}
                                   <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center">
@@ -1809,7 +1809,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                 src={previewModal.imageUrl}
                 alt={`이미지 ${previewModal.imageIndex} 미리보기`}
                 className="max-w-full max-h-[70vh] object-contain rounded-lg"
-                style={{ imageRendering: 'high-quality' }}
+                style={{ imageRendering: 'auto' }}
               />
             </div>
             
@@ -1839,7 +1839,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                           src={imageUrl}
                           alt={`버전 ${index + 1}`}
                           className="w-24 h-24 object-cover"
-                          style={{ imageRendering: 'high-quality' }}
+                          style={{ imageRendering: 'auto' }}
                         />
                         {imageUrl === previewModal.imageUrl && (
                           <div className="absolute inset-0 bg-blue-500 bg-opacity-20 flex items-center justify-center">
@@ -1942,7 +1942,6 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       {/* 에러 다이얼로그 */}
       <SimpleDialog
         isOpen={dialog.isOpen}
-        type={dialog.type}
         title={dialog.title}
         message={dialog.message}
         onClose={() => setDialog({ ...dialog, isOpen: false })}
