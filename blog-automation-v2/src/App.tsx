@@ -111,6 +111,11 @@ const App: React.FC = () => {
         newData.collectedData = null;
         newData.writingResult = undefined;
         newData.searchKeyword = undefined;
+        
+        // Step3 이미지 상태도 초기화
+        sessionStorage.removeItem('step3-image-urls');
+        sessionStorage.removeItem('step3-image-status');
+        console.log('🔄 핵심 정보 변경으로 인한 이미지 상태 초기화');
       }
       
       return newData;

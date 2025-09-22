@@ -569,6 +569,22 @@ export class LLMClientFactory {
     }
   }
 
+  // 이미지 설정 업데이트 (Step3에서 사용)
+  static updateImageSetting(key: 'quality' | 'size', value: string): void {
+    if (!this.cachedSettings) return;
+    
+    // 캐시된 설정 업데이트
+    if (!this.cachedSettings.image) {
+      this.cachedSettings.image = {};
+    }
+    this.cachedSettings.image[key] = value;
+    
+    // 실제 설정 파일에도 저장
+    if ((window as any).electronAPI && typeof (window as any).electronAPI.saveSettings === 'function') {
+      (window as any).electronAPI.saveSettings(this.cachedSettings);
+    }
+  }
+
   // 기본 설정 로드 (싱글톤 패턴으로 중복 방지)
   static async loadDefaultSettings(): Promise<void> {
     // 이미 로드되었으면 스킵

@@ -17,10 +17,54 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
   const [charCountWithSpaces, setCharCountWithSpaces] = useState(0);
   const [currentFontSize, setCurrentFontSize] = useState('15px');
   
-  // 이미지 관리 상태
+  // 이미지 관리 상태 - sessionStorage에서 복원
   const [imageFiles, setImageFiles] = useState<{ [key: number]: File | null }>({});
-  const [imageUrls, setImageUrls] = useState<{ [key: number]: string }>({});
-  const [imageStatus, setImageStatus] = useState<{ [key: number]: 'empty' | 'uploading' | 'completed' | 'generating' }>({});
+  const [imageUrls, setImageUrls] = useState<{ [key: number]: string }>(() => {
+    try {
+      const saved = sessionStorage.getItem('step3-image-urls');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [imageStatus, setImageStatus] = useState<{ [key: number]: 'empty' | 'uploading' | 'completed' | 'generating' }>(() => {
+    try {
+      const saved = sessionStorage.getItem('step3-image-status');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  
+  // 이미지 히스토리 관리 (이전 버전 보관)
+  const [imageHistory, setImageHistory] = useState<{ [key: number]: string[] }>(() => {
+    try {
+      const saved = sessionStorage.getItem('step3-image-history');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  
+  // 이미지 미리보기 모달
+  const [previewModal, setPreviewModal] = useState<{ isOpen: boolean; imageUrl: string; imageIndex: number }>({
+    isOpen: false,
+    imageUrl: '',
+    imageIndex: 0
+  });
+  
+  // 이미지 선택 모달 (재생성 시)
+  const [selectionModal, setSelectionModal] = useState<{ 
+    isOpen: boolean; 
+    imageIndex: number; 
+    currentUrl: string; 
+    newUrl: string; 
+  }>({
+    isOpen: false,
+    imageIndex: 0,
+    currentUrl: '',
+    newUrl: ''
+  });
   
   // 이미지 생성 제어 상태
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
@@ -30,11 +74,11 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
   const [hasImageClient, setHasImageClient] = useState(false);
   const [imageClientInfo, setImageClientInfo] = useState('미설정');
   
-  // 이미지 생성 옵션 상태
+  // 이미지 생성 옵션 상태 - API 설정에서 가져오기
   const [imageQuality, setImageQuality] = useState<'low' | 'medium' | 'high'>('high');
   const [imageSize, setImageSize] = useState<'1024x1024' | '1024x1536' | '1536x1024'>('1024x1024');
   
-  // 이미지 AI 클라이언트 상태 체크
+  // 이미지 AI 클라이언트 상태 체크 및 옵션 동기화
   useEffect(() => {
     const checkImageClient = () => {
       const hasClient = LLMClientFactory.hasImageClient();
@@ -43,6 +87,20 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       if (hasClient) {
         const modelStatus = LLMClientFactory.getCachedModelStatus();
         setImageClientInfo(modelStatus.image || '설정됨');
+        
+        // API 설정에서 이미지 옵션 가져오기
+        const cachedSettings = LLMClientFactory.getCachedSettings();
+        const imageSettings = cachedSettings?.settings?.image;
+        
+        if (imageSettings) {
+          // API 설정의 옵션을 Step3에 반영
+          if (imageSettings.quality) {
+            setImageQuality(imageSettings.quality as 'low' | 'medium' | 'high');
+          }
+          if (imageSettings.size) {
+            setImageSize(imageSettings.size as '1024x1024' | '1024x1536' | '1536x1024');
+          }
+        }
       } else {
         setImageClientInfo('미설정');
       }
@@ -54,6 +112,19 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     
     return () => clearInterval(interval);
   }, []);
+
+  // 이미지 상태 sessionStorage 저장
+  useEffect(() => {
+    sessionStorage.setItem('step3-image-urls', JSON.stringify(imageUrls));
+  }, [imageUrls]);
+
+  useEffect(() => {
+    sessionStorage.setItem('step3-image-status', JSON.stringify(imageStatus));
+  }, [imageStatus]);
+
+  useEffect(() => {
+    sessionStorage.setItem('step3-image-history', JSON.stringify(imageHistory));
+  }, [imageHistory]);
 
   // 폰트 크기 옵션
   const fontSizes = [
@@ -602,7 +673,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     }, 1500);
   };
 
-  // AI 이미지 생성 (정지 기능 포함)
+  // AI 이미지 생성 (히스토리 관리 및 선택 기능 포함)
   const generateAIImage = async (imageIndex: number, prompt: string, isPartOfBatch = false) => {
     setImageStatus(prev => ({ ...prev, [imageIndex]: 'generating' }));
 
@@ -615,10 +686,6 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       }
 
       const imageClient = LLMClientFactory.getImageClient();
-      
-      // 저장된 이미지 설정 가져오기
-      const cachedSettings = LLMClientFactory.getCachedSettings();
-      const imageSettings = cachedSettings?.settings?.image;
       
       // Step3에서 설정한 이미지 생성 옵션 사용
       const imageOptions = {
@@ -639,8 +706,22 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       }
       
       if (generatedImageUrl && generatedImageUrl.trim()) {
-        setImageUrls(prev => ({ ...prev, [imageIndex]: generatedImageUrl }));
-        setImageStatus(prev => ({ ...prev, [imageIndex]: 'completed' }));
+        const currentUrl = imageUrls[imageIndex];
+        
+        // 기존 이미지가 있으면 선택 모달 표시 (배치 모드가 아닐 때만)
+        if (currentUrl && !isPartOfBatch) {
+          setSelectionModal({
+            isOpen: true,
+            imageIndex,
+            currentUrl,
+            newUrl: generatedImageUrl
+          });
+          setImageStatus(prev => ({ ...prev, [imageIndex]: 'completed' }));
+        } else {
+          // 새 이미지를 바로 적용
+          applyNewImage(imageIndex, generatedImageUrl, currentUrl);
+        }
+        
         console.log(`✅ 이미지 ${imageIndex} 생성 완료: ${generatedImageUrl}`);
       } else {
         throw new Error('빈 이미지 URL이 반환되었습니다.');
@@ -655,6 +736,56 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
         alert(`이미지 생성에 실패했습니다: ${errorMessage}`);
       }
     }
+  };
+
+  // 새 이미지 적용 (히스토리 관리)
+  const applyNewImage = (imageIndex: number, newUrl: string, currentUrl?: string) => {
+    // 현재 이미지를 히스토리에 추가
+    if (currentUrl) {
+      setImageHistory(prev => ({
+        ...prev,
+        [imageIndex]: [...(prev[imageIndex] || []), currentUrl]
+      }));
+    }
+    
+    // 새 이미지 적용
+    setImageUrls(prev => ({ ...prev, [imageIndex]: newUrl }));
+    setImageStatus(prev => ({ ...prev, [imageIndex]: 'completed' }));
+  };
+
+  // 이미지 선택 (기존 유지 vs 새 이미지 사용)
+  const handleImageSelection = (useNew: boolean) => {
+    const { imageIndex, currentUrl, newUrl } = selectionModal;
+    
+    if (useNew) {
+      applyNewImage(imageIndex, newUrl, currentUrl);
+    }
+    // useNew가 false면 현재 이미지 유지 (아무것도 안 함)
+    
+    setSelectionModal({
+      isOpen: false,
+      imageIndex: 0,
+      currentUrl: '',
+      newUrl: ''
+    });
+  };
+
+  // 이미지 미리보기 모달 열기
+  const openPreviewModal = (imageUrl: string, imageIndex: number) => {
+    setPreviewModal({
+      isOpen: true,
+      imageUrl,
+      imageIndex
+    });
+  };
+
+  // 이미지 미리보기 모달 닫기
+  const closePreviewModal = () => {
+    setPreviewModal({
+      isOpen: false,
+      imageUrl: '',
+      imageIndex: 0
+    });
   };
 
   // 이미지 제거
@@ -676,6 +807,35 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       return newUrls;
     });
     setImageStatus(prev => ({ ...prev, [imageIndex]: 'empty' }));
+  };
+
+  // 모든 이미지 초기화
+  const clearAllImages = () => {
+    // 모든 blob URL 메모리 해제
+    Object.values(imageUrls).forEach(url => {
+      if (url && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+    });
+    
+    // 히스토리에 있는 URL들도 메모리 해제
+    Object.values(imageHistory).forEach(urlArray => {
+      urlArray.forEach(url => {
+        if (url && url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    });
+    
+    setImageFiles({});
+    setImageUrls({});
+    setImageStatus({});
+    setImageHistory({});
+    
+    // sessionStorage에서도 제거
+    sessionStorage.removeItem('step3-image-urls');
+    sessionStorage.removeItem('step3-image-status');
+    sessionStorage.removeItem('step3-image-history');
   };
 
   // 빈 이미지 모두 AI로 생성 (정지 기능 포함)
@@ -998,11 +1158,22 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                                 </div>
                               )}
                               {status === 'completed' && imageUrl && (
-                                <img 
-                                  src={imageUrl} 
-                                  alt={`이미지 ${imageIndex}`}
-                                  className="w-full h-full object-cover"
-                                />
+                                <div 
+                                  className="w-full h-full relative group cursor-pointer"
+                                  onClick={() => openPreviewModal(imageUrl, imageIndex)}
+                                >
+                                  <img 
+                                    src={imageUrl} 
+                                    alt={`이미지 ${imageIndex}`}
+                                    className="w-full h-full object-cover"
+                                  />
+                                  {/* 호버 시 확대 아이콘 */}
+                                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center">
+                                    <div className="text-white text-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                      🔍
+                                    </div>
+                                  </div>
+                                </div>
                               )}
                               {status === 'empty' && (
                                 <div className="text-center text-gray-400">
@@ -1136,7 +1307,12 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                             <label className="text-xs font-medium text-slate-600 mb-1 block">품질</label>
                             <select
                               value={imageQuality}
-                              onChange={(e) => setImageQuality(e.target.value as 'low' | 'medium' | 'high')}
+                              onChange={(e) => {
+                                const newQuality = e.target.value as 'low' | 'medium' | 'high';
+                                setImageQuality(newQuality);
+                                // API 설정에도 반영
+                                LLMClientFactory.updateImageSetting('quality', newQuality);
+                              }}
                               className="w-full text-xs border rounded px-2 py-1"
                             >
                               <option value="low">저품질 (빠름)</option>
@@ -1150,7 +1326,12 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                             <label className="text-xs font-medium text-slate-600 mb-1 block">해상도</label>
                             <select
                               value={imageSize}
-                              onChange={(e) => setImageSize(e.target.value as '1024x1024' | '1024x1536' | '1536x1024')}
+                              onChange={(e) => {
+                                const newSize = e.target.value as '1024x1024' | '1024x1536' | '1536x1024';
+                                setImageSize(newSize);
+                                // API 설정에도 반영
+                                LLMClientFactory.updateImageSetting('size', newSize);
+                              }}
                               className="w-full text-xs border rounded px-2 py-1"
                             >
                               <option value="1024x1024">정사각형 (1024×1024)</option>
@@ -1266,6 +1447,92 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
           </div>
         </div>
       </div>
+
+      {/* 이미지 미리보기 모달 */}
+      {previewModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50" onClick={closePreviewModal}>
+          <div className="relative max-w-4xl max-h-screen p-4" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={closePreviewModal}
+              className="absolute top-2 right-2 text-white text-2xl hover:text-gray-300 z-10 bg-black bg-opacity-50 rounded-full w-10 h-10 flex items-center justify-center"
+            >
+              ✕
+            </button>
+            <img
+              src={previewModal.imageUrl}
+              alt={`이미지 ${previewModal.imageIndex} 미리보기`}
+              className="max-w-full max-h-full object-contain rounded-lg"
+            />
+            <div className="absolute bottom-4 left-4 bg-black bg-opacity-75 text-white px-3 py-2 rounded-lg">
+              📸 이미지 {previewModal.imageIndex}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 이미지 선택 모달 (재생성 시) */}
+      {selectionModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-4xl max-h-screen overflow-auto">
+            <h3 className="text-lg font-bold text-center mb-4">
+              🎨 이미지 {selectionModal.imageIndex} - 새로운 버전이 생성되었습니다!
+            </h3>
+            <p className="text-sm text-gray-600 text-center mb-6">
+              어떤 이미지를 사용하시겠습니까?
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {/* 현재 이미지 */}
+              <div className="text-center">
+                <h4 className="font-semibold mb-2 text-blue-600">🔷 현재 이미지 (기존)</h4>
+                <div className="border rounded-lg overflow-hidden bg-gray-50">
+                  <img
+                    src={selectionModal.currentUrl}
+                    alt="현재 이미지"
+                    className="w-full h-64 object-contain"
+                  />
+                </div>
+                <button
+                  onClick={() => handleImageSelection(false)}
+                  className="mt-3 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                >
+                  ✅ 현재 이미지 유지
+                </button>
+              </div>
+              
+              {/* 새 이미지 */}
+              <div className="text-center">
+                <h4 className="font-semibold mb-2 text-green-600">🔶 새 이미지 (AI 생성)</h4>
+                <div className="border rounded-lg overflow-hidden bg-gray-50">
+                  <img
+                    src={selectionModal.newUrl}
+                    alt="새 이미지"
+                    className="w-full h-64 object-contain"
+                  />
+                </div>
+                <button
+                  onClick={() => handleImageSelection(true)}
+                  className="mt-3 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+                >
+                  🆕 새 이미지 사용
+                </button>
+              </div>
+            </div>
+            
+            <div className="text-center">
+              <p className="text-xs text-gray-500 mb-3">
+                💡 현재 이미지를 선택해도 새 이미지는 히스토리에 보관됩니다.
+              </p>
+              <button
+                onClick={() => handleImageSelection(false)}
+                className="px-4 py-2 bg-gray-400 text-white rounded hover:bg-gray-500 transition-colors"
+              >
+                ⏹️ 취소 (현재 이미지 유지)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
