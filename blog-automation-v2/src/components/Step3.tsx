@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { WorkflowData } from '../App';
 import { ImagePrompt, BlogWritingResult } from '../services/blog-writing-service';
 import { LLMClientFactory } from '../services/llm-client-factory';
+import SimpleDialog from './SimpleDialog';
 
 interface Step3Props {
   data: WorkflowData;
@@ -66,17 +67,33 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     newUrl: ''
   });
   
+  // 다이얼로그 상태 관리
+  const [dialog, setDialog] = useState<{
+    isOpen: boolean;
+    type: 'info' | 'warning' | 'error' | 'success';
+    title: string;
+    message: string;
+  }>({
+    isOpen: false,
+    type: 'info',
+    title: '',
+    message: ''
+  });
+  
   // 이미지 생성 제어 상태
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
-  const [shouldStopGeneration, setShouldStopGeneration] = useState(false);
+  const stopGenerationRef = useRef(false); // 즉시 반영되는 정지 플래그
   
   // 이미지 AI 클라이언트 상태
   const [hasImageClient, setHasImageClient] = useState(false);
   const [imageClientInfo, setImageClientInfo] = useState('미설정');
   
+  // 이미지 프롬프트 편집 상태 - 단순화
+  const [editingPrompts, setEditingPrompts] = useState<{ [key: number]: string }>({});
+  
   // 이미지 생성 옵션 상태 - API 설정에서 가져오기
   const [imageQuality, setImageQuality] = useState<'low' | 'medium' | 'high'>('high');
-  const [imageSize, setImageSize] = useState<'1024x1024' | '1024x1536' | '1536x1024'>('1024x1024');
+  const [imageSize, setImageSize] = useState<'1024x1024' | '1024x1536' | '1536x1024'>('1536x1024');
   const [imageStyle, setImageStyle] = useState<'realistic' | 'anime' | 'dreamy' | 'illustration' | 'photographic'>('realistic');
   
   // 이미지 AI 클라이언트 상태 체크 및 옵션 동기화
@@ -116,6 +133,33 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     
     return () => clearInterval(interval);
   }, []);
+
+  // 컴포넌트 마운트 시 조건부 이미지 갤러리 초기화
+  useEffect(() => {
+    // 새로운 글쓰기 세션인지 확인 (writingResult가 변경되었는지)
+    const currentWritingId = data.writingResult ? JSON.stringify(data.writingResult.imagePrompts) : 'none';
+    const lastWritingId = sessionStorage.getItem('step3-last-writing-id');
+    
+    // 새로운 글쓰기 결과이거나 처음 진입하는 경우에만 초기화
+    if (currentWritingId !== lastWritingId) {
+      console.log('🔄 새로운 글쓰기 세션 감지 - 이미지 갤러리 초기화');
+      sessionStorage.removeItem('step3-image-urls');
+      sessionStorage.removeItem('step3-image-status');
+      sessionStorage.removeItem('step3-image-history');
+      
+      // 현재 세션 ID 저장
+      sessionStorage.setItem('step3-last-writing-id', currentWritingId);
+      
+      // 상태도 초기화
+      setImageFiles({});
+      setImageUrls({});
+      setImageStatus({});
+      setImageHistory({});
+      setEditingPrompts({});
+    } else {
+      console.log('🔄 동일한 글쓰기 세션 - 이미지 갤러리 유지');
+    }
+  }, []); // 빈 배열로 컴포넌트 마운트 시에만 실행
 
   // 이미지 상태 sessionStorage 저장
   useEffect(() => {
@@ -678,11 +722,13 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
   };
 
   // AI 이미지 생성 (히스토리 관리 및 선택 기능 포함)
-  const generateAIImage = async (imageIndex: number, prompt: string, isPartOfBatch = false) => {
+  const generateAIImage = async (imageIndex: number, originalPrompt: string, isPartOfBatch = false) => {
     setImageStatus(prev => ({ ...prev, [imageIndex]: 'generating' }));
 
     try {
-      console.log(`🎨 AI 이미지 생성 시작 - 프롬프트: ${prompt}`);
+      // 편집된 프롬프트가 있으면 사용, 없으면 원본 프롬프트 사용
+      const finalPrompt = getCurrentPrompt(imageIndex) || originalPrompt;
+      console.log(`🎨 AI 이미지 생성 시작 - 프롬프트: ${finalPrompt}`);
       
       // 이미지 생성 클라이언트 확인
       if (!LLMClientFactory.hasImageClient()) {
@@ -700,14 +746,14 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       console.log(`🎛️ 이미지 생성 옵션:`, imageOptions);
       
       // 스타일 적용된 프롬프트 생성
-      const styledPrompt = applyStyleToPrompt(prompt, imageStyle);
+      const styledPrompt = applyStyleToPrompt(finalPrompt, imageStyle);
       console.log(`🎨 스타일 적용된 프롬프트: ${styledPrompt}`);
       
       // 실제 이미지 생성 API 호출
       const generatedImageUrl = await imageClient.generateImage(styledPrompt, imageOptions);
       
       // 정지 요청 확인 (배치 모드일 때만)
-      if (shouldStopGeneration && isPartOfBatch) {
+      if (stopGenerationRef.current && isPartOfBatch) {
         console.log(`이미지 ${imageIndex} 생성 중단됨`);
         setImageStatus(prev => ({ ...prev, [imageIndex]: 'empty' }));
         return;
@@ -741,7 +787,40 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       
       if (!isPartOfBatch) {
         const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
-        alert(`이미지 생성에 실패했습니다: ${errorMessage}`);
+        
+        // 에러 유형별 사용자 친화적 메시지
+        let title = '이미지 생성 실패';
+        let message = '';
+        let type: 'error' | 'warning' = 'error';
+        
+        if (errorMessage.includes('insufficientCredits') || errorMessage.includes('크레딧')) {
+          title = '💳 크레딧이 부족합니다';
+          message = 'Runware API 크레딧을 모두 사용했습니다.\n\n📍 해결 방법:\n• my.runware.ai/wallet에서 크레딧 충전\n• 또는 API 설정에서 다른 이미지 생성 AI로 변경';
+          type = 'warning';
+        } else if (errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('할당량')) {
+          title = '⏰ 일일 할당량 초과';
+          message = '오늘의 무료 이미지 생성 할당량을 모두 사용했습니다.\n\n📍 해결 방법:\n• 내일 다시 시도하기\n• API 설정에서 다른 이미지 생성 AI로 변경\n• 유료 플랜으로 업그레이드';
+          type = 'warning';
+        } else if (errorMessage.includes('403') || errorMessage.includes('인증')) {
+          title = '🔐 인증이 필요합니다';
+          message = 'OpenAI 조직 인증이 필요합니다.\n\n📍 해결 방법:\n• platform.openai.com에서 조직 인증하기\n• 또는 다른 이미지 생성 AI 사용';
+          type = 'warning';
+        } else if (errorMessage.includes('invalidModel')) {
+          title = '🚫 모델 오류';
+          message = '선택한 이미지 생성 모델에 문제가 있습니다.\n\n📍 해결 방법:\n• API 설정에서 다른 모델 선택\n• 또는 다른 이미지 생성 AI로 변경';
+          type = 'error';
+        } else {
+          title = '🔧 이미지 생성 오류';
+          message = `이미지 생성 중 오류가 발생했습니다.\n\n오류 내용: ${errorMessage}\n\n📍 해결 방법:\n• 잠시 후 다시 시도\n• API 설정 확인\n• 다른 이미지 생성 AI로 변경`;
+          type = 'error';
+        }
+        
+        setDialog({
+          isOpen: true,
+          type,
+          title,
+          message
+        });
       }
     }
   };
@@ -766,9 +845,18 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     const { imageIndex, currentUrl, newUrl } = selectionModal;
     
     if (useNew) {
+      // 새 이미지 사용: 현재 이미지를 히스토리에 추가하고 새 이미지를 현재로 설정
       applyNewImage(imageIndex, newUrl, currentUrl);
+    } else {
+      // 기존 이미지 유지: 새 이미지를 히스토리에 추가 (갤러리에서 선택할 수 있도록)
+      if (newUrl) {
+        setImageHistory(prev => ({
+          ...prev,
+          [imageIndex]: [...(prev[imageIndex] || []), newUrl]
+        }));
+        console.log(`📸 새 이미지를 갤러리에 저장: 이미지 ${imageIndex}`);
+      }
     }
-    // useNew가 false면 현재 이미지 유지 (아무것도 안 함)
     
     setSelectionModal({
       isOpen: false,
@@ -794,6 +882,105 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       imageUrl: '',
       imageIndex: 0
     });
+  };
+
+  // 프롬프트 변경 처리
+  const handlePromptChange = (imageIndex: number, newPrompt: string) => {
+    setEditingPrompts(prev => ({ ...prev, [imageIndex]: newPrompt }));
+  };
+
+  // 현재 프롬프트 가져오기 (편집된 것이 있으면 편집된 것, 없으면 원본)
+  const getCurrentPrompt = (imageIndex: number): string => {
+    const imagePrompts = data.writingResult?.imagePrompts || [];
+    const originalPrompt = imagePrompts.find(p => p.index === imageIndex)?.prompt || '';
+    
+    // 편집된 프롬프트가 있으면 그것을 사용, 없으면 원본 사용
+    return editingPrompts.hasOwnProperty(imageIndex) 
+      ? editingPrompts[imageIndex] 
+      : originalPrompt;
+  };
+
+  // 텍스트 영역에 표시할 프롬프트 가져오기 (사용자 편집 상태 유지)
+  const getDisplayPrompt = (imageIndex: number): string => {
+    // 사용자가 한 번이라도 편집했으면 편집된 값 사용 (빈 문자열 포함)
+    if (editingPrompts.hasOwnProperty(imageIndex)) {
+      return editingPrompts[imageIndex];
+    }
+    
+    // 편집한 적이 없으면 원본 프롬프트 사용
+    const imagePrompts = data.writingResult?.imagePrompts || [];
+    return imagePrompts.find(p => p.index === imageIndex)?.prompt || '';
+  };
+
+  // 프롬프트를 원본으로 되돌리기
+  const resetPromptToOriginal = (imageIndex: number) => {
+    // 편집 기록을 완전히 제거하여 원본 사용
+    setEditingPrompts(prev => {
+      const newState = { ...prev };
+      delete newState[imageIndex];
+      return newState;
+    });
+    
+    setDialog({
+      isOpen: true,
+      type: 'success',
+      title: '✅ 프롬프트 복원 완료',
+      message: '프롬프트가 원본으로 되돌려졌습니다.'
+    });
+  };
+
+  // AI 이미지 생성 처리 (빈 프롬프트면 원본 사용)
+  const handleAIImageGeneration = (imageIndex: number) => {
+    const currentPrompt = getCurrentPrompt(imageIndex);
+    const imagePrompts = data.writingResult?.imagePrompts || [];
+    const originalPrompt = imagePrompts.find(p => p.index === imageIndex)?.prompt || '';
+    
+    // 빈 프롬프트면 원본 프롬프트 사용
+    const promptToUse = (!currentPrompt || currentPrompt.trim() === '') 
+      ? originalPrompt 
+      : currentPrompt.trim();
+    
+    // 원본 프롬프트도 없으면 에러
+    if (!promptToUse || promptToUse.trim() === '') {
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '⚠️ 프롬프트가 없습니다',
+        message: '이미지 생성을 위한 프롬프트가 없습니다.'
+      });
+      return;
+    }
+    
+    // AI 이미지 생성 실행
+    generateAIImage(imageIndex, promptToUse);
+  };
+
+  // 갤러리에서 이미지 선택
+  const selectImageFromGallery = (imageIndex: number, selectedImageUrl: string) => {
+    // 현재 이미지를 히스토리에 추가 (있는 경우)
+    const currentUrl = imageUrls[imageIndex];
+    if (currentUrl && currentUrl !== selectedImageUrl) {
+      setImageHistory(prev => ({
+        ...prev,
+        [imageIndex]: [...(prev[imageIndex] || []), currentUrl]
+      }));
+    }
+
+    // 선택된 이미지를 현재 이미지로 설정
+    setImageUrls(prev => ({ ...prev, [imageIndex]: selectedImageUrl }));
+    setImageStatus(prev => ({ ...prev, [imageIndex]: 'completed' }));
+    
+    // 히스토리에서 선택된 이미지 제거 (중복 방지)
+    setImageHistory(prev => ({
+      ...prev,
+      [imageIndex]: (prev[imageIndex] || []).filter(url => url !== selectedImageUrl)
+    }));
+
+    // 미리보기 모달의 이미지도 업데이트
+    setPreviewModal(prev => ({
+      ...prev,
+      imageUrl: selectedImageUrl
+    }));
   };
 
   // 스타일에 따른 프롬프트 조정
@@ -879,12 +1066,12 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     const imageCount = (editedContent.match(imageRegex) || []).length;
     
     setIsGeneratingAll(true);
-    setShouldStopGeneration(false);
+    stopGenerationRef.current = false;
     
     try {
       for (let i = 1; i <= imageCount; i++) {
         // 정지 요청이 있으면 중단
-        if (shouldStopGeneration) {
+        if (stopGenerationRef.current) {
           console.log('일괄 이미지 생성이 사용자에 의해 중단되었습니다.');
           break;
         }
@@ -893,23 +1080,33 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
         const imagePrompt = imagePrompts.find(p => p.index === i);
         
         if (currentStatus !== 'completed' && imagePrompt) {
-          await generateAIImage(i, imagePrompt.prompt, true); // isPartOfBatch = true
+          const currentPrompt = getCurrentPrompt(i);
+          // 빈 프롬프트는 건너뛰기
+          if (currentPrompt && currentPrompt.trim() !== '') {
+            await generateAIImage(i, currentPrompt.trim(), true); // isPartOfBatch = true
+            
+            // 이미지 생성 완료 후 다시 정지 요청 확인
+            if (stopGenerationRef.current) {
+              console.log('일괄 이미지 생성이 사용자에 의해 중단되었습니다.');
+              break;
+            }
+          }
           
           // 정지 요청이 없으면 다음 이미지 생성 전 1초 대기
-          if (!shouldStopGeneration) {
+          if (!stopGenerationRef.current) {
             await new Promise(resolve => setTimeout(resolve, 1000));
           }
         }
       }
     } finally {
       setIsGeneratingAll(false);
-      setShouldStopGeneration(false);
+      stopGenerationRef.current = false;
     }
   };
 
   // 이미지 생성 정지
   const stopImageGeneration = () => {
-    setShouldStopGeneration(true);
+    stopGenerationRef.current = true;
     console.log('이미지 생성 정지 요청됨');
   };
 
@@ -1199,7 +1396,8 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                                   <img 
                                     src={imageUrl} 
                                     alt={`이미지 ${imageIndex}`}
-                                    className="w-full h-full object-cover"
+                                    className="w-full h-full object-contain"
+                                    style={{ imageRendering: 'high-quality' }}
                                   />
                                   {/* 호버 시 확대 아이콘 */}
                                   <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center">
@@ -1235,8 +1433,25 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                                     <strong>컨텍스트:</strong> {imagePrompt.context}
                                   </div>
                                   <div className="bg-slate-50 rounded p-2 border border-slate-200">
-                                    <div className="text-xs font-medium text-slate-700 mb-1">💡 AI 프롬프트:</div>
-                                    <div className="text-xs text-slate-800">{imagePrompt.prompt}</div>
+                                    <div className="flex items-center justify-between mb-1">
+                                      <div className="text-xs font-medium text-slate-700">💡 AI 프롬프트:</div>
+                                      {editingPrompts.hasOwnProperty(imageIndex) && (
+                                        <button
+                                          onClick={() => resetPromptToOriginal(imageIndex)}
+                                          className="text-xs text-orange-600 hover:text-orange-800 transition-colors"
+                                          title="원본으로 되돌리기"
+                                        >
+                                          🔄 원본
+                                        </button>
+                                      )}
+                                    </div>
+                                    <textarea
+                                      value={getDisplayPrompt(imageIndex)}
+                                      onChange={(e) => handlePromptChange(imageIndex, e.target.value)}
+                                      className="w-full text-xs text-slate-800 bg-white border border-slate-300 rounded p-2 resize-none"
+                                      rows={3}
+                                      placeholder="이미지 생성을 위한 프롬프트를 영어로 입력하세요... (예: A beautiful sunset over mountains)"
+                                    />
                                   </div>
                                 </div>
                               )}
@@ -1259,7 +1474,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                                 
                                 {imagePrompt && (
                                   <button
-                                    onClick={() => generateAIImage(imageIndex, imagePrompt.prompt)}
+                                    onClick={() => handleAIImageGeneration(imageIndex)}
                                     disabled={!hasImageClient || status === 'generating' || isGeneratingAll}
                                     className="px-3 py-1 bg-purple-500 text-white text-xs rounded hover:bg-purple-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                                     title={!hasImageClient ? '이미지 생성 AI가 설정되지 않았습니다' : ''}
@@ -1396,7 +1611,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                           </div>
                         </div>
                         
-                        {/* 예상 비용 표시 */}
+                        {/* 예상 비용 및 품질 안내 */}
                         <div className="mt-2 text-xs text-slate-500">
                           💰 예상 비용: {(() => {
                             if (imageClientInfo.includes('runware')) {
@@ -1409,6 +1624,9 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                             }
                             return '비용 정보 없음';
                           })()}
+                        </div>
+                        <div className="mt-1 text-xs text-blue-600">
+                          💡 더 선명한 이미지를 원하면 해상도를 1536x1024로, 품질을 고품질로 설정하세요
                         </div>
                       </div>
                     )}
@@ -1506,18 +1724,69 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       {/* 이미지 미리보기 모달 */}
       {previewModal.isOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50" onClick={closePreviewModal}>
-          <div className="relative max-w-4xl max-h-screen p-4" onClick={(e) => e.stopPropagation()}>
+          <div className="relative max-w-6xl max-h-screen p-4 flex flex-col" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={closePreviewModal}
               className="absolute top-2 right-2 text-white text-2xl hover:text-gray-300 z-10 bg-black bg-opacity-50 rounded-full w-10 h-10 flex items-center justify-center"
             >
               ✕
             </button>
-            <img
-              src={previewModal.imageUrl}
-              alt={`이미지 ${previewModal.imageIndex} 미리보기`}
-              className="max-w-full max-h-full object-contain rounded-lg"
-            />
+            
+            {/* 메인 이미지 */}
+            <div className="flex-1 flex items-center justify-center mb-4">
+              <img
+                src={previewModal.imageUrl}
+                alt={`이미지 ${previewModal.imageIndex} 미리보기`}
+                className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                style={{ imageRendering: 'high-quality' }}
+              />
+            </div>
+            
+            {/* 이미지 갤러리 */}
+            {(() => {
+              const currentImageUrl = imageUrls[previewModal.imageIndex];
+              const historyImages = imageHistory[previewModal.imageIndex] || [];
+              const allImages = [currentImageUrl, ...historyImages].filter(Boolean);
+              
+              return allImages.length > 1 && (
+                <div className="bg-black bg-opacity-75 rounded-lg p-4">
+                  <div className="text-white text-sm mb-3 text-center">
+                    📸 이미지 갤러리 ({allImages.length}개) - 클릭해서 선택하세요
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto justify-center">
+                    {allImages.map((imageUrl, index) => (
+                      <div
+                        key={index}
+                        className={`relative flex-shrink-0 cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
+                          imageUrl === previewModal.imageUrl 
+                            ? 'border-blue-400 shadow-lg transform scale-105' 
+                            : 'border-gray-500 hover:border-gray-300'
+                        }`}
+                        onClick={() => selectImageFromGallery(previewModal.imageIndex, imageUrl)}
+                      >
+                        <img
+                          src={imageUrl}
+                          alt={`버전 ${index + 1}`}
+                          className="w-24 h-24 object-cover"
+                          style={{ imageRendering: 'high-quality' }}
+                        />
+                        {imageUrl === previewModal.imageUrl && (
+                          <div className="absolute inset-0 bg-blue-500 bg-opacity-20 flex items-center justify-center">
+                            <div className="bg-blue-500 text-white text-xs px-2 py-1 rounded">
+                              현재
+                            </div>
+                          </div>
+                        )}
+                        <div className="absolute bottom-1 left-1 bg-black bg-opacity-75 text-white text-xs px-1 rounded">
+                          {index + 1}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+            
             <div className="absolute bottom-4 left-4 bg-black bg-opacity-75 text-white px-3 py-2 rounded-lg">
               📸 이미지 {previewModal.imageIndex}
             </div>
@@ -1588,6 +1857,15 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
           </div>
         </div>
       )}
+
+      {/* 에러 다이얼로그 */}
+      <SimpleDialog
+        isOpen={dialog.isOpen}
+        type={dialog.type}
+        title={dialog.title}
+        message={dialog.message}
+        onClose={() => setDialog({ ...dialog, isOpen: false })}
+      />
     </div>
   );
 };
