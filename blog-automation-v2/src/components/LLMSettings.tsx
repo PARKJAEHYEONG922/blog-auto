@@ -13,6 +13,7 @@ interface LLMConfig {
   apiKey: string;
   quality?: string;
   size?: string;
+  style?: string; // 이미지 스타일 추가
 }
 
 interface LLMSettings {
@@ -93,14 +94,14 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
   const [settings, setSettings] = useState<LLMSettings>({
     information: { provider: 'gemini', model: 'gemini-2.0-flash', apiKey: '' },
     writing: { provider: 'claude', model: 'claude-sonnet-4-20250514', apiKey: '' },
-    image: { provider: 'openai', model: 'gpt-image-1', apiKey: '' }
+    image: { provider: 'openai', model: 'gpt-image-1', apiKey: '', style: 'realistic' }
   });
 
   // 실제 적용된 설정 (테스트 성공한 설정만)
   const [appliedSettings, setAppliedSettings] = useState<LLMSettings>({
     information: { provider: '', model: '', apiKey: '' },
     writing: { provider: '', model: '', apiKey: '' },
-    image: { provider: '', model: '', apiKey: '' }
+    image: { provider: '', model: '', apiKey: '', style: 'realistic' }
   });
 
   const [activeTab, setActiveTab] = useState<'information' | 'writing' | 'image'>('information');
@@ -235,7 +236,7 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
             };
           } else {
             // 테스트 성공하지 않은 설정은 appliedSettings에서 제거
-            successfulSettings[tab] = { provider: '', model: '', apiKey: '' };
+            successfulSettings[tab] = { provider: '', model: '', apiKey: '', style: 'realistic' };
           }
         }
         setSuccessfulConfigs(successfulConfigsData);
@@ -269,6 +270,24 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
     { id: 'runware', name: 'Runware', icon: '⚡', color: 'purple' }
   ];
 
+  // Runware 스타일별 실제 모델 매핑
+  const runwareStyleModels = {
+    'sdxl-base': {
+      realistic: 'civitai:4201@130072', // Realistic Vision V6.0
+      photographic: 'civitai:102438@133677', // SDXL Base (사진 특화)
+      illustration: 'civitai:24149@144666', // Mistoon Anime (일러스트)
+      anime: 'civitai:24149@144666', // Mistoon Anime
+      dreamy: 'civitai:1125067@1250712' // CyberRealistic (몽환적)
+    },
+    'flux-base': {
+      realistic: 'flux-1-schnell', // FLUX 기본 (사실적)
+      photographic: 'flux-1-dev', // FLUX Dev (사진)
+      illustration: 'flux-1-schnell', // FLUX 기본 (일러스트)
+      anime: 'flux-1-schnell', // FLUX 기본 (애니메이션)
+      dreamy: 'flux-1-pro' // FLUX Pro (몽환적)
+    }
+  };
+
   const modelsByProvider = {
     claude: {
       text: [
@@ -298,8 +317,8 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
     },
     runware: {
       image: [
-        { id: 'civitai:102438@133677', name: 'Stable Diffusion XL', description: '가장 안정적인 기본 모델', tier: 'basic' },
-        { id: 'flux-1-schnell', name: 'FLUX.1 Schnell', description: '고속 생성 모델 (권장)', tier: 'premium' }
+        { id: 'sdxl-base', name: 'Stable Diffusion XL', description: '다양한 스타일 지원 모델', tier: 'basic' },
+        { id: 'flux-base', name: 'FLUX.1', description: '고품질 세밀한 생성 모델', tier: 'premium' }
       ]
     }
   };
@@ -361,7 +380,7 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
           Object.keys(newApplied).forEach(tabKey => {
             const tab = tabKey as keyof LLMSettings;
             if (newApplied[tab].provider === provider) {
-              newApplied[tab] = { provider: '', model: '', apiKey: '' };
+              newApplied[tab] = { provider: '', model: '', apiKey: '', style: 'realistic' };
             }
           });
           return newApplied;
@@ -386,7 +405,8 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
           ...prev[category],
           provider: value,
           model: '', // 모델은 초기화
-          apiKey: existingApiKey
+          apiKey: existingApiKey,
+          style: category === 'image' ? 'realistic' : prev[category].style // 이미지 탭일 때만 스타일 초기화
         }
       }));
     } else if (field === 'apiKey') {
@@ -1136,6 +1156,22 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
                                 </select>
                               </div>
                               
+                              {/* 스타일 선택 */}
+                              <div>
+                                <label className="text-xs font-medium text-gray-700 mb-2 block">이미지 스타일</label>
+                                <select
+                                  value={settings[activeTab].style || 'realistic'}
+                                  onChange={(e) => updateSetting(activeTab, 'style', e.target.value)}
+                                  className="ultra-select w-full" style={{padding: '8px 12px', fontSize: '13px'}}
+                                >
+                                  <option value="realistic">사실적</option>
+                                  <option value="photographic">사진 같은</option>
+                                  <option value="anime">애니메이션</option>
+                                  <option value="illustration">일러스트</option>
+                                  <option value="dreamy">몽환적</option>
+                                </select>
+                              </div>
+                              
                               {/* 예상 비용 표시 */}
                               <div className="bg-blue-50 p-3 rounded border">
                                 <div className="text-xs text-blue-700">
@@ -1150,11 +1186,29 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
                           )}
                           
                           {settings[activeTab].provider === 'gemini' && (
-                            <div className="bg-green-50 p-3 rounded border">
-                              <div className="text-sm text-green-700 space-y-1">
-                                <div><strong>품질:</strong> 자동 최적화 (선택 불가)</div>
-                                <div><strong>해상도:</strong> 1024x1024 고정</div>
-                                <div><strong>💰 비용:</strong> $0.039/이미지 (고정)</div>
+                            <div className="space-y-4">
+                              {/* 스타일 선택 */}
+                              <div>
+                                <label className="text-xs font-medium text-gray-700 mb-2 block">이미지 스타일</label>
+                                <select
+                                  value={settings[activeTab].style || 'realistic'}
+                                  onChange={(e) => updateSetting(activeTab, 'style', e.target.value)}
+                                  className="ultra-select w-full" style={{padding: '8px 12px', fontSize: '13px'}}
+                                >
+                                  <option value="realistic">사실적</option>
+                                  <option value="photographic">사진 같은</option>
+                                  <option value="anime">애니메이션</option>
+                                  <option value="illustration">일러스트</option>
+                                  <option value="dreamy">몽환적</option>
+                                </select>
+                              </div>
+                              
+                              <div className="bg-green-50 p-3 rounded border">
+                                <div className="text-sm text-green-700 space-y-1">
+                                  <div><strong>품질:</strong> 자동 최적화 (선택 불가)</div>
+                                  <div><strong>해상도:</strong> 1024x1024 고정</div>
+                                  <div><strong>💰 비용:</strong> $0.039/이미지 (고정)</div>
+                                </div>
                               </div>
                             </div>
                           )}
@@ -1191,16 +1245,93 @@ const LLMSettings: React.FC<LLMSettingsProps> = ({ onClose, onSettingsChange }) 
                                 </select>
                               </div>
                               
+                              {/* 스타일 선택 */}
+                              <div>
+                                <label className="text-xs font-medium text-gray-700 mb-2 block">이미지 스타일</label>
+                                <select
+                                  value={settings[activeTab].style || 'realistic'}
+                                  onChange={(e) => updateSetting(activeTab, 'style', e.target.value)}
+                                  className="ultra-select w-full" style={{padding: '8px 12px', fontSize: '13px'}}
+                                >
+                                  {settings[activeTab].model === 'sdxl-base' ? (
+                                    <>
+                                      <option value="realistic">사실적 (Realistic Vision V6.0)</option>
+                                      <option value="photographic">사진 같은 (SDXL Base)</option>
+                                      <option value="illustration">일러스트 (Mistoon Anime)</option>
+                                      <option value="anime">애니메이션 (Mistoon Anime)</option>
+                                      <option value="dreamy">몽환적 (CyberRealistic)</option>
+                                    </>
+                                  ) : settings[activeTab].model === 'flux-base' ? (
+                                    <>
+                                      <option value="realistic">사실적 (FLUX Schnell)</option>
+                                      <option value="photographic">사진 같은 (FLUX Dev)</option>
+                                      <option value="illustration">일러스트 (FLUX Schnell)</option>
+                                      <option value="anime">애니메이션 (FLUX Schnell)</option>
+                                      <option value="dreamy">몽환적 (FLUX Pro)</option>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <option value="realistic">사실적</option>
+                                      <option value="photographic">사진 같은</option>
+                                      <option value="anime">애니메이션</option>
+                                      <option value="illustration">일러스트</option>
+                                      <option value="dreamy">몽환적</option>
+                                    </>
+                                  )}
+                                </select>
+                              </div>
+                              
                               {/* 예상 비용 표시 */}
                               <div className="bg-purple-50 p-3 rounded border border-purple-200">
                                 <div className="text-xs text-purple-700">
-                                  <strong>⚡ 예상 비용:</strong> $0.0006~$0.002/이미지 (초저가!)<br/>
-                                  <strong>📐 해상도:</strong> {settings[activeTab].size || '1024x1024'}<br/>
-                                  <strong>🎛️ 품질:</strong> {
-                                    settings[activeTab].quality === 'low' ? '10 steps (빠름)' :
-                                    settings[activeTab].quality === 'high' ? '25 steps (최고)' :
-                                    '15 steps (권장)'
-                                  }
+                                  {(() => {
+                                    const model = settings[activeTab].model;
+                                    const style = settings[activeTab].style || 'realistic';
+                                    
+                                    if (model === 'sdxl-base') {
+                                      const actualModel = runwareStyleModels['sdxl-base'][style as keyof typeof runwareStyleModels['sdxl-base']];
+                                      return (
+                                        <>
+                                          <strong>⚡ 예상 비용:</strong> $0.0006/이미지 (초저가!)<br/>
+                                          <strong>📐 해상도:</strong> {settings[activeTab].size || '1024x1024'}<br/>
+                                          <strong>🎛️ 품질:</strong> {
+                                            settings[activeTab].quality === 'low' ? '10 steps (빠름)' :
+                                            settings[activeTab].quality === 'high' ? '25 steps (최고)' :
+                                            '15 steps (권장)'
+                                          }<br/>
+                                          <strong>🎨 실제 모델:</strong> {actualModel}<br/>
+                                          <strong>⚡ 속도:</strong> 2-3초
+                                        </>
+                                      );
+                                    } else if (model === 'flux-base') {
+                                      const actualModel = runwareStyleModels['flux-base'][style as keyof typeof runwareStyleModels['flux-base']];
+                                      return (
+                                        <>
+                                          <strong>⚡ 예상 비용:</strong> $0.001~$0.003/이미지 (저가)<br/>
+                                          <strong>📐 해상도:</strong> {settings[activeTab].size || '1024x1024'}<br/>
+                                          <strong>🎛️ 품질:</strong> {
+                                            settings[activeTab].quality === 'low' ? '4 steps (초고속)' :
+                                            settings[activeTab].quality === 'high' ? '8 steps (최고)' :
+                                            '6 steps (권장)'
+                                          }<br/>
+                                          <strong>🎨 실제 모델:</strong> {actualModel}<br/>
+                                          <strong>⚡ 속도:</strong> 1-2초
+                                        </>
+                                      );
+                                    } else {
+                                      return (
+                                        <>
+                                          <strong>⚡ 예상 비용:</strong> $0.0006~$0.003/이미지<br/>
+                                          <strong>📐 해상도:</strong> {settings[activeTab].size || '1024x1024'}<br/>
+                                          <strong>🎛️ 품질:</strong> {
+                                            settings[activeTab].quality === 'low' ? '10 steps (빠름)' :
+                                            settings[activeTab].quality === 'high' ? '25 steps (최고)' :
+                                            '15 steps (권장)'
+                                          }
+                                        </>
+                                      );
+                                    }
+                                  })()}
                                 </div>
                               </div>
                             </div>

@@ -77,6 +77,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
   // 이미지 생성 옵션 상태 - API 설정에서 가져오기
   const [imageQuality, setImageQuality] = useState<'low' | 'medium' | 'high'>('high');
   const [imageSize, setImageSize] = useState<'1024x1024' | '1024x1536' | '1536x1024'>('1024x1024');
+  const [imageStyle, setImageStyle] = useState<'realistic' | 'anime' | 'dreamy' | 'illustration' | 'photographic'>('realistic');
   
   // 이미지 AI 클라이언트 상태 체크 및 옵션 동기화
   useEffect(() => {
@@ -99,6 +100,9 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
           }
           if (imageSettings.size) {
             setImageSize(imageSettings.size as '1024x1024' | '1024x1536' | '1536x1024');
+          }
+          if (imageSettings.style) {
+            setImageStyle(imageSettings.style as 'realistic' | 'anime' | 'dreamy' | 'illustration' | 'photographic');
           }
         }
       } else {
@@ -695,8 +699,12 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       
       console.log(`🎛️ 이미지 생성 옵션:`, imageOptions);
       
+      // 스타일 적용된 프롬프트 생성
+      const styledPrompt = applyStyleToPrompt(prompt, imageStyle);
+      console.log(`🎨 스타일 적용된 프롬프트: ${styledPrompt}`);
+      
       // 실제 이미지 생성 API 호출
-      const generatedImageUrl = await imageClient.generateImage(prompt, imageOptions);
+      const generatedImageUrl = await imageClient.generateImage(styledPrompt, imageOptions);
       
       // 정지 요청 확인 (배치 모드일 때만)
       if (shouldStopGeneration && isPartOfBatch) {
@@ -786,6 +794,32 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       imageUrl: '',
       imageIndex: 0
     });
+  };
+
+  // 스타일에 따른 프롬프트 조정
+  const applyStyleToPrompt = (basePrompt: string, style: string): string => {
+    let styledPrompt = basePrompt;
+    
+    switch (style) {
+      case 'anime':
+        styledPrompt += ', anime style, manga style, 2D illustration, cel shading';
+        break;
+      case 'dreamy':
+        styledPrompt += ', dreamy atmosphere, soft lighting, ethereal, artistic, fantasy art, magical';
+        break;
+      case 'illustration':
+        styledPrompt += ', digital illustration, concept art, stylized, artistic rendering';
+        break;
+      case 'photographic':
+        styledPrompt += ', professional photography, high quality, detailed, photorealistic, studio lighting';
+        break;
+      case 'realistic':
+      default:
+        styledPrompt += ', realistic, detailed, high quality';
+        break;
+    }
+    
+    return styledPrompt;
   };
 
   // 이미지 제거
@@ -1301,7 +1335,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                     {hasImageClient && (
                       <div className="border-t border-slate-200 pt-3">
                         <div className="text-sm font-medium text-slate-700 mb-2">🎛️ 이미지 생성 옵션</div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           {/* 품질 설정 */}
                           <div>
                             <label className="text-xs font-medium text-slate-600 mb-1 block">품질</label>
@@ -1337,6 +1371,27 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                               <option value="1024x1024">정사각형 (1024×1024)</option>
                               <option value="1024x1536">세로형 (1024×1536)</option>
                               <option value="1536x1024">가로형 (1536×1024)</option>
+                            </select>
+                          </div>
+                          
+                          {/* 스타일 설정 */}
+                          <div>
+                            <label className="text-xs font-medium text-slate-600 mb-1 block">스타일</label>
+                            <select
+                              value={imageStyle}
+                              onChange={(e) => {
+                                const newStyle = e.target.value as 'realistic' | 'anime' | 'dreamy' | 'illustration' | 'photographic';
+                                setImageStyle(newStyle);
+                                // API 설정에도 반영
+                                LLMClientFactory.updateImageSetting('style', newStyle);
+                              }}
+                              className="w-full text-xs border rounded px-2 py-1"
+                            >
+                              <option value="realistic">사실적</option>
+                              <option value="photographic">사진 같은</option>
+                              <option value="anime">애니메이션</option>
+                              <option value="illustration">일러스트</option>
+                              <option value="dreamy">몽환적</option>
                             </select>
                           </div>
                         </div>

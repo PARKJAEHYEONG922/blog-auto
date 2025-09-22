@@ -84,6 +84,8 @@ export class OpenAIClient extends BaseLLMClient {
 
   async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
     try {
+      console.log(`🔵 OpenAI gpt-image-1 이미지 생성 시작`);
+      
       const response = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST',
         headers: {
@@ -93,18 +95,31 @@ export class OpenAIClient extends BaseLLMClient {
         body: JSON.stringify({
           model: 'gpt-image-1',
           prompt: prompt,
-          quality: options?.quality || 'high', // 'low', 'medium', 'high' 중 선택 (기본값: high)
           size: options?.size || '1024x1024', // '1024x1024', '1024x1536', '1536x1024' 중 선택
-          response_format: 'url'
+          n: 1
+          // gpt-image-1은 항상 base64로 반환하므로 response_format 불필요
+          // quality 파라미터도 gpt-image-1에서는 지원하지 않음
         })
       });
 
+      console.log(`📊 OpenAI 응답 상태: ${response.status}`);
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`❌ OpenAI 오류 응답:`, errorText);
         throw new Error(`OpenAI Image API 오류: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
-      return data.data[0]?.url || '';
+      console.log(`✅ OpenAI 응답 수신 완료`);
+      
+      // gpt-image-1은 base64 형태로 반환
+      const base64Image = data.data?.[0]?.b64_json;
+      if (base64Image) {
+        return `data:image/png;base64,${base64Image}`;
+      } else {
+        throw new Error('OpenAI에서 이미지 데이터를 받지 못했습니다.');
+      }
     } catch (error) {
       console.error('OpenAI Image API 호출 실패:', error);
       throw error;
@@ -323,10 +338,11 @@ export class GeminiClient extends BaseLLMClient {
 
   async generateImage(prompt: string, options?: { quality?: 'low' | 'medium' | 'high'; size?: '1024x1024' | '1024x1536' | '1536x1024' }): Promise<string> {
     try {
-      // Gemini 2.5 Flash Image 모델 사용 (2025년 8월 출시)
-      // 참고: Gemini는 현재 1024x1024 고정, 품질 설정 미지원
+      console.log(`🟡 Gemini 2.5 Flash Image 이미지 생성 시작`);
+      
+      // Gemini 2.5 Flash Image Preview 모델 사용 (2025년 8월 출시)
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${this.config.apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${this.config.apiKey}`,
         {
           method: 'POST',
           headers: {
@@ -335,32 +351,33 @@ export class GeminiClient extends BaseLLMClient {
           body: JSON.stringify({
             contents: [{
               parts: [{
-                text: `Create an image: ${prompt}`
+                text: prompt // 직접 프롬프트 사용 (Create an image: 접두어 불필요)
               }]
-            }],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 8000
-            }
+            }]
           })
         }
       );
 
+      console.log(`📊 Gemini 응답 상태: ${response.status}`);
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`❌ Gemini 오류 응답:`, errorText);
         throw new Error(`Gemini Image API 오류: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
+      console.log(`✅ Gemini 응답 수신 완료`);
       
-      // Gemini의 이미지 생성 응답에서 이미지 URL 추출
-      // 실제 응답 구조는 API 문서에 따라 조정 필요
-      const imageUrl = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      // Gemini 2.5 Flash Image의 실제 응답 구조에 따른 이미지 데이터 추출
+      const imageData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       
-      if (imageUrl) {
+      if (imageData) {
         // Base64 데이터를 data URL로 변환
-        return `data:image/png;base64,${imageUrl}`;
+        return `data:image/png;base64,${imageData}`;
       } else {
-        throw new Error('Gemini에서 이미지 URL을 추출할 수 없습니다.');
+        console.error('Gemini 응답 구조:', JSON.stringify(data, null, 2));
+        throw new Error('Gemini에서 이미지 데이터를 추출할 수 없습니다.');
       }
       
     } catch (error) {
@@ -369,6 +386,24 @@ export class GeminiClient extends BaseLLMClient {
     }
   }
 }
+
+// Runware 스타일별 실제 모델 매핑
+const runwareStyleModels = {
+  'sdxl-base': {
+    realistic: 'civitai:4201@130072', // Realistic Vision V6.0
+    photographic: 'civitai:102438@133677', // SDXL Base (사진 특화)
+    illustration: 'civitai:24149@144666', // Mistoon Anime (일러스트)
+    anime: 'civitai:24149@144666', // Mistoon Anime
+    dreamy: 'civitai:1125067@1250712' // CyberRealistic (몽환적)
+  },
+  'flux-base': {
+    realistic: 'flux-1-schnell', // FLUX 기본 (사실적)
+    photographic: 'flux-1-dev', // FLUX Dev (사진)
+    illustration: 'flux-1-schnell', // FLUX 기본 (일러스트)
+    anime: 'flux-1-schnell', // FLUX 기본 (애니메이션)
+    dreamy: 'flux-1-pro' // FLUX Pro (몽환적)
+  }
+};
 
 export class RunwareClient extends BaseLLMClient {
   async generateText(messages: LLMMessage[], options?: { tools?: LLMTool[] }): Promise<LLMResponse> {
@@ -395,6 +430,22 @@ export class RunwareClient extends BaseLLMClient {
       else if (options?.quality === 'medium') steps = 15;
       else if (options?.quality === 'high') steps = 25;
 
+      // 스타일에 따른 실제 모델 선택
+      let actualModel = this.config.model;
+      console.log(`🔍 Runware 설정 확인:`, {
+        configModel: this.config.model,
+        configStyle: this.config.style,
+        availableStyleModels: Object.keys(runwareStyleModels)
+      });
+      
+      if (this.config.style && runwareStyleModels[this.config.model as keyof typeof runwareStyleModels]) {
+        const styleModels = runwareStyleModels[this.config.model as keyof typeof runwareStyleModels];
+        actualModel = styleModels[this.config.style as keyof typeof styleModels] || this.config.model;
+        console.log(`🎨 Runware 스타일 매핑: ${this.config.model} + ${this.config.style} → ${actualModel}`);
+      } else {
+        console.log(`⚠️ 스타일 매핑 실패 - 기본 모델 사용: ${actualModel}`);
+      }
+
       // UUID 생성 (간단한 방법)
       const taskUUID = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
         const r = Math.random() * 16 | 0;
@@ -415,7 +466,7 @@ export class RunwareClient extends BaseLLMClient {
             positivePrompt: prompt,
             width: width,
             height: height,
-            model: 'civitai:102438@133677', // 기본 Stable Diffusion 모델
+            model: actualModel, // 스타일에 따라 매핑된 실제 모델 사용
             numberResults: 1,
             steps: steps,
             CFGScale: 7,
@@ -425,7 +476,21 @@ export class RunwareClient extends BaseLLMClient {
       });
 
       if (!response.ok) {
-        throw new Error(`Runware API 오류: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.error(`❌ Runware API 상세 오류:`, errorText);
+        console.error(`📝 요청 데이터:`, JSON.stringify({
+          taskType: 'imageInference',
+          taskUUID: taskUUID,
+          positivePrompt: prompt,
+          width: width,
+          height: height,
+          model: actualModel,
+          numberResults: 1,
+          steps: steps,
+          CFGScale: 7,
+          seed: Math.floor(Math.random() * 1000000)
+        }, null, 2));
+        throw new Error(`Runware API 오류: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
       const data = await response.json();
@@ -570,7 +635,7 @@ export class LLMClientFactory {
   }
 
   // 이미지 설정 업데이트 (Step3에서 사용)
-  static updateImageSetting(key: 'quality' | 'size', value: string): void {
+  static updateImageSetting(key: 'quality' | 'size' | 'style', value: string): void {
     if (!this.cachedSettings) return;
     
     // 캐시된 설정 업데이트
