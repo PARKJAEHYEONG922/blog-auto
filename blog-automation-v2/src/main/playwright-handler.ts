@@ -98,6 +98,81 @@ class PlaywrightService {
     await this.page.waitForTimeout(milliseconds);
   }
 
+  // 실제 키보드 타이핑 (사람처럼)
+  async typeText(text: string, delay?: number): Promise<boolean> {
+    if (!this.page) return false;
+    try {
+      await this.page.keyboard.type(text, { 
+        delay: delay || 50 + Math.random() * 100 // 50-150ms 랜덤 타이핑 속도
+      });
+      console.log(`실제 키보드로 타이핑 완료: "${text.substring(0, 20)}..."`);
+      return true;
+    } catch (error) {
+      console.error('키보드 타이핑 실패:', error);
+      return false;
+    }
+  }
+
+  // 실제 키 누르기
+  async pressKey(key: string): Promise<boolean> {
+    if (!this.page) return false;
+    try {
+      await this.page.keyboard.press(key);
+      console.log(`키 입력: ${key}`);
+      return true;
+    } catch (error) {
+      console.error(`키 입력 실패 (${key}):`, error);
+      return false;
+    }
+  }
+
+  // 실제 마우스 클릭 (좌표 기반)
+  async clickAt(x: number, y: number): Promise<boolean> {
+    if (!this.page) return false;
+    try {
+      await this.page.mouse.click(x, y);
+      console.log(`마우스 클릭: (${x}, ${y})`);
+      return true;
+    } catch (error) {
+      console.error(`마우스 클릭 실패 (${x}, ${y}):`, error);
+      return false;
+    }
+  }
+
+  // 클립보드에 텍스트 설정
+  async setClipboard(text: string): Promise<boolean> {
+    if (!this.page) return false;
+    try {
+      await this.page.evaluate(async (text) => {
+        await navigator.clipboard.writeText(text);
+      }, text);
+      console.log(`클립보드에 텍스트 설정 완료: ${text.substring(0, 50)}...`);
+      return true;
+    } catch (error) {
+      console.error('클립보드 설정 실패:', error);
+      return false;
+    }
+  }
+
+  // 클립보드에 HTML 설정
+  async setClipboardHTML(html: string): Promise<boolean> {
+    if (!this.page) return false;
+    try {
+      await this.page.evaluate(async (html) => {
+        const clipboardItem = new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([html.replace(/<[^>]*>/g, '')], { type: 'text/plain' })
+        });
+        await navigator.clipboard.write([clipboardItem]);
+      }, html);
+      console.log(`클립보드에 HTML 설정 완료: ${html.substring(0, 50)}...`);
+      return true;
+    } catch (error) {
+      console.error('클립보드 HTML 설정 실패:', error);
+      return false;
+    }
+  }
+
   async evaluateScript(script: string): Promise<any> {
     if (!this.page) return null;
     try {
@@ -126,7 +201,7 @@ class PlaywrightService {
         
         try {
           const result = await frame.evaluate(script);
-          if (result && result.success) {
+          if (result && typeof result === 'object' && 'success' in result && (result as any).success) {
             console.log(`✅ iframe에서 스크립트 실행 성공 (${frameUrl})`);
             return result;
           }
@@ -345,6 +420,56 @@ export function registerPlaywrightHandlers() {
     try {
       const result = await playwrightService.evaluateScriptInFrames(script, frameUrlPattern);
       return { success: true, result };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // 실제 키보드 타이핑
+  ipcMain.handle('playwright-type', async (event, text: string, delay?: number) => {
+    try {
+      const result = await playwrightService.typeText(text, delay);
+      return { success: result };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // 실제 키 누르기
+  ipcMain.handle('playwright-press', async (event, key: string) => {
+    try {
+      const result = await playwrightService.pressKey(key);
+      return { success: result };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // 실제 마우스 클릭
+  ipcMain.handle('playwright-click-at', async (event, x: number, y: number) => {
+    try {
+      const result = await playwrightService.clickAt(x, y);
+      return { success: result };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // 클립보드에 텍스트 설정
+  ipcMain.handle('playwright-set-clipboard', async (event, text: string) => {
+    try {
+      const result = await playwrightService.setClipboard(text);
+      return { success: result };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // 클립보드에 HTML 설정
+  ipcMain.handle('playwright-set-clipboard-html', async (event, html: string) => {
+    try {
+      const result = await playwrightService.setClipboardHTML(html);
+      return { success: result };
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }

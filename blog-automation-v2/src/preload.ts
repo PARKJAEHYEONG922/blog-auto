@@ -63,6 +63,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('playwright-click-in-frames', selector, frameUrlPattern),
   playwrightEvaluateInFrames: (script: string, frameUrlPattern?: string) => 
     ipcRenderer.invoke('playwright-evaluate-in-frames', script, frameUrlPattern),
+  playwrightType: (text: string, delay?: number) => 
+    ipcRenderer.invoke('playwright-type', text, delay),
+  playwrightPress: (key: string) => 
+    ipcRenderer.invoke('playwright-press', key),
+  playwrightClickAt: (x: number, y: number) => 
+    ipcRenderer.invoke('playwright-click-at', x, y),
+  playwrightSetClipboard: (text: string) => 
+    ipcRenderer.invoke('playwright-set-clipboard', text),
+  playwrightSetClipboardHTML: (html: string) => 
+    ipcRenderer.invoke('playwright-set-clipboard-html', html),
   playwrightCleanup: () => 
     ipcRenderer.invoke('playwright-cleanup'),
 });
@@ -95,6 +105,11 @@ declare global {
       playwrightEvaluate: (script: string) => Promise<{ success: boolean; result?: any; error?: string }>;
       playwrightClickInFrames: (selector: string, frameUrlPattern?: string) => Promise<{ success: boolean; error?: string }>;
       playwrightEvaluateInFrames: (script: string, frameUrlPattern?: string) => Promise<{ success: boolean; result?: any; error?: string }>;
+      playwrightType: (text: string, delay?: number) => Promise<{ success: boolean; error?: string }>;
+      playwrightPress: (key: string) => Promise<{ success: boolean; error?: string }>;
+      playwrightClickAt: (x: number, y: number) => Promise<{ success: boolean; error?: string }>;
+      playwrightSetClipboard: (text: string) => Promise<{ success: boolean; error?: string }>;
+      playwrightSetClipboardHTML: (html: string) => Promise<{ success: boolean; error?: string }>;
       playwrightCleanup: () => Promise<{ success: boolean; error?: string }>;
     };
   }
