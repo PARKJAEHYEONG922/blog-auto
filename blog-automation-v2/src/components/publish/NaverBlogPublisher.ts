@@ -16,6 +16,8 @@ export interface PublishOptions {
   openToPublic: boolean;
   allowComments: boolean;
   allowTrackback: boolean;
+  publishTime: 'now' | 'scheduled'; // 현재 발행 또는 예약 발행
+  scheduledDate?: string; // 예약 발행 시 날짜/시간
 }
 
 export enum PostStatus {
@@ -226,7 +228,8 @@ export class NaverBlogPublisher {
   async publishPost(postData: BlogPostData, options: PublishOptions = {
     openToPublic: true,
     allowComments: true,
-    allowTrackback: true
+    allowTrackback: true,
+    publishTime: 'now'
   }): Promise<PostStatus> {
     try {
       console.log('블로그 포스트 작성 시작...');
@@ -494,11 +497,204 @@ export class NaverBlogPublisher {
         }
       }
 
+      // 발행 시간 설정
+      await this.configurePublishTime(options.publishTime, options.scheduledDate);
+
       return true;
 
     } catch (error) {
       console.error('발행 설정 실패:', error);
       return true; // 설정은 선택적이므로 실패해도 계속 진행
+    }
+  }
+
+  /**
+   * 발행 시간 설정 구성
+   */
+  private async configurePublishTime(publishTime: 'now' | 'scheduled', scheduledDate?: string): Promise<boolean> {
+    try {
+      console.log(`발행 시간 설정: ${publishTime}`);
+
+      if (publishTime === 'now') {
+        // 현재 발행 선택
+        const nowRadio = await this.page.$('input[data-testid="nowTimeRadioBtn"], input[value="now"], #radio_time1');
+        if (nowRadio && !(await nowRadio.isChecked())) {
+          await nowRadio.click();
+          console.log('✅ 현재 발행 선택');
+        }
+      } else if (publishTime === 'scheduled') {
+        // 예약 발행 선택
+        const scheduleRadio = await this.page.$('input[data-testid="preTimeRadioBtn"], input[value="pre"], #radio_time2');
+        if (scheduleRadio) {
+          await scheduleRadio.click();
+          console.log('✅ 예약 발행 선택');
+          
+          // 예약 시간 설정 (scheduledDate가 제공된 경우)
+          if (scheduledDate) {
+            console.log(`예약 시간 설정: ${scheduledDate}`);
+            await this.setScheduledDateTime(scheduledDate);
+          }
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error('발행 시간 설정 실패:', error);
+      return true; // 설정은 선택적이므로 실패해도 계속 진행
+    }
+  }
+
+  /**
+   * 예약 발행 날짜/시간 설정
+   */
+  private async setScheduledDateTime(scheduledDate: string): Promise<boolean> {
+    try {
+      console.log('⏰ 예약 날짜/시간 설정 중...');
+      
+      // 날짜 문자열 파싱 (다양한 형식 지원)
+      let date: Date;
+      
+      // ISO 형식이나 일반적인 형식 파싱 시도
+      if (scheduledDate.includes('T')) {
+        // ISO 8601 형식 (예: "2024-12-25T14:30:00")
+        date = new Date(scheduledDate);
+      } else if (scheduledDate.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/)) {
+        // "YYYY-MM-DD HH:mm" 형식
+        date = new Date(scheduledDate.replace(' ', 'T'));
+      } else {
+        // 기타 형식은 Date 생성자에 맡김
+        date = new Date(scheduledDate);
+      }
+      
+      if (isNaN(date.getTime())) {
+        console.error('❌ 유효하지 않은 날짜 형식:', scheduledDate);
+        return false;
+      }
+      
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1; // getMonth()는 0부터 시작
+      const day = date.getDate();
+      const hour = date.getHours();
+      const minute = date.getMinutes();
+      
+      console.log(`📅 설정할 날짜/시간: ${year}년 ${month}월 ${day}일 ${hour}시 ${minute}분`);
+      
+      // 년도 설정
+      await this.setDateTimeField('year', year.toString(), [
+        'select[name*="year"]',
+        'select[id*="year"]',
+        'input[name*="year"]',
+        'input[id*="year"]',
+        '.year-select',
+        '[data-testid*="year"]'
+      ]);
+      
+      // 월 설정
+      await this.setDateTimeField('month', month.toString(), [
+        'select[name*="month"]',
+        'select[id*="month"]', 
+        'input[name*="month"]',
+        'input[id*="month"]',
+        '.month-select',
+        '[data-testid*="month"]'
+      ]);
+      
+      // 일 설정
+      await this.setDateTimeField('day', day.toString(), [
+        'select[name*="day"]',
+        'select[id*="day"]',
+        'select[name*="date"]',
+        'select[id*="date"]',
+        'input[name*="day"]',
+        'input[id*="day"]',
+        '.day-select',
+        '[data-testid*="day"]'
+      ]);
+      
+      // 시간 설정
+      await this.setDateTimeField('hour', hour.toString(), [
+        'select[name*="hour"]',
+        'select[id*="hour"]',
+        'input[name*="hour"]',
+        'input[id*="hour"]',
+        '.hour-select',
+        '[data-testid*="hour"]'
+      ]);
+      
+      // 분 설정
+      await this.setDateTimeField('minute', minute.toString(), [
+        'select[name*="minute"]',
+        'select[id*="minute"]',
+        'select[name*="min"]',
+        'select[id*="min"]',
+        'input[name*="minute"]',
+        'input[id*="minute"]',
+        '.minute-select',
+        '[data-testid*="minute"]'
+      ]);
+      
+      console.log('✅ 예약 날짜/시간 설정 완료');
+      return true;
+      
+    } catch (error) {
+      console.error('❌ 예약 날짜/시간 설정 실패:', error);
+      return false;
+    }
+  }
+  
+  /**
+   * 날짜/시간 필드 설정 헬퍼
+   */
+  private async setDateTimeField(fieldType: string, value: string, selectors: string[]): Promise<boolean> {
+    try {
+      for (const selector of selectors) {
+        try {
+          const element = await this.page.$(selector);
+          if (!element) continue;
+          
+          const tagName = await element.evaluate(el => el.tagName.toLowerCase());
+          
+          if (tagName === 'select') {
+            // Select 박스인 경우
+            const options = await element.$$eval('option', options => 
+              options.map(option => ({
+                value: option.value,
+                text: option.textContent?.trim() || ''
+              }))
+            );
+            
+            // 값이나 텍스트로 매칭되는 옵션 찾기
+            const matchingOption = options.find(option => 
+              option.value === value || 
+              option.text === value ||
+              option.text === value.padStart(2, '0') // "01", "02" 형식
+            );
+            
+            if (matchingOption) {
+              await element.selectOption(matchingOption.value);
+              console.log(`✅ ${fieldType} 설정 완료: ${value} (셀렉터: ${selector})`);
+              return true;
+            }
+          } else if (tagName === 'input') {
+            // Input 필드인 경우
+            await element.click();
+            await element.fill('');
+            await element.type(value);
+            console.log(`✅ ${fieldType} 설정 완료: ${value} (셀렉터: ${selector})`);
+            return true;
+          }
+        } catch (error) {
+          console.debug(`${fieldType} 필드 설정 실패 (셀렉터: ${selector}):`, error);
+          continue;
+        }
+      }
+      
+      console.warn(`⚠️ ${fieldType} 필드를 찾을 수 없음`);
+      return false;
+      
+    } catch (error) {
+      console.error(`❌ ${fieldType} 필드 설정 오류:`, error);
+      return false;
     }
   }
 
@@ -511,6 +707,9 @@ export class NaverBlogPublisher {
 
       const publishSelectors = [
         'button:has-text("발행")',
+        'button[class*="publish_btn"]',
+        'button[data-click-area="tpb.publish"]',
+        '.publish_btn__m9KHH',
         'button:has-text("완료")',
         'button[type="submit"]',
         '.btn-publish',
