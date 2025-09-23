@@ -1969,34 +1969,88 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
         await window.electronAPI.playwrightWaitTimeout(1000); // 팝업 로딩 대기
         
         if (publishOption === 'immediate') {
-          // 즉시 발행: "현재" 라디오 버튼 클릭 (기본값이지만 명시적으로)
-          console.log('⚡ 즉시 발행 - 현재 시간 선택...');
-          const currentRadioResult = await window.electronAPI.playwrightClickInFrames('#radio_time1', 'PostWriteForm.naver');
-          
-          if (currentRadioResult.success) {
-            console.log('✅ 현재 시간 라디오 버튼 클릭 완료');
-          } else {
-            console.warn('⚠️ 현재 시간 라디오 버튼 클릭 실패 (기본값일 가능성 있음)');
-          }
+          // 즉시 발행: 기본값이 현재이므로 별도 설정 불필요
+          console.log('⚡ 즉시 발행 - 기본 설정 사용 (현재 시간)');
           
         } else if (publishOption === 'scheduled') {
-          // 예약 발행: "예약" 라디오 버튼 클릭 후 시간 설정
-          console.log('📅 예약 발행 - 예약 라디오 버튼 클릭...');
-          const radioResult = await window.electronAPI.playwrightClickInFrames('#radio_time2', 'PostWriteForm.naver');
+          // 예약 발행: 실제 네이버 구조에 맞는 처리
+          console.log('📅 예약 발행 - 예약 라벨 클릭...');
+          
+          // 1단계: 예약 라벨 클릭
+          const radioResult = await window.electronAPI.playwrightClickInFrames('label[for="radio_time2"]', 'PostWriteForm.naver');
           
           if (!radioResult.success) {
-            console.warn('⚠️ 예약 라디오 버튼 클릭 실패');
-            return false;
+            console.warn('⚠️ 예약 라벨 클릭 실패, 라디오 버튼 직접 클릭 시도...');
+            const radioDirectResult = await window.electronAPI.playwrightClickInFrames('#radio_time2', 'PostWriteForm.naver');
+            if (!radioDirectResult.success) {
+              console.warn('⚠️ 예약 라디오 버튼 클릭도 실패');
+              return false;
+            }
           }
           
           console.log('✅ 예약 라디오 버튼 클릭 완료');
-          await window.electronAPI.playwrightWaitTimeout(500);
+          await window.electronAPI.playwrightWaitTimeout(1000); // 날짜/시간 UI 로딩 대기
           
-          // 2단계: UI에서 설정한 예약 시간 사용
-          console.log(`예약 시간 설정: ${scheduledDate} ${scheduledHour}:${scheduledMinute}`);
+          // 2단계: 날짜 설정 (현재 날짜가 아닌 경우에만)
+          const [year, month, day] = scheduledDate.split('-').map(Number);
+          const today = new Date();
+          const isToday = year === today.getFullYear() && 
+                         month === (today.getMonth() + 1) && 
+                         day === today.getDate();
           
-          // 시간 선택 (select 요소)
-          console.log('🕐 시간 선택 중...');
+          if (isToday) {
+            console.log('📅 오늘 날짜이므로 날짜 클릭 건너뜀');
+          } else {
+            console.log(`📅 날짜 변경 필요: ${scheduledDate}`);
+            
+            // 날짜 입력 필드 클릭하여 달력 열기
+            const dateInputResult = await window.electronAPI.playwrightClickInFrames('.input_date__QmA0s', 'PostWriteForm.naver');
+            
+            if (!dateInputResult.success) {
+              console.warn('⚠️ 날짜 입력 필드 클릭 실패');
+              return false;
+            }
+            
+            await window.electronAPI.playwrightWaitTimeout(500); // 달력 팝업 대기
+            
+            // 달력에서 날짜 선택
+            const dateSelectResult = await window.electronAPI.playwrightEvaluateInFrames(`
+              (function() {
+                try {
+                  // 달력에서 해당 날짜 버튼 찾기
+                  const datePicker = document.querySelector('.ui-datepicker');
+                  if (!datePicker) {
+                    return { success: false, error: '달력을 찾을 수 없음' };
+                  }
+                  
+                  // 모든 날짜 버튼 중에서 해당 날짜 찾기
+                  const dateButtons = datePicker.querySelectorAll('button.ui-state-default');
+                  for (const button of dateButtons) {
+                    if (button.textContent.trim() === '${day}') {
+                      button.click();
+                      console.log('날짜 선택 완료: ${day}일');
+                      return { success: true };
+                    }
+                  }
+                  
+                  return { success: false, error: '해당 날짜 버튼을 찾을 수 없음' };
+                } catch (error) {
+                  return { success: false, error: error.message };
+                }
+              })()
+            `, 'PostWriteForm.naver');
+            
+            if (!dateSelectResult.success || !dateSelectResult.result?.success) {
+              console.warn('⚠️ 날짜 선택 실패:', dateSelectResult?.result?.error);
+              return false;
+            }
+            
+            console.log('✅ 날짜 선택 완료');
+            await window.electronAPI.playwrightWaitTimeout(500);
+          }
+          
+          // 4단계: 시간 선택
+          console.log(`🕐 시간 선택: ${scheduledHour}시`);
           const hourSelectResult = await window.electronAPI.playwrightEvaluateInFrames(`
             (function() {
               try {
@@ -2004,7 +2058,7 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
                 if (hourSelect) {
                   hourSelect.value = '${scheduledHour}';
                   hourSelect.dispatchEvent(new Event('change', { bubbles: true }));
-                  console.log('시간 선택 완료: ${scheduledHour}');
+                  console.log('시간 선택 완료: ${scheduledHour}시');
                   return { success: true };
                 }
                 return { success: false, error: '시간 선택 요소를 찾을 수 없음' };
@@ -2014,14 +2068,16 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
             })()
           `, 'PostWriteForm.naver');
           
-          if (hourSelectResult?.result?.success) {
-            console.log('✅ 시간 선택 완료');
-          } else {
+          if (!hourSelectResult.success || !hourSelectResult.result?.success) {
             console.warn('⚠️ 시간 선택 실패:', hourSelectResult?.result?.error);
+            return false;
           }
           
-          // 분 선택 (select 요소)
-          console.log('⏱️ 분 선택 중...');
+          console.log('✅ 시간 선택 완료');
+          await window.electronAPI.playwrightWaitTimeout(300);
+          
+          // 5단계: 분 선택
+          console.log(`🕐 분 선택: ${scheduledMinute}분`);
           const minuteSelectResult = await window.electronAPI.playwrightEvaluateInFrames(`
             (function() {
               try {
@@ -2029,7 +2085,7 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
                 if (minuteSelect) {
                   minuteSelect.value = '${scheduledMinute}';
                   minuteSelect.dispatchEvent(new Event('change', { bubbles: true }));
-                  console.log('분 선택 완료: ${scheduledMinute}');
+                  console.log('분 선택 완료: ${scheduledMinute}분');
                   return { success: true };
                 }
                 return { success: false, error: '분 선택 요소를 찾을 수 없음' };
@@ -2039,11 +2095,12 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
             })()
           `, 'PostWriteForm.naver');
           
-          if (minuteSelectResult?.result?.success) {
-            console.log('✅ 분 선택 완료');
-          } else {
+          if (!minuteSelectResult.success || !minuteSelectResult.result?.success) {
             console.warn('⚠️ 분 선택 실패:', minuteSelectResult?.result?.error);
+            return false;
           }
+          
+          console.log('✅ 분 선택 완료');
         }
         
         await window.electronAPI.playwrightWaitTimeout(500);
