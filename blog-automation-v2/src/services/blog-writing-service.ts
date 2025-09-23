@@ -330,6 +330,14 @@ ${blogContent}
 - 한국적 요소가 필요한 경우 "Korean style" 등으로 명시
 - 음식/요리 관련시 "Korean food photography style" 추가
 
+🚨 중요: 한국어 텍스트 방지 규칙 🚨
+- "no Korean text", "no Korean characters", "avoid Korean writing" 반드시 포함
+- 간단한 영어는 허용: "simple English labels OK (dog, cat, small, big, step 1, 15g etc.)"
+- 비교/구분이 필요한 경우: "use simple English words or symbols like O, X, checkmarks"
+- 단계/순서 표시: "use numbers 1,2,3 or simple English instead of Korean text"
+- 올바름/틀림 표시: "show with O and X symbols or simple English, no Korean characters"
+- 한국어만 금지하고 간단한 영어는 허용: "minimal English text allowed, Korean text forbidden"
+
 ⚠️ 다시 한 번 강조: 반드시 정확히 ${expectedImageCount}개의 이미지 프롬프트를 생성해야 합니다. 개수가 맞지 않으면 오류가 발생합니다.`;
     
     return prompt;

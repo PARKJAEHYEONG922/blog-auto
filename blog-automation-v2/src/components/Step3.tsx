@@ -461,6 +461,120 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     return content;
   };
 
+  // 긴 텍스트를 28자 기준으로 재귀적으로 자르는 함수
+  const breakLongText = (text: string): string[] => {
+    // 마크다운 제거하여 실제 텍스트 길이 계산
+    const plainText = text.replace(/\*\*([^*]+)\*\*/g, '$1');
+    
+    if (plainText.length <= 28) {
+      return [text]; // 28자 이하면 그대로 반환
+    }
+    
+    // 15-28자 구간에서 자를 위치 찾기
+    let cutPosition = -1;
+    
+    // 1순위: 마침표
+    for (let i = 15; i <= Math.min(28, plainText.length - 3); i++) {
+      if (plainText[i] === '.') {
+        cutPosition = i + 1;
+        break;
+      }
+    }
+    
+    // 2순위: 쉼표 (마침표를 못 찾은 경우만)
+    if (cutPosition === -1) {
+      for (let i = 15; i <= Math.min(28, plainText.length - 3); i++) {
+        if (plainText[i] === ',') {
+          cutPosition = i + 1;
+          break;
+        }
+      }
+    }
+    
+    // 3순위: 접속사 (마침표, 쉼표를 못 찾은 경우만)
+    if (cutPosition === -1) {
+      for (let i = 15; i <= Math.min(28, plainText.length - 3); i++) {
+        const remaining = plainText.substring(i);
+        if (remaining.startsWith('그리고') || remaining.startsWith('하지만') || 
+            remaining.startsWith('또한') || remaining.startsWith('따라서') ||
+            remaining.startsWith('그런데') || remaining.startsWith('그러나') ||
+            remaining.startsWith('그래서') || remaining.startsWith('또는') ||
+            remaining.startsWith('그러면') || remaining.startsWith('그럼') ||
+            remaining.startsWith('이제') || remaining.startsWith('이때') ||
+            remaining.startsWith('반면') || remaining.startsWith('한편') ||
+            remaining.startsWith('예를 들어') || remaining.startsWith('특히') ||
+            remaining.startsWith('특별히')) {
+          cutPosition = i;
+          break;
+        }
+      }
+    }
+    
+    // 4순위: 공백 (다른 구분자를 못 찾은 경우만)
+    if (cutPosition === -1) {
+      for (let i = 15; i <= Math.min(28, plainText.length - 3); i++) {
+        if (plainText[i] === ' ') {
+          cutPosition = i;
+        }
+      }
+    }
+    
+    if (cutPosition > 0) {
+      // 원본 텍스트(마크다운 포함)에서 해당 위치로 자르기
+      // 플레인 텍스트 위치를 원본 텍스트 위치로 매핑
+      let realCutPosition = 0;
+      let plainCount = 0;
+      let i = 0;
+      
+      while (i < text.length && plainCount < cutPosition) {
+        if (text.substring(i, i + 2) === '**') {
+          // 마크다운 태그는 건너뛰기
+          realCutPosition = i + 2;
+          i += 2;
+        } else {
+          // 일반 문자는 카운트
+          plainCount++;
+          realCutPosition = i + 1;
+          i++;
+        }
+      }
+      
+      // 마크다운 태그 중간에서 자르는 것 방지
+      // 자르는 위치가 ** 태그 내부에 있는지 확인
+      let inMarkdown = false;
+      let markdownCount = 0;
+      for (let j = 0; j < realCutPosition; j++) {
+        if (text.substring(j, j + 2) === '**') {
+          markdownCount++;
+          j++; // ** 두 글자이므로 하나 더 건너뛰기
+        }
+      }
+      
+      // 홀수 개의 ** 태그가 있으면 마크다운 내부이므로 조정
+      if (markdownCount % 2 === 1) {
+        // 다음 ** 태그 뒤로 이동
+        while (realCutPosition < text.length - 1) {
+          if (text.substring(realCutPosition, realCutPosition + 2) === '**') {
+            realCutPosition += 2;
+            break;
+          }
+          realCutPosition++;
+        }
+      }
+      
+      const firstPart = text.substring(0, realCutPosition).trim();
+      const secondPart = text.substring(realCutPosition).trim();
+      
+      // 재귀적으로 두 번째 부분도 처리
+      const restParts = breakLongText(secondPart);
+      
+      return [firstPart, ...restParts];
+    } else {
+      // 자를 위치를 못 찾으면 그대로 반환
+      return [text];
+    }
+  };
+
   // 마크다운을 네이버 블로그 호환 HTML로 변환
   const processMarkdown = (content: string): string => {
     // 먼저 콘텐츠 정리
@@ -515,28 +629,10 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
         text = text.replace(/\*\*([^*]+)\*\*/g, '<span class="se-ff-nanumgothic se-fs16" style="color: rgb(0, 0, 0); font-weight: bold;">$1</span>');
         result.push(`<p class="se-text-paragraph se-text-paragraph-align-center" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0);">${text}</span></p>`);
       } else {        
-        // 긴 문장(25자 이상)일 때만 자연스러운 의미 단위로 개행 처리 (모바일 최적화)
-        const lineLength = line.trim().length;
-        if (lineLength >= 25) {
-          // 자연스러운 의미 단위로 분리: 마침표, 쉼표, 접속사 기준
-          const sentences = line.trim().split(/(?<=[.!?,])\s+|(?=그리고|하지만|또한|따라서|그런데|그러나|그래서|또는)\s*/);
-          if (sentences.length > 1) {
-            // 여러 의미 단위가 있으면 각각을 별도 p 태그로 분리
-            sentences.forEach(sentence => {
-              if (sentence.trim()) {
-                // **강조** 처리를 각 문장별로 적용
-                let processedSentence = sentence.trim().replace(/\*\*([^*]+)\*\*/g, '<span class="se-ff-nanumgothic se-fs16" style="color: rgb(0, 0, 0); font-weight: bold;">$1</span>');
-                result.push(`<p class="se-text-paragraph se-text-paragraph-align-center" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0);">${processedSentence}</span></p>`);
-              }
-            });
-          } else {
-            // 단일 의미 단위면 그대로 처리
-            let processedLine = line.trim().replace(/\*\*([^*]+)\*\*/g, '<span class="se-ff-nanumgothic se-fs16" style="color: rgb(0, 0, 0); font-weight: bold;">$1</span>');
-            result.push(`<p class="se-text-paragraph se-text-paragraph-align-center" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0);">${processedLine}</span></p>`);
-          }
-        } else {
-          // 짧은 문장(25자 미만)은 개행하지 않고 그대로 처리
-          let processedLine = line.trim().replace(/\*\*([^*]+)\*\*/g, '<span class="se-ff-nanumgothic se-fs16" style="color: rgb(0, 0, 0); font-weight: bold;">$1</span>');
+        // 일반 텍스트 처리 (28자 이상이면 재귀적으로 자르기)
+        const processedLines = breakLongText(line.trim());
+        for (const textLine of processedLines) {
+          let processedLine = textLine.replace(/\*\*([^*]+)\*\*/g, '<span class="se-ff-nanumgothic se-fs16" style="color: rgb(0, 0, 0); font-weight: bold;">$1</span>');
           result.push(`<p class="se-text-paragraph se-text-paragraph-align-center" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0);">${processedLine}</span></p>`);
         }
       }
@@ -1095,6 +1191,9 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
         styledPrompt += ', realistic, detailed, high quality';
         break;
     }
+    
+    // 한국어 텍스트 방지 규칙 추가 (간단한 영어는 허용)
+    styledPrompt += ', no Korean text, no Korean characters, avoid Korean writing, simple English labels OK, minimal text only';
     
     return styledPrompt;
   };
