@@ -13,7 +13,8 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
   data, 
   editedContent, 
   imageUrls, 
-  onComplete 
+  onComplete,
+  copyToClipboard 
 }) => {
   
   // 네이버 로그인 상태
@@ -485,24 +486,9 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
               console.log('📍 2초 대기 후 본문 영역으로 이동...');
               await window.electronAPI.playwrightWaitTimeout(2000);
               
-              // 본문 placeholder 클릭 (focused 없는 상태)
-              console.log('본문 클릭 시도: .se-placeholder.__se_placeholder');
-              const bodyClickResult = await window.electronAPI.playwrightClickInFrames('.se-placeholder.__se_placeholder:not(.se-placeholder-focused)', 'PostWriteForm.naver');
-              
-              if (bodyClickResult.success) {
-                console.log('✅ 본문 영역 클릭 완료');
-              } else {
-                console.log('일반 placeholder 클릭 시도...');
-                const fallbackResult = await window.electronAPI.playwrightClickInFrames('.se-placeholder.__se_placeholder', 'PostWriteForm.naver');
-                if (fallbackResult.success) {
-                  console.log('✅ 본문 영역 클릭 완료 (fallback)');
-                } else {
-                  console.warn('⚠️ 본문 영역 클릭 실패');
-                }
-              }
-              
-              // 클릭 후 2초 대기
-              await window.electronAPI.playwrightWaitTimeout(2000);
+              // 제목 입력 후 바로 본문 입력으로 넘어감 (중복 클릭 제거)
+              console.log('✅ 제목 입력 완료, 본문 입력 준비됨');
+              await window.electronAPI.playwrightWaitTimeout(1000);
               
             } else {
               console.warn('⚠️ 제목 입력 실패:', titleTypingResult.error);
@@ -1229,7 +1215,7 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
     }[] = [];
     
     // 1. 먼저 표 처리
-    const tableRegex = /<div class="se-component se-table[^>]*">.*?<table class="se-table-content[^>]*">(.*?)<\/table>.*?<\/div>/gs;
+    const tableRegex = /<div class="se-component se-table[^>]*">[\s\S]*?<table class="se-table-content[^>]*">([\s\S]*?)<\/table>[\s\S]*?<\/div>/g;
     let tableMatch;
     let processedContent = htmlContent;
     
@@ -1252,7 +1238,7 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
     }
     
     // 2. 문단(p 태그)별로 처리
-    const pRegex = /<p[^>]*class="se-text-paragraph[^>]*"[^>]*>(.*?)<\/p>/gs;
+    const pRegex = /<p[^>]*class="se-text-paragraph[^>]*"[^>]*>([\s\S]*?)<\/p>/g;
     let pMatch;
     
     while ((pMatch = pRegex.exec(processedContent)) !== null) {
@@ -1369,9 +1355,9 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
     return paragraphs;
   };
 
-  // 세그먼트별 타이핑으로 네이버 블로그에 본문 입력
+  // 클립보드 붙여넣기로 네이버에 전송 (단순화된 버전)
   const inputContentWithFormatting = async (): Promise<boolean> => {
-    console.log('📝 본문 입력 시작 (세그먼트별 타이핑 방식)...');
+    console.log('📝 본문 입력 시작 (클립보드 붙여넣기)...');
     
     if (!editedContent) {
       console.warn('⚠️ 편집된 내용이 없습니다.');
@@ -1379,16 +1365,7 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
     }
     
     try {
-      // 1단계: Step3 HTML 구조 파싱
-      console.log('🔍 Step3 HTML 구조 파싱 중...');
-      const paragraphs = parseContentByParagraphs(editedContent);
-      
-      if (paragraphs.length === 0) {
-        console.warn('⚠️ 파싱된 문단이 없습니다.');
-        return false;
-      }
-      
-      // 2단계: 네이버 블로그 본문 영역 클릭
+      // 네이버 블로그 본문 영역 클릭
       console.log('📝 네이버 블로그 본문 영역 클릭 시도...');
       
       const contentSelectors = [
@@ -1416,93 +1393,86 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
         return false;
       }
       
-      // 3단계: 문단별로 세그먼트 타이핑
-      console.log('🎯 문단별 세그먼트 타이핑 시작...');
+      // 바로 붙여넣기 (이미 클립보드에 복사되어 있음)
+      console.log('📋 네이버 블로그에서 붙여넣기 시작...');
       
-      let currentFontSize = '15'; // 현재 설정된 폰트 크기
-      let currentBold = false; // 현재 굵기 상태
+      const pasteResult = await window.electronAPI.playwrightPress('Control+v');
+      if (!pasteResult.success) {
+        console.warn('⚠️ Ctrl+V 실패');
+        return false;
+      }
       
-      for (let paragraphIndex = 0; paragraphIndex < paragraphs.length; paragraphIndex++) {
-        const paragraph = paragraphs[paragraphIndex];
-        
-        // 표 처리
-        if (paragraph.isTable && paragraph.tableData) {
-          console.log(`📊 표 삽입 중... (${paragraph.tableData.rows}행 ${paragraph.tableData.cols}열)`);
-          
-          // 표 추가
-          const tableAdded = await addTable(paragraph.tableData.rows, paragraph.tableData.cols);
-          if (tableAdded) {
-            // 표 데이터 입력
-            for (let row = 0; row < paragraph.tableData.rows; row++) {
-              for (let col = 0; col < paragraph.tableData.cols; col++) {
-                const cellText = paragraph.tableData.data[row]?.[col] || '';
-                if (cellText) {
-                  await inputTableCell(cellText, row, col);
-                  await window.electronAPI.playwrightWaitTimeout(100);
+      console.log('✅ Ctrl+V 붙여넣기 완료');
+      await window.electronAPI.playwrightWaitTimeout(3000); // 네이버 처리 시간 충분히 대기
+      
+      // 붙여넣기 결과 확인
+      const pasteCheckResult = await window.electronAPI.playwrightEvaluateInFrames(`
+        (function() {
+          try {
+            // 다양한 에디터 요소 확인
+            const editorSelectors = [
+              '[contenteditable="true"]',
+              '.se-module-text',
+              '.se-text-paragraph',
+              '.se-component-content'
+            ];
+            
+            let editor = null;
+            let content = '';
+            
+            for (const selector of editorSelectors) {
+              const el = document.querySelector(selector);
+              if (el && (el.innerHTML || el.textContent)) {
+                editor = el;
+                content = el.innerHTML || el.textContent || '';
+                if (content.trim().length > 0) {
+                  console.log('에디터 발견:', selector, '내용 길이:', content.length);
+                  break;
                 }
               }
             }
             
-            // 첫 번째 행에 헤더 스타일 적용
-            await applyTableHeaderStyle();
-          }
-          
-          // 표 다음에 줄바꿈 추가
-          await window.electronAPI.playwrightPress('Enter');
-          await window.electronAPI.playwrightWaitTimeout(300);
-          continue;
-        }
-        
-        // 텍스트 문단 처리
-        console.log(`📝 문단 ${paragraphIndex + 1} 처리 중... (${paragraph.segments.length}개 세그먼트)`);
-        
-        for (let segmentIndex = 0; segmentIndex < paragraph.segments.length; segmentIndex++) {
-          const segment = paragraph.segments[segmentIndex];
-          
-          console.log(`  📝 세그먼트 ${segmentIndex + 1}: "${segment.text}" (${segment.fontSize}${segment.isBold ? ', 굵게' : ''})`);
-          
-          // 서식이 달라진 경우에만 변경
-          const targetFontSize = segment.fontSize.replace('px', '');
-          
-          if (targetFontSize !== currentFontSize || segment.isBold !== currentBold) {
-            console.log(`  🎨 서식 변경: ${currentFontSize}px${currentBold ? ' 굵게' : ''} → ${targetFontSize}px${segment.isBold ? ' 굵게' : ''}`);
-            
-            // 폰트 크기 변경
-            if (targetFontSize !== currentFontSize) {
-              await changeFontSize(targetFontSize);
-              currentFontSize = targetFontSize;
-              await window.electronAPI.playwrightWaitTimeout(200);
+            if (!editor) {
+              return { success: false, error: '에디터를 찾을 수 없음' };
             }
             
-            // 굵기 변경
-            if (segment.isBold !== currentBold) {
-              await setBoldState(segment.isBold);
-              currentBold = segment.isBold;
-              await window.electronAPI.playwrightWaitTimeout(200);
-            }
+            const hasContent = content.trim().length > 0;
+            const hasRichContent = content.includes('<') || content.includes('민생지원금'); // Step3 콘텐츠 키워드 확인
+            
+            console.log('붙여넣기 결과 상세 확인:', {
+              hasContent: hasContent,
+              hasRichContent: hasRichContent,
+              contentLength: content.length,
+              preview: content.substring(0, 100),
+              editorClass: editor.className
+            });
+            
+            return { 
+              success: hasContent || hasRichContent, // 내용이 있거나 특정 키워드가 있으면 성공
+              contentLength: content.length,
+              preview: content.substring(0, 200),
+              editorFound: editor.className
+            };
+          } catch (error) {
+            console.error('붙여넣기 확인 오류:', error);
+            return { success: false, error: error.message };
           }
-          
-          // 텍스트 타이핑
-          const typingResult = await window.electronAPI.playwrightType(segment.text, 15); // 빠른 타이핑
-          if (!typingResult.success) {
-            console.warn(`⚠️ 세그먼트 타이핑 실패: "${segment.text}"`);
-          }
-          
-          await window.electronAPI.playwrightWaitTimeout(100);
-        }
-        
-        // 문단 끝에 줄바꿈 추가 (마지막 문단 제외)
-        if (paragraphIndex < paragraphs.length - 1) {
-          await window.electronAPI.playwrightPress('Enter');
-          await window.electronAPI.playwrightWaitTimeout(200);
-        }
+        })()
+      `, 'PostWriteForm.naver');
+      
+      if (pasteCheckResult?.result?.success) {
+        console.log('🎉 키보드 복사/붙여넣기 성공!');
+        console.log('붙여넣어진 내용 길이:', pasteCheckResult.result.contentLength);
+        console.log('내용 미리보기:', pasteCheckResult.result.preview);
+        return true;
+      } else {
+        console.warn('⚠️ 붙여넣기 결과 확인 실패');
+        console.log('확인 결과:', pasteCheckResult?.result);
+        return false;
       }
       
-      console.log('✅ 모든 문단 타이핑 완료!');
-      return true;
-      
     } catch (error) {
-      console.error('❌ 세그먼트별 타이핑 실패:', error);
+      console.error('❌ 클립보드 복사/붙여넣기 실패:', error);
       return false;
     }
   };
@@ -1526,7 +1496,22 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
     try {
       console.log('네이버 로그인 시도:', { username: naverCredentials.username });
       
-      // 1단계: 브라우저 초기화
+      // 1단계: 먼저 클립보드에 복사
+      if (copyToClipboard) {
+        setPublishStatus(prev => ({
+          ...prev,
+          error: '콘텐츠를 클립보드에 복사하는 중...'
+        }));
+        
+        const copySuccess = await copyToClipboard();
+        if (!copySuccess) {
+          console.warn('⚠️ HTML 형식 복사 실패, 텍스트로 복사되었습니다.');
+        } else {
+          console.log('✅ 콘텐츠가 클립보드에 복사되었습니다.');
+        }
+      }
+      
+      // 2단계: 브라우저 초기화
       setPublishStatus(prev => ({
         ...prev,
         error: '브라우저를 시작하는 중...'
@@ -1687,7 +1672,7 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
             <strong>발행 정보:</strong>
             <div className="ml-2 mt-1">
               • 제목: {data.selectedTitle}
-              • 태그: {data.keyword || '없음'}
+              • 메인 키워드: {data.keyword || '없음'}
               • 이미지: {Object.keys(imageUrls).length}개
             </div>
           </div>

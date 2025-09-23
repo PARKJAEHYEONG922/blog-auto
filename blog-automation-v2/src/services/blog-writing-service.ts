@@ -271,7 +271,7 @@ ${commonTagsSection}
    * 이미지 프롬프트 생성용 요청 생성
    */
   private static generateImagePromptRequest(blogContent: string): string {
-    return `다음 블로그 글에서 (이미지) 태그들을 찾아서 각각에 맞는 DALL-E 이미지 생성 프롬프트를 JSON으로 생성해주세요:
+    return `다음 블로그 글에서 (이미지) 태그들을 찾아서 각각에 맞는 이미지 생성 프롬프트를 만들어주세요:
 
 === 블로그 글 내용 ===
 ${blogContent}
@@ -279,17 +279,19 @@ ${blogContent}
 
 각 (이미지) 태그 위치의 전후 문맥을 분석하여 해당 위치에 적합한 영어 프롬프트를 작성해주세요.
 
-다음 JSON 형식으로 출력해주세요:
+반드시 다음 JSON 형식으로만 출력하세요 (다른 설명이나 텍스트 없이):
+\`\`\`json
 {
   "imagePrompts": [
     {
       "index": 1,
-      "position": "이미지가 들어갈 위치의 문맥 설명 (예: 재료 준비 단계)",
+      "position": "이미지가 들어갈 위치의 문맥 설명",
       "context": "해당 이미지 주변 글 내용 요약",
-      "prompt": "DALL-E용 영어 프롬프트 (구체적이고 시각적으로 작성)"
+      "prompt": "영어로 된 이미지 생성 프롬프트"
     }
   ]
 }
+\`\`\`
 
 프롬프트 작성 지침:
 - 영어로 작성
@@ -298,7 +300,7 @@ ${blogContent}
 - 한국적 요소가 필요한 경우 "Korean style" 등으로 명시
 - 음식/요리 관련시 "Korean food photography style" 추가
 
-글에 (이미지) 태그가 몇 개 있든 모든 이미지에 대해 프롬프트를 생성해주세요.`;
+중요: 글에 있는 모든 (이미지) 태그에 대해 프롬프트를 생성하고, 반드시 위의 JSON 형식으로만 응답하세요.`;
   }
 
   /**
@@ -332,18 +334,61 @@ ${blogContent}
       let imagePromptsData;
       try {
         const cleanedResponse = response.content.trim();
+        console.log('🔍 제미나이 원본 응답 (처음 200자):', cleanedResponse.substring(0, 200));
+        
         // 마크다운 코드 블록 제거
-        const jsonContent = cleanedResponse.startsWith('```json') 
-          ? cleanedResponse.replace(/^```json\n?/, '').replace(/\n?```$/, '')
-          : cleanedResponse.startsWith('```')
-          ? cleanedResponse.replace(/^```\n?/, '').replace(/\n?```$/, '')
-          : cleanedResponse;
+        let jsonContent = cleanedResponse;
+        
+        // 다양한 형식의 코드 블록 제거
+        if (cleanedResponse.includes('```')) {
+          // ```json, ```javascript, ``` 등 모든 형식 처리
+          jsonContent = cleanedResponse.replace(/```[a-zA-Z]*\n?/g, '').replace(/\n?```/g, '').trim();
+        }
+        
+        // JSON 추출 시도 - 중괄호로 시작하는 부분 찾기
+        const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonContent = jsonMatch[0];
+        }
+        
+        // 배열로 시작하는 경우 처리
+        const arrayMatch = jsonContent.match(/\[[\s\S]*\]/);
+        if (!jsonMatch && arrayMatch) {
+          jsonContent = `{"imagePrompts": ${arrayMatch[0]}}`;
+        }
         
         imagePromptsData = JSON.parse(jsonContent);
       } catch (parseError) {
         console.error('JSON 파싱 실패:', parseError);
-        console.log('원본 응답:', response.content);
-        throw new Error('AI 응답을 파싱할 수 없습니다.');
+        console.log('원본 응답 전체:', response.content);
+        
+        // 대체 파싱 시도 - 정규식으로 프롬프트 추출
+        try {
+          console.log('🔄 대체 파싱 시도...');
+          const prompts: ImagePrompt[] = [];
+          
+          // "prompt": "..." 또는 'prompt': '...' 패턴 찾기
+          const promptRegex = /["']prompt["']\s*:\s*["']([^"']+)["']/g;
+          let match;
+          let index = 1;
+          
+          while ((match = promptRegex.exec(response.content)) !== null) {
+            prompts.push({
+              index: index++,
+              position: `이미지 ${index}`,
+              prompt: match[1]
+            });
+          }
+          
+          if (prompts.length > 0) {
+            console.log(`✅ 대체 파싱으로 ${prompts.length}개 프롬프트 추출 성공`);
+            imagePromptsData = { imagePrompts: prompts };
+          } else {
+            throw new Error('AI 응답을 파싱할 수 없습니다.');
+          }
+        } catch (altError) {
+          throw new Error('AI 응답을 파싱할 수 없습니다.');
+        }
       }
 
       const imagePrompts = imagePromptsData.imagePrompts || [];

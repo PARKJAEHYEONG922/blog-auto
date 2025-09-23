@@ -797,17 +797,39 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     }
   };
 
-  // 클립보드 복사
-  const copyToClipboard = () => {
+  // 클립보드 복사 (HTML 형식 유지)
+  const copyToClipboard = async () => {
     if (editorRef.current) {
-      const content = editorRef.current.innerText || '';
-      navigator.clipboard.writeText(content).then(() => {
-        alert('클립보드에 복사되었습니다!');
-      }).catch((err) => {
+      try {
+        // HTML 형식으로 복사하기 위해 선택 영역 생성
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editorRef.current);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        
+        // 복사 실행
+        const success = document.execCommand('copy');
+        
+        // 선택 해제
+        selection?.removeAllRanges();
+        
+        if (success) {
+          console.log('✅ HTML 형식으로 클립보드에 복사되었습니다!');
+          return true;
+        } else {
+          throw new Error('복사 명령 실행 실패');
+        }
+      } catch (err) {
         console.error('복사 실패:', err);
-        alert('복사에 실패했습니다.');
-      });
+        // 대체 방법: 텍스트만 복사
+        const content = editorRef.current.innerText || '';
+        await navigator.clipboard.writeText(content);
+        console.log('⚠️ 텍스트 형식으로 복사되었습니다.');
+        return false;
+      }
     }
+    return false;
   };
 
   // 이미지 업로드 처리
@@ -1349,6 +1371,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
             
             <div
               ref={editorRef}
+              id="step3-editor"
               contentEditable
               className="w-full min-h-96 p-4 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               style={{
@@ -1767,6 +1790,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
             editedContent={editedContent}
             imageUrls={imageUrls}
             onComplete={onComplete}
+            copyToClipboard={copyToClipboard}
           />
 
           {/* 네비게이션 */}

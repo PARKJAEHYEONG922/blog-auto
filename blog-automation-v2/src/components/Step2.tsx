@@ -931,7 +931,7 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                                   {collectedData.contentSummary.key_points.map((point, idx) => (
                                     <li key={idx} className="text-xs text-slate-700 flex items-start gap-2">
                                       <span className="text-purple-500 mt-0.5">•</span>
-                                      <span>{point}</span>
+                                      <span>{typeof point === 'object' ? JSON.stringify(point) : point}</span>
                                     </li>
                                   ))}
                                 </ul>
@@ -946,7 +946,7 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                                   {collectedData.contentSummary.improvement_opportunities.map((opportunity, idx) => (
                                     <li key={idx} className="text-xs text-slate-700 flex items-start gap-2">
                                       <span className="text-orange-500 mt-0.5">•</span>
-                                      <span>{opportunity}</span>
+                                      <span>{typeof opportunity === 'object' ? JSON.stringify(opportunity) : opportunity}</span>
                                     </li>
                                   ))}
                                 </ul>

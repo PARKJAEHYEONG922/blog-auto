@@ -21,6 +21,7 @@ export interface PublishComponentProps {
   editedContent: string;
   imageUrls: { [key: number]: string };
   onComplete: (data: Partial<WorkflowData>) => void;
+  copyToClipboard?: () => Promise<boolean>;
 }
 
 // 플랫폼별 발행 컴포넌트가 구현해야 할 인터페이스
