@@ -1355,9 +1355,10 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
     return paragraphs;
   };
 
-  // 클립보드 붙여넣기로 네이버에 전송 (단순화된 버전)
-  const inputContentWithFormatting = async (): Promise<boolean> => {
-    console.log('📝 본문 입력 시작 (클립보드 붙여넣기)...');
+
+  // 클립보드 붙여넣기 + 이미지 업로드 통합
+  const inputContentWithImages = async (): Promise<boolean> => {
+    console.log('📝 본문 및 이미지 입력 시작...');
     
     if (!editedContent) {
       console.warn('⚠️ 편집된 내용이 없습니다.');
@@ -1365,7 +1366,7 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
     }
     
     try {
-      // 네이버 블로그 본문 영역 클릭
+      // 1. 먼저 텍스트 붙여넣기
       console.log('📝 네이버 블로그 본문 영역 클릭 시도...');
       
       const contentSelectors = [
@@ -1393,8 +1394,8 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
         return false;
       }
       
-      // 바로 붙여넣기 (이미 클립보드에 복사되어 있음)
-      console.log('📋 네이버 블로그에서 붙여넣기 시작...');
+      // 2. 텍스트 붙여넣기
+      console.log('📋 네이버 블로그에서 텍스트 붙여넣기...');
       
       const pasteResult = await window.electronAPI.playwrightPress('Control+v');
       if (!pasteResult.success) {
@@ -1405,7 +1406,227 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
       console.log('✅ Ctrl+V 붙여넣기 완료');
       await window.electronAPI.playwrightWaitTimeout(3000); // 네이버 처리 시간 충분히 대기
       
-      // 붙여넣기 결과 확인
+      // 3. Step3에서 선택된 이미지들 자동 업로드
+      const imageCount = Object.keys(imageUrls).length;
+      if (imageCount > 0) {
+        console.log(`📸 ${imageCount}개 이미지를 자동으로 업로드합니다...`);
+        
+        // 각 이미지를 순서대로 처리
+        for (let i = 1; i <= imageCount; i++) {
+          const imageUrl = imageUrls[i];
+          if (!imageUrl) {
+            console.log(`⚠️ 이미지 ${i} URL이 없습니다. 건너뛰기...`);
+            continue;
+          }
+          
+          console.log(`📸 이미지 ${i} 처리 중: ${imageUrl.substring(0, 50)}...`);
+          
+          try {
+            // 1. 이미지를 임시 파일로 저장
+            const downloadResponse = await fetch(imageUrl);
+            const imageBuffer = await downloadResponse.arrayBuffer();
+            const imageDataArray = Array.from(new Uint8Array(imageBuffer));
+            
+            const fileExtension = imageUrl.includes('.png') ? 'png' : 
+                                imageUrl.includes('.gif') ? 'gif' : 
+                                imageUrl.includes('.webp') ? 'webp' : 'jpg';
+            const fileName = `blog_image_${i}.${fileExtension}`;
+            
+            const saveResult = await window.electronAPI.saveTempFile(fileName, imageDataArray);
+            if (!saveResult.success || !saveResult.filePath) {
+              console.error(`❌ 이미지 ${i} 임시 저장 실패:`, saveResult.error);
+              continue;
+            }
+            
+            console.log(`✅ 이미지 ${i} 임시 저장 완료: ${saveResult.filePath}`);
+            
+            // 2. 네이버 블로그에서 (이미지) 텍스트 찾아서 바로 클릭
+            console.log(`🎯 네이버 블로그에서 "${i}번째 (이미지)" 찾아서 클릭...`);
+            
+            // Step 1: (이미지) 텍스트 찾고 좌표 계산
+            const findResult = await window.electronAPI.playwrightEvaluateInFrames(`
+              (function() {
+                try {
+                  console.log('${i}번째 (이미지) 찾기 시작');
+                  
+                  // TreeWalker로 DOM 순서대로 (이미지) 텍스트 노드 찾기
+                  let imageElements = [];
+                  const walker = document.createTreeWalker(
+                    document.body,
+                    NodeFilter.SHOW_TEXT,
+                    null,
+                    false
+                  );
+                  
+                  let node;
+                  while (node = walker.nextNode()) {
+                    if (node.textContent && (node.textContent.includes('(이미지)') || node.textContent.includes('[이미지]'))) {
+                      const parentElement = node.parentElement;
+                      if (parentElement) {
+                        imageElements.push(parentElement);
+                        console.log('발견된 (이미지) 요소:', parentElement.textContent.trim(), '위치:', imageElements.length);
+                      }
+                    }
+                  }
+                  
+                  console.log('(이미지) 텍스트를 포함하는 요소 개수:', imageElements.length);
+                  
+                  if (imageElements.length >= ${i}) {
+                    const targetElement = imageElements[${i - 1}];
+                    console.log('${i}번째 (이미지) 요소:', targetElement.textContent.trim());
+                    
+                    // 스크롤해서 화면에 보이게 하기
+                    targetElement.scrollIntoView({ behavior: 'instant', block: 'center' });
+                    
+                    // 좌표 계산
+                    const rect = targetElement.getBoundingClientRect();
+                    const centerX = rect.left + rect.width / 2;
+                    const centerY = rect.top + rect.height / 2;
+                    
+                    console.log('${i}번째 (이미지) 좌표:', { x: centerX, y: centerY });
+                    
+                    return { 
+                      success: true, 
+                      elementText: targetElement.textContent.trim(),
+                      centerX: centerX,
+                      centerY: centerY,
+                      totalFound: imageElements.length
+                    };
+                  } else {
+                    return { 
+                      success: false, 
+                      error: '충분한 (이미지) 요소를 찾을 수 없음',
+                      found: imageElements.length,
+                      needed: ${i}
+                    };
+                  }
+                } catch (error) {
+                  console.error('(이미지) 찾기 오류:', error);
+                  return { success: false, error: error.message };
+                }
+              })()
+            `, 'PostWriteForm.naver');
+            
+            if (!findResult?.result?.success) {
+              console.warn(`⚠️ ${i}번째 (이미지) 텍스트 찾기 실패:`, findResult?.result);
+              continue;
+            }
+            
+            console.log(`✅ ${i}번째 (이미지) 텍스트 찾기 완료: "${findResult.result.elementText}"`);
+            
+            // Step 2: 실제 Playwright 마우스로 클릭
+            if (findResult.result.centerX && findResult.result.centerY) {
+              console.log(`🖱️ 실제 마우스로 클릭: (${findResult.result.centerX}, ${findResult.result.centerY})`);
+              
+              // iframe 오프셋 계산
+              const offsetResult = await window.electronAPI.playwrightEvaluate(`
+                (function() {
+                  try {
+                    const iframe = document.querySelector('iframe[src*="PostWriteForm.naver"]') || 
+                                  document.querySelector('iframe');
+                    if (iframe) {
+                      const rect = iframe.getBoundingClientRect();
+                      return { success: true, offsetX: rect.left, offsetY: rect.top };
+                    }
+                    return { success: false, error: 'iframe을 찾을 수 없음' };
+                  } catch (error) {
+                    return { success: false, error: error.message };
+                  }
+                })()
+              `);
+              
+              if (offsetResult?.result?.success) {
+                const realX = findResult.result.centerX + offsetResult.result.offsetX;
+                const realY = findResult.result.centerY + offsetResult.result.offsetY;
+                
+                console.log(`🖱️ 최종 더블클릭 좌표: (${realX}, ${realY})`);
+                
+                // 실제 마우스 더블클릭 (두 번 연속 클릭)
+                const firstClick = await window.electronAPI.playwrightClickAt(realX, realY);
+                
+                if (firstClick.success) {
+                  // 짧은 간격 후 두 번째 클릭
+                  await window.electronAPI.playwrightWaitTimeout(100);
+                  const secondClick = await window.electronAPI.playwrightClickAt(realX, realY);
+                  
+                  if (secondClick.success) {
+                    console.log(`✅ ${i}번째 (이미지) 실제 마우스 더블클릭 완료`);
+                    
+                    // 더블클릭 후 잠깐 대기
+                    await window.electronAPI.playwrightWaitTimeout(300);
+                    
+                    // 선택 상태 확인
+                    const selectionCheck = await window.electronAPI.playwrightEvaluateInFrames(`
+                      (function() {
+                        const selection = window.getSelection();
+                        return { selectedText: selection.toString() };
+                      })()
+                    `, 'PostWriteForm.naver');
+                    
+                    console.log(`더블클릭 후 선택 상태:`, selectionCheck?.result?.selectedText);
+                  } else {
+                    console.warn(`⚠️ ${i}번째 (이미지) 두 번째 클릭 실패`);
+                  }
+                } else {
+                  console.warn(`⚠️ ${i}번째 (이미지) 첫 번째 클릭 실패`);
+                }
+              } else {
+                console.warn(`⚠️ iframe 오프셋 계산 실패`);
+              }
+            }
+            
+            const findAndClickResult = { result: findResult.result };
+            
+            if (!findAndClickResult?.result?.success) {
+              console.warn(`⚠️ ${i}번째 (이미지) 텍스트 찾기/클릭 실패:`, findAndClickResult?.result);
+              continue;
+            }
+            
+            console.log(`✅ ${i}번째 (이미지) 텍스트 클릭 완료: "${findAndClickResult.result.elementText}"`);
+            await window.electronAPI.playwrightWaitTimeout(500);
+            
+            // 3. 이미지 파일을 클립보드에 복사 (Electron 메인 프로세스에서)
+            console.log(`📋 이미지 ${i}를 클립보드에 복사 중...`);
+            
+            // Electron의 네이티브 클립보드 API 사용
+            const clipboardResult = await window.electronAPI.copyImageToClipboard(saveResult.filePath);
+            
+            if (!clipboardResult?.success) {
+              console.warn(`⚠️ 이미지 ${i} 클립보드 복사 실패:`, clipboardResult?.error);
+              continue;
+            }
+            
+            console.log(`✅ 이미지 ${i} 클립보드 복사 완료`);
+            
+            // 4. 선택된 (이미지) 텍스트에 Ctrl+V로 이미지 붙여넣기 (자동 교체)
+            console.log(`📋 이미지 ${i} 붙여넣기 중 (선택된 (이미지) 텍스트 자동 교체)...`);
+            
+            const pasteImageResult = await window.electronAPI.playwrightPress('Control+v');
+            if (!pasteImageResult.success) {
+              console.warn(`⚠️ 이미지 ${i} 붙여넣기 실패`);
+              continue;
+            }
+            
+            console.log(`✅ 이미지 ${i} 붙여넣기 완료 - 선택된 (이미지) 텍스트가 이미지로 자동 교체됨`);
+            await window.electronAPI.playwrightWaitTimeout(2000); // 네이버 이미지 처리 대기
+            
+            // 5. 임시 파일 정리
+            await window.electronAPI.deleteTempFile(saveResult.filePath);
+            console.log(`🗑️ 이미지 ${i} 임시 파일 삭제 완료`);
+            
+          } catch (error) {
+            console.error(`❌ 이미지 ${i} 처리 중 오류:`, error);
+            continue;
+          }
+        }
+        
+        console.log(`🎉 ${imageCount}개 이미지 자동 업로드 프로세스 완료`);
+        
+      } else {
+        console.log('ℹ️ 업로드할 이미지가 없습니다.');
+      }
+      
+      // 4. 붙여넣기 결과 확인
       const pasteCheckResult = await window.electronAPI.playwrightEvaluateInFrames(`
         (function() {
           try {
@@ -1437,20 +1658,41 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
             }
             
             const hasContent = content.trim().length > 0;
-            const hasRichContent = content.includes('<') || content.includes('민생지원금'); // Step3 콘텐츠 키워드 확인
+            const hasImages = content.includes('se-image-resource') || 
+                             content.includes('blogfiles.pstatic.net') ||
+                             content.includes('<img') ||
+                             content.includes('data-image') ||
+                             content.includes('se-image');
+            
+            // (이미지) 텍스트가 남아있는지 확인
+            const remainingImageText = content.includes('(이미지)') || content.includes('[이미지]');
             
             console.log('붙여넣기 결과 상세 확인:', {
               hasContent: hasContent,
-              hasRichContent: hasRichContent,
+              hasImages: hasImages,
+              remainingImageText: remainingImageText,
               contentLength: content.length,
-              preview: content.substring(0, 100),
+              preview: content.substring(0, 200),
               editorClass: editor.className
             });
             
+            // 이미지 태그들 찾기
+            const imageTags = content.match(/<img[^>]*>/g);
+            const imageResources = content.match(/se-image-resource/g);
+            
+            console.log('이미지 관련 태그 분석:', {
+              imageTags: imageTags ? imageTags.length : 0,
+              imageResources: imageResources ? imageResources.length : 0,
+              sampleImageTag: imageTags ? imageTags[0] : 'none'
+            });
+            
             return { 
-              success: hasContent || hasRichContent, // 내용이 있거나 특정 키워드가 있으면 성공
+              success: hasContent, 
               contentLength: content.length,
-              preview: content.substring(0, 200),
+              hasImages: hasImages,
+              remainingImageText: remainingImageText,
+              imageCount: imageTags ? imageTags.length : 0,
+              preview: content.substring(0, 300),
               editorFound: editor.className
             };
           } catch (error) {
@@ -1461,18 +1703,19 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
       `, 'PostWriteForm.naver');
       
       if (pasteCheckResult?.result?.success) {
-        console.log('🎉 키보드 복사/붙여넣기 성공!');
-        console.log('붙여넣어진 내용 길이:', pasteCheckResult.result.contentLength);
+        console.log('🎉 콘텐츠 및 이미지 입력 성공!');
+        console.log('입력된 내용 길이:', pasteCheckResult.result.contentLength);
+        console.log('이미지 포함 여부:', pasteCheckResult.result.hasImages);
         console.log('내용 미리보기:', pasteCheckResult.result.preview);
         return true;
       } else {
-        console.warn('⚠️ 붙여넣기 결과 확인 실패');
+        console.warn('⚠️ 콘텐츠 입력 결과 확인 실패');
         console.log('확인 결과:', pasteCheckResult?.result);
         return false;
       }
       
     } catch (error) {
-      console.error('❌ 클립보드 복사/붙여넣기 실패:', error);
+      console.error('❌ 콘텐츠 및 이미지 입력 실패:', error);
       return false;
     }
   };
@@ -1506,8 +1749,6 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
         const copySuccess = await copyToClipboard();
         if (!copySuccess) {
           console.warn('⚠️ HTML 형식 복사 실패, 텍스트로 복사되었습니다.');
-        } else {
-          console.log('✅ 콘텐츠가 클립보드에 복사되었습니다.');
         }
       }
       
@@ -1545,15 +1786,15 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
           throw new Error('블로그 글쓰기 페이지 이동 실패');
         }
         
-        // 4단계: 본문 자동 입력 (글씨 크기 포함)
+        // 4단계: 본문 및 이미지 자동 입력
         setPublishStatus(prev => ({
           ...prev,
-          error: '본문을 자동으로 입력하는 중...'
+          error: '본문과 이미지를 자동으로 입력하는 중...'
         }));
         
-        const contentSuccess = await inputContentWithFormatting();
+        const contentSuccess = await inputContentWithImages();
         if (!contentSuccess) {
-          console.warn('⚠️ 본문 자동 입력 실패, 수동으로 진행해주세요.');
+          console.warn('⚠️ 본문 및 이미지 자동 입력 실패, 수동으로 진행해주세요.');
         }
         
         // 5단계: 완료 안내

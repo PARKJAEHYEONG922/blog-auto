@@ -318,6 +318,146 @@ class PlaywrightService {
       return false;
     }
   }
+
+  // 파일 드래그 앤 드롭 (네이버 블로그 이미지 업로드용)
+  async dragAndDropFile(filePath: string, targetSelector: string): Promise<boolean> {
+    if (!this.page) return false;
+    try {
+      console.log(`🔄 파일 드래그 앤 드롭 시작: ${filePath} -> ${targetSelector}`);
+      
+      // 파일 존재 확인
+      const fs = require('fs');
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`파일이 존재하지 않습니다: ${filePath}`);
+      }
+
+      // 파일 정보 읽기
+      const path = require('path');
+      const fileName = path.basename(filePath);
+      const fileBuffer = fs.readFileSync(filePath);
+
+      // 대상 요소 찾기 (메인 페이지 및 iframe에서)
+      let targetElement = null;
+      let targetFrame = null;
+
+      try {
+        // 메인 페이지에서 먼저 시도
+        targetElement = await this.page.waitForSelector(targetSelector, { state: 'visible', timeout: 3000 });
+        console.log(`✅ 메인 페이지에서 대상 요소 발견: ${targetSelector}`);
+      } catch (error) {
+        // iframe에서 시도
+        const frames = await this.page.frames();
+        for (const frame of frames) {
+          try {
+            targetElement = await frame.waitForSelector(targetSelector, { state: 'visible', timeout: 3000 });
+            if (targetElement) {
+              targetFrame = frame;
+              console.log(`✅ iframe에서 대상 요소 발견: ${targetSelector} (frame: ${frame.url()})`);
+              break;
+            }
+          } catch (frameError) {
+            continue;
+          }
+        }
+      }
+
+      if (!targetElement) {
+        throw new Error(`대상 요소를 찾을 수 없습니다: ${targetSelector}`);
+      }
+
+      // 파일 드래그 앤 드롭 시뮬레이션
+      const fileInput = await (targetFrame || this.page).evaluateHandle(() => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.style.display = 'none';
+        document.body.appendChild(input);
+        return input;
+      });
+
+      // 파일 설정
+      await fileInput.setInputFiles(filePath);
+
+      // 드래그 앤 드롭 이벤트 시뮬레이션
+      const boundingBox = await targetElement.boundingBox();
+      if (!boundingBox) {
+        throw new Error('대상 요소의 위치를 가져올 수 없습니다');
+      }
+
+      const centerX = boundingBox.x + boundingBox.width / 2;
+      const centerY = boundingBox.y + boundingBox.height / 2;
+
+      // 드래그 앤 드롭 이벤트 발생
+      await (targetFrame || this.page).evaluate(
+        ({ selector, fileName, fileBuffer, centerX, centerY }) => {
+          const element = document.querySelector(selector);
+          if (!element) return false;
+
+          // File 객체 생성
+          const file = new File([new Uint8Array(fileBuffer as number[])], fileName, {
+            type: fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') ? 'image/jpeg' :
+                  fileName.endsWith('.png') ? 'image/png' :
+                  fileName.endsWith('.gif') ? 'image/gif' :
+                  fileName.endsWith('.webp') ? 'image/webp' : 'image/*'
+          });
+
+          // 드래그 앤 드롭 이벤트들
+          const dataTransfer = new DataTransfer();
+          dataTransfer.files.constructor.prototype.item = function(index: number) { return this[index]; };
+          Object.defineProperty(dataTransfer, 'files', {
+            value: Object.assign([file], {
+              item: (index: number) => index === 0 ? file : null,
+              length: 1
+            }),
+            writable: false
+          });
+
+          // 드래그 시작
+          const dragEnterEvent = new DragEvent('dragenter', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer: dataTransfer
+          });
+          
+          const dragOverEvent = new DragEvent('dragover', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer: dataTransfer
+          });
+          
+          const dropEvent = new DragEvent('drop', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer: dataTransfer
+          });
+
+          // 이벤트 순차 발생
+          element.dispatchEvent(dragEnterEvent);
+          element.dispatchEvent(dragOverEvent);
+          element.dispatchEvent(dropEvent);
+
+          console.log(`✅ 드래그 앤 드롭 이벤트 발생 완료: ${fileName}`);
+          return true;
+        },
+        { 
+          selector: targetSelector, 
+          fileName, 
+          fileBuffer: Array.from(fileBuffer),
+          centerX,
+          centerY
+        }
+      );
+
+      // 파일 입력 요소 정리
+      await fileInput.dispose();
+
+      console.log(`✅ 파일 드래그 앤 드롭 완료: ${fileName}`);
+      return true;
+
+    } catch (error) {
+      console.error(`❌ 파일 드래그 앤 드롭 실패:`, error);
+      return false;
+    }
+  }
 }
 
 // 싱글톤 인스턴스
@@ -469,6 +609,16 @@ export function registerPlaywrightHandlers() {
   ipcMain.handle('playwright-set-clipboard-html', async (event, html: string) => {
     try {
       const result = await playwrightService.setClipboardHTML(html);
+      return { success: result };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // 파일 드래그 앤 드롭
+  ipcMain.handle('playwright-drag-drop-file', async (event, filePath: string, targetSelector: string) => {
+    try {
+      const result = await playwrightService.dragAndDropFile(filePath, targetSelector);
       return { success: result };
     } catch (error) {
       return { success: false, error: (error as Error).message };

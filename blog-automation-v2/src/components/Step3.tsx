@@ -647,6 +647,93 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     }
   };
 
+  // 클립보드에 HTML 복사 (네이버 발행용)
+  const copyToClipboard = async (): Promise<boolean> => {
+    if (editorRef.current) {
+      try {
+        // HTML 형식으로 복사하기 위해 선택 영역 생성
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editorRef.current);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        
+        // 복사 실행
+        const success = document.execCommand('copy');
+        
+        // 선택 해제
+        selection?.removeAllRanges();
+        
+        if (success) {
+          console.log('✅ HTML 형식으로 클립보드에 복사되었습니다!');
+          return true;
+        } else {
+          throw new Error('복사 명령 실행 실패');
+        }
+      } catch (err) {
+        console.error('복사 실패:', err);
+        // 대체 방법: 텍스트만 복사
+        const content = editorRef.current.innerText || '';
+        await navigator.clipboard.writeText(content);
+        console.log('⚠️ 텍스트 형식으로 복사되었습니다.');
+        return false;
+      }
+    }
+    return false;
+  };
+
+  // 이미지 위치 정보 수집 함수
+  const collectImagePositions = () => {
+    if (!editorRef.current) return [];
+    
+    const positions: Array<{
+      index: number;
+      textContent: string;
+      parentClass: string;
+      nextSibling: string | null;
+      prevSibling: string | null;
+    }> = [];
+    
+    // 모든 텍스트 노드를 순회하면서 (이미지) 찾기
+    const walker = document.createTreeWalker(
+      editorRef.current,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+    
+    let node;
+    let imageIndex = 1;
+    
+    while (node = walker.nextNode()) {
+      const textContent = node.textContent || '';
+      
+      if (textContent.includes('(이미지)') || textContent.includes('[이미지]')) {
+        const parentElement = node.parentElement;
+        const parentClass = parentElement?.className || '';
+        const nextSibling = node.nextSibling?.textContent?.substring(0, 20) || null;
+        const prevSibling = node.previousSibling?.textContent?.substring(0, 20) || null;
+        
+        positions.push({
+          index: imageIndex++,
+          textContent: textContent.trim(),
+          parentClass,
+          nextSibling,
+          prevSibling
+        });
+        
+        console.log(`🔍 이미지 ${imageIndex - 1} 위치:`, {
+          text: textContent.trim(),
+          parent: parentClass,
+          next: nextSibling,
+          prev: prevSibling
+        });
+      }
+    }
+    
+    return positions;
+  };
+
   // 콘텐츠 변경 처리
   const handleContentChange = () => {
     if (editorRef.current) {
@@ -797,40 +884,6 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     }
   };
 
-  // 클립보드 복사 (HTML 형식 유지)
-  const copyToClipboard = async () => {
-    if (editorRef.current) {
-      try {
-        // HTML 형식으로 복사하기 위해 선택 영역 생성
-        const selection = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(editorRef.current);
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-        
-        // 복사 실행
-        const success = document.execCommand('copy');
-        
-        // 선택 해제
-        selection?.removeAllRanges();
-        
-        if (success) {
-          console.log('✅ HTML 형식으로 클립보드에 복사되었습니다!');
-          return true;
-        } else {
-          throw new Error('복사 명령 실행 실패');
-        }
-      } catch (err) {
-        console.error('복사 실패:', err);
-        // 대체 방법: 텍스트만 복사
-        const content = editorRef.current.innerText || '';
-        await navigator.clipboard.writeText(content);
-        console.log('⚠️ 텍스트 형식으로 복사되었습니다.');
-        return false;
-      }
-    }
-    return false;
-  };
 
   // 이미지 업로드 처리
   const handleImageUpload = (imageIndex: number, file: File | null) => {

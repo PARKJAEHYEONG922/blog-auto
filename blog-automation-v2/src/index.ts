@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, clipboard, nativeImage } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -248,6 +248,95 @@ const setupIpcHandlers = () => {
       console.log(`외부 링크 열기: ${url}`);
     } catch (error) {
       console.error('외부 링크 열기 실패:', error);
+    }
+  });
+
+  // 임시 파일 저장
+  ipcMain.handle('file:saveTempFile', async (event, { fileName, data }: { fileName: string; data: number[] }) => {
+    try {
+      console.log(`💾 임시 파일 저장 시작: ${fileName}`);
+      
+      const tempDir = os.tmpdir();
+      const tempFilePath = path.join(tempDir, fileName);
+      
+      // Uint8Array로 변환하여 파일 저장
+      const buffer = Buffer.from(data);
+      await fs.promises.writeFile(tempFilePath, buffer);
+      
+      console.log(`✅ 임시 파일 저장 완료: ${tempFilePath}`);
+      return { success: true, filePath: tempFilePath };
+    } catch (error) {
+      console.error('임시 파일 저장 실패:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 임시 파일 삭제
+  ipcMain.handle('file:deleteTempFile', async (event, filePath: string) => {
+    try {
+      console.log(`🗑️ 임시 파일 삭제: ${filePath}`);
+      await fs.promises.unlink(filePath);
+      console.log(`✅ 임시 파일 삭제 완료: ${filePath}`);
+      return { success: true };
+    } catch (error) {
+      console.error('임시 파일 삭제 실패:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 파일 저장 다이얼로그
+  ipcMain.handle('file:saveFile', async (event, { defaultPath, filters, data }: { 
+    defaultPath: string; 
+    filters: Array<{ name: string; extensions: string[] }>;
+    data: number[];
+  }) => {
+    try {
+      const { dialog } = require('electron');
+      const result = await dialog.showSaveDialog({
+        defaultPath,
+        filters
+      });
+      
+      if (!result.canceled && result.filePath) {
+        const buffer = Buffer.from(data);
+        await fs.promises.writeFile(result.filePath, buffer);
+        console.log(`✅ 파일 저장 완료: ${result.filePath}`);
+        return { success: true, filePath: result.filePath };
+      } else {
+        return { success: false, error: '저장이 취소되었습니다.' };
+      }
+    } catch (error) {
+      console.error('파일 저장 실패:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 이미지를 클립보드에 복사
+  ipcMain.handle('clipboard:copyImage', async (event, filePath: string) => {
+    try {
+      console.log(`📋 클립보드에 이미지 복사: ${filePath}`);
+      
+      // 파일이 존재하는지 확인
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`파일이 존재하지 않습니다: ${filePath}`);
+      }
+      
+      // 이미지 파일을 nativeImage로 생성
+      const image = nativeImage.createFromPath(filePath);
+      
+      if (image.isEmpty()) {
+        throw new Error('이미지를 로드할 수 없습니다');
+      }
+      
+      // 클립보드에 이미지 복사
+      clipboard.writeImage(image);
+      
+      console.log(`✅ 클립보드에 이미지 복사 완료: ${filePath}`);
+      return { success: true };
+      
+    } catch (error) {
+      console.error('클립보드 이미지 복사 실패:', error);
+      return { success: false, error: error.message };
     }
   });
 

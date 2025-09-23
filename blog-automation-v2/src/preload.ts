@@ -73,8 +73,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('playwright-set-clipboard', text),
   playwrightSetClipboardHTML: (html: string) => 
     ipcRenderer.invoke('playwright-set-clipboard-html', html),
+  playwrightDragDropFile: (filePath: string, targetSelector: string) => 
+    ipcRenderer.invoke('playwright-drag-drop-file', filePath, targetSelector),
   playwrightCleanup: () => 
     ipcRenderer.invoke('playwright-cleanup'),
+    
+  // 파일 관련 API
+  saveTempFile: (fileName: string, data: number[]) => 
+    ipcRenderer.invoke('file:saveTempFile', { fileName, data }),
+  deleteTempFile: (filePath: string) => 
+    ipcRenderer.invoke('file:deleteTempFile', filePath),
+  saveFile: (defaultPath: string, filters: Array<{ name: string; extensions: string[] }>, data: number[]) => 
+    ipcRenderer.invoke('file:saveFile', { defaultPath, filters, data }),
+  copyImageToClipboard: (filePath: string) => 
+    ipcRenderer.invoke('clipboard:copyImage', filePath),
 });
 
 // TypeScript 타입 정의
@@ -110,7 +122,12 @@ declare global {
       playwrightClickAt: (x: number, y: number) => Promise<{ success: boolean; error?: string }>;
       playwrightSetClipboard: (text: string) => Promise<{ success: boolean; error?: string }>;
       playwrightSetClipboardHTML: (html: string) => Promise<{ success: boolean; error?: string }>;
+      playwrightDragDropFile: (filePath: string, targetSelector: string) => Promise<{ success: boolean; error?: string }>;
       playwrightCleanup: () => Promise<{ success: boolean; error?: string }>;
+      saveTempFile: (fileName: string, data: number[]) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+      deleteTempFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+      saveFile: (defaultPath: string, filters: Array<{ name: string; extensions: string[] }>, data: number[]) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+      copyImageToClipboard: (filePath: string) => Promise<{ success: boolean; error?: string }>;
     };
   }
 }

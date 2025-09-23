@@ -376,6 +376,7 @@ ${blogContent}
             prompts.push({
               index: index++,
               position: `이미지 ${index}`,
+              context: `이미지 ${index} 관련 내용`,
               prompt: match[1]
             });
           }
