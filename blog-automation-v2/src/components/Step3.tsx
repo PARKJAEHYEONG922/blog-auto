@@ -85,6 +85,16 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const stopGenerationRef = useRef(false); // 즉시 반영되는 정지 플래그
   
+  // 발행 설정 상태
+  const [publishSettings, setPublishSettings] = useState({
+    openToPublic: true,
+    allowComments: true,
+    allowTrackback: true,
+    publishTime: 'now' as 'now' | 'scheduled',
+    scheduledDate: '',
+    scheduledTime: { hour: '14', minute: '00' }
+  });
+  
   // 이미지 AI 클라이언트 상태
   const [hasImageClient, setHasImageClient] = useState(false);
   const [imageClientInfo, setImageClientInfo] = useState('미설정');
@@ -1219,6 +1229,128 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     setImageStatus(prev => ({ ...prev, [imageIndex]: 'empty' }));
   };
 
+  // 네이버 블로그 발행 처리
+  const handleNaverBlogPublish = async () => {
+    try {
+      setIsPublishing(true);
+      
+      // 발행할 내용 확인
+      if (!editedContent || editedContent.trim() === '') {
+        setDialog({
+          isOpen: true,
+          type: 'warning',
+          title: '발행 실패',
+          message: '발행할 내용이 없습니다. 글 내용을 먼저 작성해주세요.'
+        });
+        return;
+      }
+      
+      // 예약 발행 날짜 유효성 검사
+      if (!validateScheduledDate()) {
+        return;
+      }
+      
+      // 이미지가 있는지 확인하고 업로드된 이미지 URL들 수집
+      const imageRegex = /\(이미지\)/g;
+      const imageMatches = editedContent.match(imageRegex) || [];
+      const imageUrlList: string[] = [];
+      
+      // 모든 이미지가 준비되었는지 확인
+      for (let i = 1; i <= imageMatches.length; i++) {
+        const imageUrl = imageUrls[i];
+        const status = imageStatus[i];
+        
+        if (!imageUrl || status !== 'completed') {
+          setDialog({
+            isOpen: true,
+            type: 'warning',
+            title: '발행 실패',
+            message: `이미지 ${i}가 준비되지 않았습니다. 모든 이미지를 업로드하거나 생성한 후 발행해주세요.`
+          });
+          return;
+        }
+        
+        imageUrlList.push(imageUrl);
+      }
+      
+      // 블로그 포스트 데이터 구성
+      const postData = {
+        title: data.selectedTitle,
+        content: editedContent,
+        tags: [], // 태그는 나중에 추가할 수 있음
+        images: imageUrlList
+      };
+      
+      // 발행 옵션 구성
+      const publishOptions = {
+        openToPublic: publishSettings.openToPublic,
+        allowComments: publishSettings.allowComments,
+        allowTrackback: publishSettings.allowTrackback,
+        publishTime: publishSettings.publishTime,
+        scheduledDate: publishSettings.publishTime === 'scheduled' 
+          ? `${publishSettings.scheduledDate} ${publishSettings.scheduledTime.hour}:${publishSettings.scheduledTime.minute}:00`
+          : undefined
+      };
+      
+      console.log('🚀 네이버 블로그 발행 시작:', { postData, publishOptions });
+      
+      // PublishFactory를 통한 네이버 블로그 발행
+      const result = await PublishFactory.publishToNaverBlog(postData, publishOptions);
+      
+      if (result.success) {
+        setDialog({
+          isOpen: true,
+          type: 'success',
+          title: '발행 완료',
+          message: '네이버 블로그에 성공적으로 발행되었습니다!'
+        });
+      } else {
+        throw new Error(result.error || '발행 중 오류가 발생했습니다.');
+      }
+      
+    } catch (error) {
+      console.error('❌ 네이버 블로그 발행 실패:', error);
+      setDialog({
+        isOpen: true,
+        type: 'error',
+        title: '발행 실패',
+        message: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.'
+      });
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+  
+  // 예약 날짜 유효성 검사
+  const validateScheduledDate = (): boolean => {
+    if (publishSettings.publishTime !== 'scheduled') return true;
+    
+    if (!publishSettings.scheduledDate) {
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '날짜 입력 필요',
+        message: '예약 발행을 위해 날짜를 선택해주세요.'
+      });
+      return false;
+    }
+    
+    const scheduledDateTime = new Date(`${publishSettings.scheduledDate} ${publishSettings.scheduledTime.hour}:${publishSettings.scheduledTime.minute}`);
+    const now = new Date();
+    
+    if (scheduledDateTime <= now) {
+      setDialog({
+        isOpen: true,
+        type: 'warning',
+        title: '날짜 오류',
+        message: '예약 시간은 현재 시간보다 나중이어야 합니다.'
+      });
+      return false;
+    }
+    
+    return true;
+  };
+
   // 모든 이미지 초기화
   const clearAllImages = () => {
     // 모든 blob URL 메모리 해제
@@ -1856,15 +1988,216 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
             return null;
           })()}
 
-          {/* 발행 - PublishFactory 사용 */}
-          <PublishFactory
-            platform={data.platform}
-            data={data}
-            editedContent={editedContent}
-            imageUrls={imageUrls}
-            onComplete={onComplete}
-            copyToClipboard={copyToClipboard}
-          />
+          {/* 네이버 블로그 발행 설정 */}
+          <div className="section-card" style={{padding: '20px', marginBottom: '16px'}}>
+            <div className="section-header" style={{marginBottom: '16px'}}>
+              <div className="section-icon purple" style={{width: '32px', height: '32px', fontSize: '16px'}}>🚀</div>
+              <h2 className="section-title" style={{fontSize: '16px'}}>네이버 블로그 발행</h2>
+            </div>
+            
+            {/* 발행 설정 */}
+            <div className="grid md:grid-cols-2 gap-6 mb-6">
+              {/* 발행 옵션 */}
+              <div>
+                <h3 className="text-sm font-medium text-slate-700 mb-3">📝 발행 옵션</h3>
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={publishSettings.openToPublic}
+                      onChange={(e) => setPublishSettings(prev => ({
+                        ...prev,
+                        openToPublic: e.target.checked
+                      }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">전체 공개</span>
+                  </label>
+                  
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={publishSettings.allowComments}
+                      onChange={(e) => setPublishSettings(prev => ({
+                        ...prev,
+                        allowComments: e.target.checked
+                      }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">댓글 허용</span>
+                  </label>
+                  
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={publishSettings.allowTrackback}
+                      onChange={(e) => setPublishSettings(prev => ({
+                        ...prev,
+                        allowTrackback: e.target.checked
+                      }))}
+                      className="rounded"
+                    />
+                    <span className="text-sm">트랙백 허용</span>
+                  </label>
+                </div>
+              </div>
+              
+              {/* 발행 시간 설정 */}
+              <div>
+                <h3 className="text-sm font-medium text-slate-700 mb-3">⏰ 발행 시간</h3>
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="publishTime"
+                      value="now"
+                      checked={publishSettings.publishTime === 'now'}
+                      onChange={(e) => setPublishSettings(prev => ({
+                        ...prev,
+                        publishTime: e.target.value as 'now' | 'scheduled'
+                      }))}
+                    />
+                    <span className="text-sm">현재 발행</span>
+                  </label>
+                  
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="publishTime"
+                      value="scheduled"
+                      checked={publishSettings.publishTime === 'scheduled'}
+                      onChange={(e) => setPublishSettings(prev => ({
+                        ...prev,
+                        publishTime: e.target.value as 'now' | 'scheduled'
+                      }))}
+                    />
+                    <span className="text-sm">예약 발행</span>
+                  </label>
+                  
+                  {/* 예약 발행 날짜/시간 설정 */}
+                  {publishSettings.publishTime === 'scheduled' && (
+                    <div className="ml-6 space-y-2 p-3 bg-gray-50 rounded">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">날짜</label>
+                        <input
+                          type="date"
+                          value={publishSettings.scheduledDate}
+                          onChange={(e) => setPublishSettings(prev => ({
+                            ...prev,
+                            scheduledDate: e.target.value
+                          }))}
+                          min={new Date().toISOString().split('T')[0]}
+                          className="w-full text-xs border rounded px-2 py-1"
+                        />
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">시간</label>
+                          <select
+                            value={publishSettings.scheduledTime.hour}
+                            onChange={(e) => setPublishSettings(prev => ({
+                              ...prev,
+                              scheduledTime: {
+                                ...prev.scheduledTime,
+                                hour: e.target.value
+                              }
+                            }))}
+                            className="w-full text-xs border rounded px-2 py-1"
+                          >
+                            {Array.from({length: 24}, (_, i) => (
+                              <option key={i} value={i.toString().padStart(2, '0')}>
+                                {i.toString().padStart(2, '0')}시
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">분</label>
+                          <select
+                            value={publishSettings.scheduledTime.minute}
+                            onChange={(e) => setPublishSettings(prev => ({
+                              ...prev,
+                              scheduledTime: {
+                                ...prev.scheduledTime,
+                                minute: e.target.value
+                              }
+                            }))}
+                            className="w-full text-xs border rounded px-2 py-1"
+                          >
+                            <option value="00">00분</option>
+                            <option value="10">10분</option>
+                            <option value="20">20분</option>
+                            <option value="30">30분</option>
+                            <option value="40">40분</option>
+                            <option value="50">50분</option>
+                          </select>
+                          <div className="text-xs text-gray-500 mt-1">
+                            * 네이버 블로그는 10분 단위로만 선택 가능
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {publishSettings.scheduledDate && (
+                        <div className="text-xs text-blue-600 mt-2">
+                          📅 예약 시간: {publishSettings.scheduledDate} {publishSettings.scheduledTime.hour}:{publishSettings.scheduledTime.minute}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            {/* 발행 버튼 */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleNaverBlogPublish}
+                disabled={isPublishing}
+                className="ultra-btn px-6 py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: isPublishing ? '#9ca3af' : '#22c55e',
+                  borderColor: isPublishing ? '#9ca3af' : '#22c55e',
+                  color: 'white'
+                }}
+              >
+                {isPublishing ? (
+                  <div className="flex items-center gap-2">
+                    <div className="ultra-spinner" style={{width: '16px', height: '16px'}}></div>
+                    <span>발행 중...</span>
+                  </div>
+                ) : (
+                  <span>🚀 네이버 블로그 발행</span>
+                )}
+              </button>
+              
+              <button
+                onClick={copyToClipboard}
+                className="ultra-btn px-4 py-3 text-sm"
+                style={{
+                  background: '#8b5cf6',
+                  borderColor: '#8b5cf6',
+                  color: 'white'
+                }}
+              >
+                📋 내용 복사
+              </button>
+            </div>
+            
+            {/* 발행 안내 */}
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+              <div className="text-sm text-blue-800">
+                <div className="font-medium mb-1">📌 발행 안내</div>
+                <ul className="text-xs space-y-1 text-blue-700">
+                  <li>• 발행 전 네이버 로그인이 필요합니다</li>
+                  <li>• 모든 이미지가 업로드/생성되어야 발행 가능합니다</li>
+                  <li>• 예약 발행 시 설정한 시간에 자동 발행됩니다</li>
+                  <li>• 발행 과정에서 2차 인증이 필요할 수 있습니다</li>
+                </ul>
+              </div>
+            </div>
+          </div>
 
           {/* 네비게이션 */}
           <div className="flex justify-between pt-4">

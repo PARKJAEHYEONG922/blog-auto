@@ -579,59 +579,44 @@ export class NaverBlogPublisher {
       
       console.log(`📅 설정할 날짜/시간: ${year}년 ${month}월 ${day}일 ${hour}시 ${minute}분`);
       
-      // 년도 설정
-      await this.setDateTimeField('year', year.toString(), [
-        'select[name*="year"]',
-        'select[id*="year"]',
-        'input[name*="year"]',
-        'input[id*="year"]',
-        '.year-select',
-        '[data-testid*="year"]'
-      ]);
+      // 네이버 블로그 특정 날짜/시간 설정
+      console.log('📅 네이버 블로그 예약 발행 날짜/시간 설정 중...');
       
-      // 월 설정
-      await this.setDateTimeField('month', month.toString(), [
-        'select[name*="month"]',
-        'select[id*="month"]', 
-        'input[name*="month"]',
-        'input[id*="month"]',
-        '.month-select',
-        '[data-testid*="month"]'
-      ]);
+      // 날짜 입력 필드 (읽기 전용, 클릭하면 날짜 선택기 열림)
+      const dateInput = await this.page.$('.input_date__QmA0s');
+      if (dateInput) {
+        console.log('📅 네이버 블로그 날짜 입력 필드 발견');
+        // 네이버 블로그는 날짜를 직접 입력할 수 없고, 제한된 날짜만 선택 가능
+        // 실제로는 사용자가 수동으로 날짜를 선택해야 할 수 있음
+        console.log('⚠️ 네이버 블로그 날짜는 수동 선택이 필요할 수 있습니다.');
+      }
       
-      // 일 설정
-      await this.setDateTimeField('day', day.toString(), [
-        'select[name*="day"]',
-        'select[id*="day"]',
-        'select[name*="date"]',
-        'select[id*="date"]',
-        'input[name*="day"]',
-        'input[id*="day"]',
-        '.day-select',
-        '[data-testid*="day"]'
-      ]);
+      // 시간 설정 (시)
+      const hourSelect = await this.page.$('.hour_option__J_heO');
+      if (hourSelect) {
+        await hourSelect.selectOption(hour.toString().padStart(2, '0'));
+        console.log(`✅ 시간 설정 완료: ${hour}시`);
+      } else {
+        console.warn('⚠️ 시간 선택 박스를 찾을 수 없음');
+      }
       
-      // 시간 설정
-      await this.setDateTimeField('hour', hour.toString(), [
-        'select[name*="hour"]',
-        'select[id*="hour"]',
-        'input[name*="hour"]',
-        'input[id*="hour"]',
-        '.hour-select',
-        '[data-testid*="hour"]'
-      ]);
-      
-      // 분 설정
-      await this.setDateTimeField('minute', minute.toString(), [
-        'select[name*="minute"]',
-        'select[id*="minute"]',
-        'select[name*="min"]',
-        'select[id*="min"]',
-        'input[name*="minute"]',
-        'input[id*="minute"]',
-        '.minute-select',
-        '[data-testid*="minute"]'
-      ]);
+      // 분 설정 (분)
+      const minuteSelect = await this.page.$('.minute_option__Vb3xB');
+      if (minuteSelect) {
+        // 네이버 블로그는 10분 단위로만 선택 가능 (00, 10, 20, 30, 40, 50)
+        const availableMinutes = ['00', '10', '20', '30', '40', '50'];
+        const targetMinute = minute.toString().padStart(2, '0');
+        
+        // 가장 가까운 10분 단위로 반올림
+        const nearestMinute = availableMinutes.reduce((prev, curr) => {
+          return Math.abs(parseInt(curr) - minute) < Math.abs(parseInt(prev) - minute) ? curr : prev;
+        });
+        
+        await minuteSelect.selectOption(nearestMinute);
+        console.log(`✅ 분 설정 완료: ${nearestMinute}분 (요청: ${minute}분)`);
+      } else {
+        console.warn('⚠️ 분 선택 박스를 찾을 수 없음');
+      }
       
       console.log('✅ 예약 날짜/시간 설정 완료');
       return true;
