@@ -339,9 +339,9 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     return `
       <div class="se-component se-table se-l-default">
         <div class="se-component-content">
-          <div class="se-section se-section-table se-l-default se-section-align-left">
-            <div class="se-table-container">
-              <table class="se-table-content se-reflow-toggle">
+          <div class="se-section se-section-table se-l-default se-section-align-center">
+            <div class="se-table-container" style="margin: 0 auto;">
+              <table class="se-table-content se-reflow-toggle" style="width: 100%; table-layout: auto;">
                 <tbody>
                   ${tableRows.join('')}
                 </tbody>
