@@ -8,6 +8,7 @@ import SimpleDialog from './SimpleDialog';
 interface Step2Props {
   data: WorkflowData;
   onNext: (data: Partial<WorkflowData>) => void;
+  onDataUpdate?: (data: Partial<WorkflowData>) => void;
   onBack: () => void;
   aiModelStatus: {
     information: string;
@@ -16,7 +17,7 @@ interface Step2Props {
   };
 }
 
-const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) => {
+const Step2: React.FC<Step2Props> = ({ data, onNext, onDataUpdate, onBack, aiModelStatus }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisSteps, setAnalysisSteps] = useState<AnalysisProgress[]>([]);
   // 기존 상태가 있으면 그것을 사용, 없으면 null
@@ -368,6 +369,15 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
           
           setWritingResult(updatedResult);
           setImagePromptsGenerated(true);
+          
+          // 부모 컴포넌트(App.tsx)의 상태를 실시간 업데이트
+          if (onDataUpdate) {
+            onDataUpdate({
+              writingResult: updatedResult,
+              collectedData,
+              searchKeyword
+            });
+          }
           
           console.log('✅ 이미지 프롬프트 생성 완료:', imagePromptResult.imagePrompts?.length || 0, '개');
         } else {

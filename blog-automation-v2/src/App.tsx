@@ -180,6 +180,9 @@ const App: React.FC = () => {
               updateWorkflowData(data);
               setCurrentStep(3);
             }}
+            onDataUpdate={(data) => {
+              updateWorkflowData(data);
+            }}
             onBack={() => {
               setIsBackFromStep2(true); // Step2에서 돌아갈 때 플래그 설정
               setCurrentStep(1);
