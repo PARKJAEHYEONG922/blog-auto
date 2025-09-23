@@ -389,8 +389,6 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       // 해시태그 정리
       cleanedContent = cleanHashtags(cleanedContent);
       
-      // 모바일 최적화: 25자 기준 줄바꿈 적용
-      cleanedContent = applyMobileOptimization(cleanedContent);
       
       // 연속된 공백과 줄바꿈 정리
       cleanedContent = cleanedContent.replace(/\n\s*\n\s*\n/g, '\n\n');
@@ -440,156 +438,33 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     }
   };
 
-  // 25자 기준 줄바꿈 (모바일 최적화)
-  const splitTextByLength = (text: string, targetLength: number = 25): string[] => {
-    if (text.length <= targetLength + 3) {
-      return [text];
-    }
-    
-    const result: string[] = [];
-    let current = text;
-    
-    while (current.length > targetLength + 3) {
-      // 25±3자 범위에서 가장 적절한 공백 찾기
-      let bestPos = targetLength;
-      
-      // targetLength-3 ~ targetLength+5 범위에서 공백 찾기
-      for (let i = Math.max(targetLength - 3, 10); i < Math.min(targetLength + 6, current.length); i++) {
-        if (current[i] === ' ') {
-          bestPos = i;
-          break;
-        }
-      }
-      
-      // 공백을 찾았으면 그 위치에서 분리
-      if (bestPos < current.length && current[bestPos] === ' ') {
-        result.push(current.substring(0, bestPos).trim());
-        current = current.substring(bestPos).trim();
-      } else {
-        // 공백이 없으면 targetLength에서 강제 분리
-        result.push(current.substring(0, targetLength));
-        current = current.substring(targetLength);
-      }
-    }
-    
-    // 남은 텍스트 추가
-    if (current.trim()) {
-      result.push(current.trim());
-    }
-    
-    return result;
-  };
 
-  // 구조화된 콘텐츠인지 판별 (리스트, 단계별 설명 등은 줄바꿈하지 않음)
-  const isStructuredContent = (line: string): boolean => {
-    try {
-      const lineStrip = line.trim();
-      
-      // 해시태그 줄 (# 기호가 여러 개 있는 경우 - 줄바꿈 제외)
-      if (lineStrip.includes('#') && lineStrip.split(' ').filter(part => part.startsWith('#')).length >= 2) {
-        return true;
-      }
-      
-      // 마크다운 소제목 (## 또는 ###로 시작 - 줄바꿈 제외)
-      if (lineStrip.startsWith('## ') || lineStrip.startsWith('### ')) {
-        return true;
-      }
-      
-      // 체크리스트/불릿 포인트 패턴 (다양한 형태)
-      const bulletPatterns = [
-        '✓ ', '✔ ', '✔️ ', '☑ ', '☑️ ', '✅ ',  // 체크마크
-        '- ', '• ', '◦ ', '▪ ', '▫ ', '‣ ',     // 불릿
-        '→ ', '➤ ', '► ', '▶ ', '🔸 ', '🔹 ',    // 화살표/도형
-        '★ ', '⭐ ', '🌟 ', '💡 ', '📌 ', '🎯 '   // 기타 강조
-      ];
-      
-      for (const pattern of bulletPatterns) {
-        if (lineStrip.startsWith(pattern)) {
-          return true;
-        }
-      }
-      
-      // 번호 목록 패턴 (숫자, 로마자, 한글 등)
-      // 1. 2. 3. 또는 1) 2) 3) 패턴
-      if (lineStrip.length > 0 && /^\d+[.)]\s/.test(lineStrip)) {
-        return true;
-      }
-      
-      // 로마자 패턴 (a. b. c. 또는 A. B. C.)
-      if (lineStrip.length >= 3 && /^[a-zA-Z][.)]\s/.test(lineStrip)) {
-        return true;
-      }
-      
-      // 한글 자모 패턴 (가. 나. 다. 또는 ㄱ. ㄴ. ㄷ.)
-      const koreanChars = 'ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ가나다라마바사아자차카타파하';
-      if (lineStrip.length >= 3 && lineStrip[1] === '.' && koreanChars.includes(lineStrip[0])) {
-        return true;
-      }
-      
-      // 단계별 패턴 (**1단계:**, **2단계:** 등)
-      if (lineStrip.includes('단계:') || lineStrip.includes('**단계')) {
-        return true;
-      }
-      
-      // 표 형태나 구조화된 데이터 (: 기호가 많이 있는 경우)
-      if ((lineStrip.match(/:/g) || []).length >= 2) {
-        return true;
-      }
-      
-      // 마크다운 표 형태 (| 기호로 구분)
-      if (lineStrip.startsWith('|') && lineStrip.endsWith('|') && (lineStrip.match(/\|/g) || []).length >= 3) {
-        return true;
-      }
-      
-      // 표 구분선 (---|---|--- 형태)
-      if (lineStrip.includes('---') && lineStrip.includes('|')) {
-        return true;
-      }
-      
-      // 짧은 줄 (30자 이하)
-      if (lineStrip.length <= 30) {
-        return true;
-      }
-      
-      return false;
-    } catch (error) {
-      console.error('구조화된 콘텐츠 판별 오류:', error);
-      return false;
-    }
-  };
 
-  // 모바일 최적화 텍스트 포맷팅 적용
-  const applyMobileOptimization = (content: string): string => {
-    const lines = content.split('\n');
-    const optimizedLines: string[] = [];
+  // (이미지) 플레이스홀더를 번호가 매겨진 형태로 변경
+  const addImageNumbers = (content: string): string => {
+    // 먼저 [이미지]를 (이미지)로 통일 (혼재 상황 방지)
+    content = content.replace(/\[이미지\]/g, '(이미지)');
     
-    for (const line of lines) {
-      const trimmed = line.trim();
-      
-      // 빈 줄이나 구조화된 콘텐츠는 그대로 유지
-      if (!trimmed || isStructuredContent(trimmed)) {
-        optimizedLines.push(line);
-        continue;
-      }
-      
-      // 긴 줄인 경우 25자 기준으로 분할
-      if (trimmed.length > 30) {
-        const splitLines = splitTextByLength(trimmed, 25);
-        optimizedLines.push(...splitLines);
-      } else {
-        optimizedLines.push(line);
-      }
-    }
+    let imageIndex = 1;
     
-    return optimizedLines.join('\n');
+    // 모든 (이미지)를 순서대로 번호가 매겨진 형태로 변경
+    content = content.replace(/\(이미지\)/g, () => {
+      return `(이미지${imageIndex++})`;
+    });
+    
+    console.log(`🔢 이미지 플레이스홀더 번호 매기기 완료: 총 ${imageIndex - 1}개`);
+    return content;
   };
 
   // 마크다운을 네이버 블로그 호환 HTML로 변환
   const processMarkdown = (content: string): string => {
-    // 먼저 모바일 최적화 처리
+    // 먼저 콘텐츠 정리
     const cleanedContent = cleanAIGeneratedContent(content);
     
-    const lines = cleanedContent.split('\n');
+    // 이미지 플레이스홀더에 번호 매기기
+    const numberedContent = addImageNumbers(cleanedContent);
+    
+    const lines = numberedContent.split('\n');
     const result: string[] = [];
     let i = 0;
     
@@ -902,6 +777,46 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     }, 1500);
   };
 
+  // 현재 프롬프트 가져오기 (편집된 프롬프트 우선)
+  const getCurrentPrompt = (imageIndex: number): string => {
+    // 편집된 프롬프트가 있으면 사용
+    if (editingPrompts.hasOwnProperty(imageIndex)) {
+      return editingPrompts[imageIndex];
+    }
+    
+    // 원본 프롬프트가 있으면 사용
+    const imagePrompts = data.writingResult?.imagePrompts || [];
+    const imagePrompt = imagePrompts.find(p => p.index === imageIndex);
+    if (imagePrompt) {
+      return imagePrompt.prompt;
+    }
+    
+    // 둘 다 없으면 빈 문자열
+    return '';
+  };
+
+  // 표시용 프롬프트 가져오기 (UI에서 사용)
+  const getDisplayPrompt = (imageIndex: number): string => {
+    return getCurrentPrompt(imageIndex);
+  };
+
+  // 프롬프트 편집 처리
+  const handlePromptChange = (imageIndex: number, newPrompt: string) => {
+    setEditingPrompts(prev => ({
+      ...prev,
+      [imageIndex]: newPrompt
+    }));
+  };
+
+  // 프롬프트를 원본으로 리셋
+  const resetPromptToOriginal = (imageIndex: number) => {
+    setEditingPrompts(prev => {
+      const newPrompts = { ...prev };
+      delete newPrompts[imageIndex];
+      return newPrompts;
+    });
+  };
+
   // AI 이미지 생성 (히스토리 관리 및 선택 기능 포함)
   const generateAIImage = async (imageIndex: number, originalPrompt: string, isPartOfBatch = false) => {
     setImageStatus(prev => ({ ...prev, [imageIndex]: 'generating' }));
@@ -1065,50 +980,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
     });
   };
 
-  // 프롬프트 변경 처리
-  const handlePromptChange = (imageIndex: number, newPrompt: string) => {
-    setEditingPrompts(prev => ({ ...prev, [imageIndex]: newPrompt }));
-  };
 
-  // 현재 프롬프트 가져오기 (편집된 것이 있으면 편집된 것, 없으면 원본)
-  const getCurrentPrompt = (imageIndex: number): string => {
-    const imagePrompts = data.writingResult?.imagePrompts || [];
-    const originalPrompt = imagePrompts.find(p => p.index === imageIndex)?.prompt || '';
-    
-    // 편집된 프롬프트가 있으면 그것을 사용, 없으면 원본 사용
-    return editingPrompts.hasOwnProperty(imageIndex) 
-      ? editingPrompts[imageIndex] 
-      : originalPrompt;
-  };
-
-  // 텍스트 영역에 표시할 프롬프트 가져오기 (사용자 편집 상태 유지)
-  const getDisplayPrompt = (imageIndex: number): string => {
-    // 사용자가 한 번이라도 편집했으면 편집된 값 사용 (빈 문자열 포함)
-    if (editingPrompts.hasOwnProperty(imageIndex)) {
-      return editingPrompts[imageIndex];
-    }
-    
-    // 편집한 적이 없으면 원본 프롬프트 사용
-    const imagePrompts = data.writingResult?.imagePrompts || [];
-    return imagePrompts.find(p => p.index === imageIndex)?.prompt || '';
-  };
-
-  // 프롬프트를 원본으로 되돌리기
-  const resetPromptToOriginal = (imageIndex: number) => {
-    // 편집 기록을 완전히 제거하여 원본 사용
-    setEditingPrompts(prev => {
-      const newState = { ...prev };
-      delete newState[imageIndex];
-      return newState;
-    });
-    
-    setDialog({
-      isOpen: true,
-      type: 'success',
-      title: '✅ 프롬프트 복원 완료',
-      message: '프롬프트가 원본으로 되돌려졌습니다.'
-    });
-  };
 
   // AI 이미지 생성 처리 (빈 프롬프트면 원본 사용)
   const handleAIImageGeneration = (imageIndex: number) => {
@@ -1243,7 +1115,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
   // 빈 이미지 모두 AI로 생성 (정지 기능 포함)
   const generateAllMissingImages = async () => {
     const imagePrompts = data.writingResult?.imagePrompts || [];
-    const imageRegex = /[\(\[\*_]이미지[\)\]\*_]/g;
+    const imageRegex = /[\(\[\*_]이미지\d*[\)\]\*_]/g;
     const imageCount = (editedContent.match(imageRegex) || []).length;
     
     setIsGeneratingAll(true);
@@ -1501,8 +1373,8 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
 
           {/* 이미지 섹션 */}
           {(() => {
-            // 다양한 형태의 이미지 태그 개수 계산
-            const imageRegex = /[\(\[\*_]이미지[\)\]\*_]/g;
+            // 다양한 형태의 이미지 태그 개수 계산 (번호가 매겨진 형태 포함)
+            const imageRegex = /[\(\[\*_]이미지\d*[\)\]\*_]/g;
             const imageCount = (editedContent.match(imageRegex) || []).length;
             const imagePrompts = data.writingResult?.imagePrompts || [];
             
@@ -1577,34 +1449,41 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                               </div>
                               
                               {/* AI 프롬프트 정보 */}
-                              {imagePrompt && (
-                                <div className="mb-3">
+                              <div className="mb-3">
+                                {imagePrompt ? (
                                   <div className="text-xs text-slate-600 mb-1">
                                     <strong>컨텍스트:</strong> {imagePrompt.context}
                                   </div>
-                                  <div className="bg-slate-50 rounded p-2 border border-slate-200">
-                                    <div className="flex items-center justify-between mb-1">
-                                      <div className="text-xs font-medium text-slate-700">💡 AI 프롬프트:</div>
-                                      {editingPrompts.hasOwnProperty(imageIndex) && (
-                                        <button
-                                          onClick={() => resetPromptToOriginal(imageIndex)}
-                                          className="text-xs text-orange-600 hover:text-orange-800 transition-colors"
-                                          title="원본으로 되돌리기"
-                                        >
-                                          🔄 원본
-                                        </button>
-                                      )}
-                                    </div>
-                                    <textarea
-                                      value={getDisplayPrompt(imageIndex)}
-                                      onChange={(e) => handlePromptChange(imageIndex, e.target.value)}
-                                      className="w-full text-xs text-slate-800 bg-white border border-slate-300 rounded p-2 resize-none"
-                                      rows={3}
-                                      placeholder="이미지 생성을 위한 프롬프트를 영어로 입력하세요... (예: A beautiful sunset over mountains)"
-                                    />
+                                ) : (
+                                  <div className="text-xs text-orange-600 mb-1">
+                                    <strong>⚠️ 프롬프트 없음:</strong> AI가 생성하지 못한 이미지 위치입니다. 직접 프롬프트를 입력해주세요.
                                   </div>
+                                )}
+                                <div className="bg-slate-50 rounded p-2 border border-slate-200">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <div className="text-xs font-medium text-slate-700">💡 이미지 프롬프트:</div>
+                                    {editingPrompts.hasOwnProperty(imageIndex) && imagePrompt && (
+                                      <button
+                                        onClick={() => resetPromptToOriginal(imageIndex)}
+                                        className="text-xs text-orange-600 hover:text-orange-800 transition-colors"
+                                        title="원본으로 되돌리기"
+                                      >
+                                        🔄 원본
+                                      </button>
+                                    )}
+                                  </div>
+                                  <textarea
+                                    value={getDisplayPrompt(imageIndex)}
+                                    onChange={(e) => handlePromptChange(imageIndex, e.target.value)}
+                                    className="w-full text-xs text-slate-800 bg-white border border-slate-300 rounded p-2 resize-none"
+                                    rows={3}
+                                    placeholder={imagePrompt ? 
+                                      "이미지 생성을 위한 프롬프트를 영어로 입력하세요..." : 
+                                      "프롬프트가 없습니다. 이미지 생성을 위한 영어 프롬프트를 직접 입력해주세요... (예: professional illustration related to blog content)"
+                                    }
+                                  />
                                 </div>
-                              )}
+                              </div>
                               
                               {/* 버튼 영역 */}
                               <div className="flex gap-2">
@@ -1622,16 +1501,18 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
                                   📁 이미지 업로드
                                 </label>
                                 
-                                {imagePrompt && (
-                                  <button
-                                    onClick={() => handleAIImageGeneration(imageIndex)}
-                                    disabled={!hasImageClient || status === 'generating' || isGeneratingAll}
-                                    className="px-3 py-1 bg-purple-500 text-white text-xs rounded hover:bg-purple-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                                    title={!hasImageClient ? '이미지 생성 AI가 설정되지 않았습니다' : ''}
-                                  >
-                                    🎨 AI 이미지생성
-                                  </button>
-                                )}
+                                <button
+                                  onClick={() => handleAIImageGeneration(imageIndex)}
+                                  disabled={!hasImageClient || status === 'generating' || isGeneratingAll || !getDisplayPrompt(imageIndex).trim()}
+                                  className="px-3 py-1 bg-purple-500 text-white text-xs rounded hover:bg-purple-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                  title={
+                                    !hasImageClient ? '이미지 생성 AI가 설정되지 않았습니다' :
+                                    !getDisplayPrompt(imageIndex).trim() ? '프롬프트를 입력해주세요' :
+                                    ''
+                                  }
+                                >
+                                  🎨 AI 이미지생성 {!imagePrompt && '(수동)'}
+                                </button>
                                 
                                 {status === 'completed' && (
                                   <button

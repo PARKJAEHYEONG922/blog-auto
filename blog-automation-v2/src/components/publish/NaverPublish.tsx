@@ -1407,17 +1407,18 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
       await window.electronAPI.playwrightWaitTimeout(3000); // 네이버 처리 시간 충분히 대기
       
       // 3. Step3에서 선택된 이미지들 자동 업로드
-      const imageCount = Object.keys(imageUrls).length;
+      // 실제 URL이 있는 이미지만 필터링
+      const validImages = Object.entries(imageUrls)
+        .filter(([key, url]) => url && url.trim() !== '')
+        .map(([key, url]) => ({ index: parseInt(key), url: url as string }));
+      
+      const imageCount = validImages.length;
       if (imageCount > 0) {
         console.log(`📸 ${imageCount}개 이미지를 자동으로 업로드합니다...`);
+        console.log(`📋 처리할 이미지 인덱스: ${validImages.map(img => img.index).join(', ')}`);
         
-        // 각 이미지를 순서대로 처리
-        for (let i = 1; i <= imageCount; i++) {
-          const imageUrl = imageUrls[i];
-          if (!imageUrl) {
-            console.log(`⚠️ 이미지 ${i} URL이 없습니다. 건너뛰기...`);
-            continue;
-          }
+        // 실제 존재하는 이미지들만 순서대로 처리
+        for (const { index: i, url: imageUrl } of validImages) {
           
           console.log(`📸 이미지 ${i} 처리 중: ${imageUrl.substring(0, 50)}...`);
           
@@ -1440,16 +1441,16 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
             
             console.log(`✅ 이미지 ${i} 임시 저장 완료: ${saveResult.filePath}`);
             
-            // 2. 네이버 블로그에서 (이미지) 텍스트 찾아서 바로 클릭
-            console.log(`🎯 네이버 블로그에서 "${i}번째 (이미지)" 찾아서 클릭...`);
+            // 2. 네이버 블로그에서 (이미지${i}) 텍스트 찾아서 바로 클릭
+            console.log(`🎯 네이버 블로그에서 "(이미지${i})" 찾아서 클릭...`);
             
-            // Step 1: (이미지) 텍스트 찾고 좌표 계산
+            // Step 1: (이미지${i}) 텍스트 찾고 좌표 계산
             const findResult = await window.electronAPI.playwrightEvaluateInFrames(`
               (function() {
                 try {
-                  console.log('${i}번째 (이미지) 찾기 시작');
+                  console.log('(이미지${i}) 찾기 시작');
                   
-                  // TreeWalker로 DOM 순서대로 (이미지) 텍스트 노드 찾기
+                  // TreeWalker로 DOM 순서대로 (이미지${i}) 텍스트 노드 찾기
                   let imageElements = [];
                   const walker = document.createTreeWalker(
                     document.body,
@@ -1460,20 +1461,30 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
                   
                   let node;
                   while (node = walker.nextNode()) {
-                    if (node.textContent && (node.textContent.includes('(이미지)') || node.textContent.includes('[이미지]'))) {
+                    if (node.textContent && (
+                      node.textContent.includes('(이미지${i})') || 
+                      node.textContent.includes('[이미지${i}]') ||
+                      node.textContent.match(/\(이미지\d+\)/) ||
+                      node.textContent.match(/\[이미지\d+\]/)
+                    )) {
                       const parentElement = node.parentElement;
                       if (parentElement) {
-                        imageElements.push(parentElement);
-                        console.log('발견된 (이미지) 요소:', parentElement.textContent.trim(), '위치:', imageElements.length);
+                        // 정확히 ${i}번째 이미지인지 확인
+                        const isTargetImage = parentElement.textContent.includes('(이미지${i})') || 
+                                             parentElement.textContent.includes('[이미지${i}]');
+                        if (isTargetImage) {
+                          imageElements.push(parentElement);
+                          console.log('발견된 (이미지${i}) 요소:', parentElement.textContent.trim(), '위치:', imageElements.length);
+                        }
                       }
                     }
                   }
                   
-                  console.log('(이미지) 텍스트를 포함하는 요소 개수:', imageElements.length);
+                  console.log('(이미지${i}) 텍스트를 포함하는 요소 개수:', imageElements.length);
                   
-                  if (imageElements.length >= ${i}) {
-                    const targetElement = imageElements[${i - 1}];
-                    console.log('${i}번째 (이미지) 요소:', targetElement.textContent.trim());
+                  if (imageElements.length > 0) {
+                    const targetElement = imageElements[0]; // 정확히 찾은 ${i}번째 이미지 요소
+                    console.log('(이미지${i}) 요소:', targetElement.textContent.trim());
                     
                     // 스크롤해서 화면에 보이게 하기
                     targetElement.scrollIntoView({ behavior: 'instant', block: 'center' });
@@ -1483,7 +1494,7 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
                     const centerX = rect.left + rect.width / 2;
                     const centerY = rect.top + rect.height / 2;
                     
-                    console.log('${i}번째 (이미지) 좌표:', { x: centerX, y: centerY });
+                    console.log('(이미지${i}) 좌표:', { x: centerX, y: centerY });
                     
                     return { 
                       success: true, 
@@ -1495,24 +1506,24 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
                   } else {
                     return { 
                       success: false, 
-                      error: '충분한 (이미지) 요소를 찾을 수 없음',
+                      error: '(이미지${i}) 요소를 찾을 수 없음',
                       found: imageElements.length,
-                      needed: ${i}
+                      searchFor: '(이미지${i})'
                     };
                   }
                 } catch (error) {
-                  console.error('(이미지) 찾기 오류:', error);
+                  console.error('(이미지${i}) 찾기 오류:', error);
                   return { success: false, error: error.message };
                 }
               })()
             `, 'PostWriteForm.naver');
             
             if (!findResult?.result?.success) {
-              console.warn(`⚠️ ${i}번째 (이미지) 텍스트 찾기 실패:`, findResult?.result);
+              console.warn(`⚠️ (이미지${i}) 텍스트 찾기 실패:`, findResult?.result);
               continue;
             }
             
-            console.log(`✅ ${i}번째 (이미지) 텍스트 찾기 완료: "${findResult.result.elementText}"`);
+            console.log(`✅ (이미지${i}) 텍스트 찾기 완료: "${findResult.result.elementText}"`);
             
             // Step 2: 실제 Playwright 마우스로 클릭
             if (findResult.result.centerX && findResult.result.centerY) {
@@ -1550,7 +1561,7 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
                   const secondClick = await window.electronAPI.playwrightClickAt(realX, realY);
                   
                   if (secondClick.success) {
-                    console.log(`✅ ${i}번째 (이미지) 실제 마우스 더블클릭 완료`);
+                    console.log(`✅ (이미지${i}) 실제 마우스 더블클릭 완료`);
                     
                     // 더블클릭 후 잠깐 대기
                     await window.electronAPI.playwrightWaitTimeout(300);
@@ -1565,10 +1576,10 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
                     
                     console.log(`더블클릭 후 선택 상태:`, selectionCheck?.result?.selectedText);
                   } else {
-                    console.warn(`⚠️ ${i}번째 (이미지) 두 번째 클릭 실패`);
+                    console.warn(`⚠️ (이미지${i}) 두 번째 클릭 실패`);
                   }
                 } else {
-                  console.warn(`⚠️ ${i}번째 (이미지) 첫 번째 클릭 실패`);
+                  console.warn(`⚠️ (이미지${i}) 첫 번째 클릭 실패`);
                 }
               } else {
                 console.warn(`⚠️ iframe 오프셋 계산 실패`);
@@ -1578,11 +1589,11 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
             const findAndClickResult = { result: findResult.result };
             
             if (!findAndClickResult?.result?.success) {
-              console.warn(`⚠️ ${i}번째 (이미지) 텍스트 찾기/클릭 실패:`, findAndClickResult?.result);
+              console.warn(`⚠️ (이미지${i}) 텍스트 찾기/클릭 실패:`, findAndClickResult?.result);
               continue;
             }
             
-            console.log(`✅ ${i}번째 (이미지) 텍스트 클릭 완료: "${findAndClickResult.result.elementText}"`);
+            console.log(`✅ (이미지${i}) 텍스트 클릭 완료: "${findAndClickResult.result.elementText}"`);
             await window.electronAPI.playwrightWaitTimeout(500);
             
             // 3. 이미지 파일을 클립보드에 복사 (Electron 메인 프로세스에서)
@@ -1598,8 +1609,8 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
             
             console.log(`✅ 이미지 ${i} 클립보드 복사 완료`);
             
-            // 4. 선택된 (이미지) 텍스트에 Ctrl+V로 이미지 붙여넣기 (자동 교체)
-            console.log(`📋 이미지 ${i} 붙여넣기 중 (선택된 (이미지) 텍스트 자동 교체)...`);
+            // 4. 선택된 (이미지${i}) 텍스트에 Ctrl+V로 이미지 붙여넣기 (자동 교체)
+            console.log(`📋 이미지 ${i} 붙여넣기 중 (선택된 (이미지${i}) 텍스트 자동 교체)...`);
             
             const pasteImageResult = await window.electronAPI.playwrightPress('Control+v');
             if (!pasteImageResult.success) {
@@ -1607,7 +1618,7 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
               continue;
             }
             
-            console.log(`✅ 이미지 ${i} 붙여넣기 완료 - 선택된 (이미지) 텍스트가 이미지로 자동 교체됨`);
+            console.log(`✅ 이미지 ${i} 붙여넣기 완료 - 선택된 (이미지${i}) 텍스트가 이미지로 자동 교체됨`);
             await window.electronAPI.playwrightWaitTimeout(2000); // 네이버 이미지 처리 대기
             
             // 5. 임시 파일 정리

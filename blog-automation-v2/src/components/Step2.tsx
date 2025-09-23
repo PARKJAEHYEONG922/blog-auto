@@ -725,6 +725,18 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onBack, aiModelStatus }) =>
                           position: "마무리 섹션",
                           context: "혜택을 받는 모습을 보여주는 이미지",
                           prompt: "Happy Korean family receiving government financial support, positive atmosphere, showing gratitude and relief, warm lighting"
+                        },
+                        {
+                          index: 4,
+                          position: "신청 방법 비교 표 섹션",
+                          context: "신청 방법별 특징을 보여주는 표",
+                          prompt: "Clean comparison table showing different application methods for Korean government support, mobile app vs web vs offline, organized layout with icons"
+                        },
+                        {
+                          index: 5,
+                          position: "온라인 신청 상세 과정 섹션",
+                          context: "실제 신청 화면 스크린샷",
+                          prompt: "Korean government support application process screenshots, step by step mobile interface, clean modern design, user authentication screens"
                         }
                       ],
                       usage: {

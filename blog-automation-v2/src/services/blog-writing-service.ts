@@ -270,12 +270,14 @@ ${commonTagsSection}
   /**
    * 이미지 프롬프트 생성용 요청 생성
    */
-  private static generateImagePromptRequest(blogContent: string): string {
+  private static generateImagePromptRequest(blogContent: string, expectedImageCount: number): string {
     return `다음 블로그 글에서 (이미지) 태그들을 찾아서 각각에 맞는 이미지 생성 프롬프트를 만들어주세요:
 
 === 블로그 글 내용 ===
 ${blogContent}
 === 글 내용 끝 ===
+
+⚠️ 중요: 이 글에는 정확히 ${expectedImageCount}개의 (이미지) 태그가 있습니다. 반드시 ${expectedImageCount}개의 이미지 프롬프트를 생성해주세요.
 
 각 (이미지) 태그 위치의 전후 문맥을 분석하여 해당 위치에 적합한 영어 프롬프트를 작성해주세요.
 
@@ -300,7 +302,7 @@ ${blogContent}
 - 한국적 요소가 필요한 경우 "Korean style" 등으로 명시
 - 음식/요리 관련시 "Korean food photography style" 추가
 
-중요: 글에 있는 모든 (이미지) 태그에 대해 프롬프트를 생성하고, 반드시 위의 JSON 형식으로만 응답하세요.`;
+⚠️ 다시 한 번 강조: 반드시 정확히 ${expectedImageCount}개의 이미지 프롬프트를 생성해야 합니다. 개수가 맞지 않으면 오류가 발생합니다.`;
   }
 
   /**
@@ -314,94 +316,168 @@ ${blogContent}
         throw new Error('글쓰기 AI가 설정되지 않았습니다.');
       }
 
-      const writingClient = LLMClientFactory.getWritingClient();
-      const prompt = this.generateImagePromptRequest(blogContent);
-
-      console.log('📝 이미지 프롬프트 요청 생성 완료');
-
-      const response = await writingClient.generateText([
-        {
-          role: 'user',
-          content: prompt
-        }
-      ]);
-
-      if (!response.content || response.content.trim().length === 0) {
-        throw new Error('AI가 빈 응답을 반환했습니다.');
-      }
-
-      // JSON 파싱
-      let imagePromptsData;
-      try {
-        const cleanedResponse = response.content.trim();
-        console.log('🔍 제미나이 원본 응답 (처음 200자):', cleanedResponse.substring(0, 200));
-        
-        // 마크다운 코드 블록 제거
-        let jsonContent = cleanedResponse;
-        
-        // 다양한 형식의 코드 블록 제거
-        if (cleanedResponse.includes('```')) {
-          // ```json, ```javascript, ``` 등 모든 형식 처리
-          jsonContent = cleanedResponse.replace(/```[a-zA-Z]*\n?/g, '').replace(/\n?```/g, '').trim();
-        }
-        
-        // JSON 추출 시도 - 중괄호로 시작하는 부분 찾기
-        const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          jsonContent = jsonMatch[0];
-        }
-        
-        // 배열로 시작하는 경우 처리
-        const arrayMatch = jsonContent.match(/\[[\s\S]*\]/);
-        if (!jsonMatch && arrayMatch) {
-          jsonContent = `{"imagePrompts": ${arrayMatch[0]}}`;
-        }
-        
-        imagePromptsData = JSON.parse(jsonContent);
-      } catch (parseError) {
-        console.error('JSON 파싱 실패:', parseError);
-        console.log('원본 응답 전체:', response.content);
-        
-        // 대체 파싱 시도 - 정규식으로 프롬프트 추출
-        try {
-          console.log('🔄 대체 파싱 시도...');
-          const prompts: ImagePrompt[] = [];
-          
-          // "prompt": "..." 또는 'prompt': '...' 패턴 찾기
-          const promptRegex = /["']prompt["']\s*:\s*["']([^"']+)["']/g;
-          let match;
-          let index = 1;
-          
-          while ((match = promptRegex.exec(response.content)) !== null) {
-            prompts.push({
-              index: index++,
-              position: `이미지 ${index}`,
-              context: `이미지 ${index} 관련 내용`,
-              prompt: match[1]
-            });
-          }
-          
-          if (prompts.length > 0) {
-            console.log(`✅ 대체 파싱으로 ${prompts.length}개 프롬프트 추출 성공`);
-            imagePromptsData = { imagePrompts: prompts };
-          } else {
-            throw new Error('AI 응답을 파싱할 수 없습니다.');
-          }
-        } catch (altError) {
-          throw new Error('AI 응답을 파싱할 수 없습니다.');
-        }
-      }
-
-      const imagePrompts = imagePromptsData.imagePrompts || [];
+      // 블로그 글에서 (이미지) 태그 개수 정확히 계산
+      const imageMatches = blogContent.match(/\(이미지\)|\[이미지\]/g);
+      const expectedImageCount = imageMatches ? imageMatches.length : 0;
       
-      console.log('✅ 이미지 프롬프트 생성 완료:', imagePrompts.length + '개');
-      console.log('📊 토큰 사용량:', response.usage);
+      console.log(`📊 예상 이미지 개수: ${expectedImageCount}개`);
+      
+      if (expectedImageCount === 0) {
+        console.log('⚠️ 이미지 태그가 없어 이미지 프롬프트 생성을 건너뜁니다.');
+        return {
+          success: true,
+          imagePrompts: [],
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        };
+      }
 
-      return {
-        success: true,
-        imagePrompts,
-        usage: response.usage
-      };
+      const writingClient = LLMClientFactory.getWritingClient();
+      const maxRetries = 3;
+      let totalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        console.log(`🔄 이미지 프롬프트 생성 시도 ${attempt}/${maxRetries}`);
+        
+        const prompt = this.generateImagePromptRequest(blogContent, expectedImageCount);
+
+        console.log('📝 이미지 프롬프트 요청 생성 완료');
+
+        const response = await writingClient.generateText([
+          {
+            role: 'user',
+            content: prompt
+          }
+        ]);
+
+        // 사용량 누적
+        if (response.usage) {
+          totalUsage.promptTokens += response.usage.promptTokens || 0;
+          totalUsage.completionTokens += response.usage.completionTokens || 0;
+          totalUsage.totalTokens += response.usage.totalTokens || 0;
+        }
+
+        if (!response.content || response.content.trim().length === 0) {
+          console.warn(`⚠️ 시도 ${attempt}: AI가 빈 응답을 반환했습니다.`);
+          if (attempt === maxRetries) {
+            throw new Error('AI가 빈 응답을 반환했습니다.');
+          }
+          continue;
+        }
+
+        // JSON 파싱
+        let imagePromptsData;
+        try {
+          const cleanedResponse = response.content.trim();
+          console.log('🔍 AI 원본 응답 (처음 200자):', cleanedResponse.substring(0, 200));
+          
+          // 마크다운 코드 블록 제거
+          let jsonContent = cleanedResponse;
+          
+          // 다양한 형식의 코드 블록 제거
+          if (cleanedResponse.includes('```')) {
+            jsonContent = cleanedResponse.replace(/```[a-zA-Z]*\n?/g, '').replace(/\n?```/g, '').trim();
+          }
+          
+          // JSON 추출 시도
+          const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            jsonContent = jsonMatch[0];
+          }
+          
+          // 배열로 시작하는 경우 처리
+          const arrayMatch = jsonContent.match(/\[[\s\S]*\]/);
+          if (!jsonMatch && arrayMatch) {
+            jsonContent = `{"imagePrompts": ${arrayMatch[0]}}`;
+          }
+          
+          imagePromptsData = JSON.parse(jsonContent);
+        } catch (parseError) {
+          console.error(`❌ 시도 ${attempt}: JSON 파싱 실패:`, parseError);
+          
+          // 대체 파싱 시도
+          try {
+            console.log('🔄 대체 파싱 시도...');
+            const prompts: ImagePrompt[] = [];
+            
+            const promptRegex = /["']prompt["']\s*:\s*["']([^"']+)["']/g;
+            let match;
+            let index = 1;
+            
+            while ((match = promptRegex.exec(response.content)) !== null) {
+              prompts.push({
+                index: index,
+                position: `이미지 ${index}`,
+                context: `이미지 ${index} 관련 내용`,
+                prompt: match[1]
+              });
+              index++;
+            }
+            
+            if (prompts.length > 0) {
+              console.log(`✅ 대체 파싱으로 ${prompts.length}개 프롬프트 추출`);
+              imagePromptsData = { imagePrompts: prompts };
+            } else {
+              throw new Error('파싱 불가능');
+            }
+          } catch (altError) {
+            console.warn(`⚠️ 시도 ${attempt}: 대체 파싱도 실패`);
+            if (attempt === maxRetries) {
+              throw new Error('AI 응답을 파싱할 수 없습니다.');
+            }
+            continue;
+          }
+        }
+
+        const imagePrompts = imagePromptsData.imagePrompts || [];
+        
+        console.log(`📊 시도 ${attempt}: 생성된 프롬프트 개수 - 예상: ${expectedImageCount}개, 실제: ${imagePrompts.length}개`);
+
+        // 개수 검증
+        if (imagePrompts.length === expectedImageCount) {
+          console.log('✅ 이미지 프롬프트 생성 성공 - 개수 일치!');
+          console.log('📊 총 토큰 사용량:', totalUsage);
+          
+          return {
+            success: true,
+            imagePrompts,
+            usage: totalUsage
+          };
+        } else {
+          console.warn(`⚠️ 시도 ${attempt}: 개수 불일치 - 예상: ${expectedImageCount}개, 실제: ${imagePrompts.length}개`);
+          
+          if (attempt === maxRetries) {
+            // 최종 시도에서도 실패한 경우, 부족한 프롬프트는 기본값으로 채우기
+            const finalPrompts = [...imagePrompts];
+            
+            while (finalPrompts.length < expectedImageCount) {
+              finalPrompts.push({
+                index: finalPrompts.length + 1,
+                position: `이미지 ${finalPrompts.length + 1}`,
+                context: '추가 이미지 위치',
+                prompt: 'professional, clean, informative illustration related to the blog content'
+              });
+            }
+            
+            // 개수가 초과된 경우 자르기
+            if (finalPrompts.length > expectedImageCount) {
+              finalPrompts.splice(expectedImageCount);
+            }
+            
+            console.log(`🔧 개수 보정 완료: ${finalPrompts.length}개`);
+            
+            return {
+              success: true,
+              imagePrompts: finalPrompts,
+              usage: totalUsage
+            };
+          }
+          
+          // 다음 시도를 위해 잠시 대기
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      throw new Error('최대 재시도 횟수를 초과했습니다.');
 
     } catch (error) {
       console.error('❌ 이미지 프롬프트 생성 실패:', error);
