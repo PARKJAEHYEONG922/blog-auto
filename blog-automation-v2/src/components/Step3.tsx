@@ -316,11 +316,16 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
         const rowCells = cells.map(cellContent => {
           const processedContent = cellContent.replace(/\*\*([^*]+)\*\*/g, '<span class="se-ff-nanumgothic se-fs16" style="color: rgb(0, 0, 0); font-weight: bold;">$1</span>');
           
+          // 헤더 행에는 연한 회색 배경 적용
+          const cellStyle = isHeaderRow 
+            ? `width: ${cellWidth}%; height: 43px; background-color: #f5f5f5;`
+            : `width: ${cellWidth}%; height: 43px;`;
+          
           return `
-            <td class="__se-unit se-cell" style="width: ${cellWidth}%; height: 43px;">
+            <td class="__se-unit se-cell" style="${cellStyle}">
               <div class="se-module se-module-text">
-                <p class="se-text-paragraph se-text-paragraph-align-left" style="line-height: 1.6;">
-                  <span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0);">${processedContent}</span>
+                <p class="se-text-paragraph se-text-paragraph-align-center" style="line-height: 1.6;">
+                  <span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0); ${isHeaderRow ? 'font-weight: bold;' : ''}">${processedContent}</span>
                 </p>
               </div>
             </td>`;
@@ -492,16 +497,48 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
       // 일반 텍스트 처리
       if (line.trim().startsWith('## ')) {
         const text = line.substring(line.indexOf('## ') + 3);
-        result.push(`<p class="se-text-paragraph se-text-paragraph-align-left" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs24" style="color: rgb(0, 0, 0); font-weight: bold;">${text}</span></p>`);
+        result.push(`<p class="se-text-paragraph se-text-paragraph-align-center" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs24" style="color: rgb(0, 0, 0); font-weight: bold;">${text}</span></p>`);
       } else if (line.trim().startsWith('### ')) {
         const text = line.substring(line.indexOf('### ') + 4);
-        result.push(`<p class="se-text-paragraph se-text-paragraph-align-left" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs19" style="color: rgb(0, 0, 0); font-weight: bold;">${text}</span></p>`);
+        result.push(`<p class="se-text-paragraph se-text-paragraph-align-center" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs19" style="color: rgb(0, 0, 0); font-weight: bold;">${text}</span></p>`);
       } else if (line.trim() === '') {
-        result.push(`<p class="se-text-paragraph se-text-paragraph-align-left" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0);">&nbsp;</span></p>`);
-      } else {
-        // **강조** 처리
-        let processedLine = line.replace(/\*\*([^*]+)\*\*/g, '<span class="se-ff-nanumgothic se-fs16" style="color: rgb(0, 0, 0); font-weight: bold;">$1</span>');
-        result.push(`<p class="se-text-paragraph se-text-paragraph-align-left" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0);">${processedLine}</span></p>`);
+        result.push(`<p class="se-text-paragraph se-text-paragraph-align-center" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0);">&nbsp;</span></p>`);
+      } else if (line.trim().match(/^(\d+\.|[-•*]\s+|✓\s+|[①-⑳]\s+|[가-힣]\.\s+)/)) {
+        // 모든 리스트 항목 처리 - 줄바꿈 금지
+        // 1. 번호 리스트 (1. 2. 3.)
+        // - • * 불릿 리스트
+        // ✓ 체크리스트
+        // ① ② 원숫자
+        // 가. 나. 다. 한글 리스트
+        let text = line.trim();
+        // **강조** 처리만 적용하고 문장별 개행은 하지 않음
+        text = text.replace(/\*\*([^*]+)\*\*/g, '<span class="se-ff-nanumgothic se-fs16" style="color: rgb(0, 0, 0); font-weight: bold;">$1</span>');
+        result.push(`<p class="se-text-paragraph se-text-paragraph-align-center" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0);">${text}</span></p>`);
+      } else {        
+        // 긴 문장(25자 이상)일 때만 자연스러운 의미 단위로 개행 처리 (모바일 최적화)
+        const lineLength = line.trim().length;
+        if (lineLength >= 25) {
+          // 자연스러운 의미 단위로 분리: 마침표, 쉼표, 접속사 기준
+          const sentences = line.trim().split(/(?<=[.!?,])\s+|(?=그리고|하지만|또한|따라서|그런데|그러나|그래서|또는)\s*/);
+          if (sentences.length > 1) {
+            // 여러 의미 단위가 있으면 각각을 별도 p 태그로 분리
+            sentences.forEach(sentence => {
+              if (sentence.trim()) {
+                // **강조** 처리를 각 문장별로 적용
+                let processedSentence = sentence.trim().replace(/\*\*([^*]+)\*\*/g, '<span class="se-ff-nanumgothic se-fs16" style="color: rgb(0, 0, 0); font-weight: bold;">$1</span>');
+                result.push(`<p class="se-text-paragraph se-text-paragraph-align-center" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0);">${processedSentence}</span></p>`);
+              }
+            });
+          } else {
+            // 단일 의미 단위면 그대로 처리
+            let processedLine = line.trim().replace(/\*\*([^*]+)\*\*/g, '<span class="se-ff-nanumgothic se-fs16" style="color: rgb(0, 0, 0); font-weight: bold;">$1</span>');
+            result.push(`<p class="se-text-paragraph se-text-paragraph-align-center" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0);">${processedLine}</span></p>`);
+          }
+        } else {
+          // 짧은 문장(25자 미만)은 개행하지 않고 그대로 처리
+          let processedLine = line.trim().replace(/\*\*([^*]+)\*\*/g, '<span class="se-ff-nanumgothic se-fs16" style="color: rgb(0, 0, 0); font-weight: bold;">$1</span>');
+          result.push(`<p class="se-text-paragraph se-text-paragraph-align-center" style="line-height: 1.8;"><span class="se-ff-nanumgothic se-fs15" style="color: rgb(0, 0, 0);">${processedLine}</span></p>`);
+        }
       }
       
       i++;
@@ -1324,6 +1361,9 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
               }
               .se-text-paragraph-align-left {
                 text-align: left;
+              }
+              .se-text-paragraph-align-center {
+                text-align: center;
               }
               .se-ff-nanumgothic {
                 font-family: "Nanum Gothic", "나눔고딕", "돋움", Dotum, Arial, sans-serif;
