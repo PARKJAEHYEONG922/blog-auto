@@ -235,7 +235,47 @@ export class ClaudeClient extends BaseLLMClient {
             await new Promise(resolve => setTimeout(resolve, parseInt(retryAfter) * 1000));
             continue; // 다시 시도
           }
-          throw new Error(`Claude API 오류: ${response.status} ${response.statusText}`);
+          
+          // 상세한 에러 정보 확인
+          const errorBody = await response.text().catch(() => '');
+          
+          // 사용자 친화적인 에러 메시지 생성
+          let errorMessage = '';
+          switch (response.status) {
+            case 400:
+              // 400 에러는 잔액 부족일 수도 있고 요청 형식 문제일 수도 있음
+              if (errorBody.includes('credit balance is too low') || errorBody.includes('insufficient') || errorBody.includes('balance')) {
+                errorMessage = '💳 Claude API 잔액이 부족합니다. Anthropic 계정에서 크레딧을 충전해주세요.';
+              } else {
+                errorMessage = 'Claude API 요청 형식에 문제가 있습니다. 프롬프트가 너무 길거나 형식이 잘못되었을 수 있습니다.';
+              }
+              break;
+            case 401:
+              errorMessage = 'Claude API 키가 유효하지 않습니다. 설정에서 API 키를 확인해주세요.';
+              break;
+            case 402:
+              errorMessage = '💳 Claude API 잔액이 부족합니다. Anthropic 계정에서 크레딧을 충전해주세요.';
+              break;
+            case 403:
+              errorMessage = 'Claude API 접근이 거부되었습니다. API 키 권한을 확인해주세요.';
+              break;
+            case 404:
+              errorMessage = '요청한 Claude 모델을 찾을 수 없습니다. 모델명을 확인해주세요.';
+              break;
+            case 422:
+              errorMessage = 'Claude API 요청 매개변수가 올바르지 않습니다.';
+              break;
+            case 500:
+              errorMessage = 'Claude API 서버에 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해주세요.';
+              break;
+            case 529:
+              errorMessage = 'Claude API 서버가 과부하 상태입니다. 잠시 후 다시 시도해주세요.';
+              break;
+            default:
+              errorMessage = `Claude API 오류가 발생했습니다 (${response.status}). 잠시 후 다시 시도해주세요.`;
+          }
+          
+          throw new Error(errorMessage);
         }
 
         const data = await response.json();

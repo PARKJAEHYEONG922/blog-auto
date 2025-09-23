@@ -1226,18 +1226,6 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onDataUpdate, onBack, aiMod
                             onClick={() => {
                               setWritingResult(null);
                               setRetryCount(0); // 재시도 카운터 리셋
-                              // 실패 후 재시도 시 바로 글쓰기 시작
-                              setTimeout(() => startWriting(), 100);
-                            }}
-                            className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors"
-                          >
-                            🔄 즉시 재시도
-                          </button>
-                          <button
-                            onClick={() => {
-                              // 분석 데이터와 이전 설정은 유지하고 글쓰기 결과만 초기화
-                              setWritingResult(null);
-                              setRetryCount(0); // 재시도 카운터 리셋
                               setIsGeneratingImagePrompts(false);
                               setImagePromptsGenerated(false);
                               setImagePromptError(null);
@@ -1249,9 +1237,9 @@ const Step2: React.FC<Step2Props> = ({ data, onNext, onDataUpdate, onBack, aiMod
                                 }
                               }, 500);
                             }}
-                            className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors"
+                            className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors"
                           >
-                            🔄 정보유지 재시도
+                            🔄 다시 시도
                           </button>
                         </div>
                       </div>
