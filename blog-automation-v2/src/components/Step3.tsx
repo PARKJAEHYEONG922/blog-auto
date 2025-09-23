@@ -759,6 +759,7 @@ const Step3: React.FC<Step3Props> = ({ data, onComplete, onBack }) => {
   };
 
 
+
   // 이미지 업로드 처리
   const handleImageUpload = (imageIndex: number, file: File | null) => {
     if (!file) return;
