@@ -1968,6 +1968,18 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
         console.log('✅ 발행 설정 팝업 열기 완료');
         await window.electronAPI.playwrightWaitTimeout(1000); // 팝업 로딩 대기
         
+        // 공통: 공감허용 라벨 클릭 (모든 발행 타입에서 필수)
+        console.log('💝 공감허용 라벨 클릭...');
+        const sympathyLabelResult = await window.electronAPI.playwrightClickInFrames('label[for="publish-option-sympathy"]', 'PostWriteForm.naver');
+        
+        if (sympathyLabelResult.success) {
+          console.log('✅ 공감허용 라벨 클릭 완료');
+        } else {
+          console.warn('⚠️ 공감허용 라벨 클릭 실패');
+        }
+        
+        await window.electronAPI.playwrightWaitTimeout(300); // 체크박스 처리 후 잠시 대기
+        
         if (publishOption === 'immediate') {
           // 즉시 발행: 기본값이 현재이므로 별도 설정 불필요
           console.log('⚡ 즉시 발행 - 기본 설정 사용 (현재 시간)');
