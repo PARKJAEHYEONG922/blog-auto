@@ -1,7 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { PublishComponentProps, PublishStatus, PublishResult, IPublishComponent } from './PublishInterface';
-// import { PlaywrightNaverHelper, NaverCredentials, LoginStatus } from './PlaywrightNaverHelper';
-// import { NaverBlogPublisher, BlogPostData, PublishOptions, PostStatus } from './NaverBlogPublisher';
 
 // 네이버 자격 증명 타입
 interface NaverCredentials {
@@ -29,6 +27,200 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
     error: '',
     success: false
   });
+
+  // 발행 옵션 상태
+  const [publishOption, setPublishOption] = useState<'temp' | 'immediate' | 'scheduled'>('immediate');
+  
+  // 예약 발행 시간 상태
+  const [scheduledDate, setScheduledDate] = useState<string>('');
+  const [scheduledHour, setScheduledHour] = useState<string>('');
+  const [scheduledMinute, setScheduledMinute] = useState<string>('');
+  const [timeError, setTimeError] = useState<string>('');
+  const [timeUntilPublish, setTimeUntilPublish] = useState<string>('');
+  const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
+  const [currentCalendarMonth, setCurrentCalendarMonth] = useState<number>(0); // 현재 달부터의 상대적 개월 수
+  
+  // 컴포넌트 마운트 시 기본 예약 시간 설정 (1시간 후)
+  useEffect(() => {
+    const now = new Date();
+    const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+    
+    const year = oneHourLater.getFullYear();
+    const month = (oneHourLater.getMonth() + 1).toString().padStart(2, '0');
+    const day = oneHourLater.getDate().toString().padStart(2, '0');
+    const hour = oneHourLater.getHours().toString().padStart(2, '0');
+    const minute = Math.floor(oneHourLater.getMinutes() / 10) * 10; // 10분 단위로 반올림
+    
+    setScheduledDate(`${year}-${month}-${day}`);
+    setScheduledHour(hour);
+    setScheduledMinute(minute.toString().padStart(2, '0'));
+  }, []);
+  
+  // 예약 시간 유효성 검사 및 남은 시간 계산
+  const validateAndCalculateTime = useCallback((hour: string, minute: string) => {
+    // 입력값 유효성 검사
+    if (!hour || !minute || hour === '' || minute === '') {
+      setTimeError('');
+      setTimeUntilPublish('');
+      return;
+    }
+    
+    const hourNum = parseInt(hour);
+    const minuteNum = parseInt(minute);
+    
+    // 숫자 변환 실패 체크
+    if (isNaN(hourNum) || isNaN(minuteNum)) {
+      setTimeError('');
+      setTimeUntilPublish('');
+      return;
+    }
+    
+    const now = new Date();
+    const selectedTime = new Date();
+    
+    // 선택된 날짜가 있으면 해당 날짜로 설정, 없으면 오늘 날짜
+    if (scheduledDate) {
+      const [year, month, day] = scheduledDate.split('-').map(Number);
+      selectedTime.setFullYear(year, month - 1, day);
+    }
+    
+    selectedTime.setHours(hourNum);
+    selectedTime.setMinutes(minuteNum);
+    selectedTime.setSeconds(0);
+    selectedTime.setMilliseconds(0);
+    
+    // 현재 시간보다 이전이면 에러 (같은 날짜인 경우에만 체크)
+    const isToday = scheduledDate === '' || scheduledDate === now.toISOString().split('T')[0];
+    
+    if (isToday && selectedTime <= now) {
+      setTimeError('⚠️ 현재 시간보다 이후로 설정해주세요');
+      setTimeUntilPublish('');
+      return;
+    }
+    
+    // 차이 계산
+    const diffMs = selectedTime.getTime() - now.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    setTimeError('');
+    
+    if (diffDays > 0) {
+      if (diffHours > 0) {
+        setTimeUntilPublish(`${diffDays}일 ${diffHours}시간 ${diffMinutes}분 후 발행됩니다`);
+      } else {
+        setTimeUntilPublish(`${diffDays}일 ${diffMinutes}분 후 발행됩니다`);
+      }
+    } else if (diffHours > 0) {
+      setTimeUntilPublish(`${diffHours}시간 ${diffMinutes}분 후 발행됩니다`);
+    } else {
+      setTimeUntilPublish(`${diffMinutes}분 후 발행됩니다`);
+    }
+  }, [scheduledDate]);
+  
+  // 시간 변경 핸들러
+  const handleTimeChange = useCallback((type: 'hour' | 'minute', value: string) => {
+    if (type === 'hour') {
+      setScheduledHour(value);
+      validateAndCalculateTime(value, scheduledMinute);
+    } else {
+      setScheduledMinute(value);
+      validateAndCalculateTime(scheduledHour, value);
+    }
+  }, [scheduledHour, scheduledMinute, validateAndCalculateTime]);
+  
+  // 초기 시간 설정 후 계산 (날짜 변경 시에도 재계산)
+  useEffect(() => {
+    if (scheduledHour && scheduledMinute) {
+      validateAndCalculateTime(scheduledHour, scheduledMinute);
+    }
+  }, [scheduledDate, scheduledHour, scheduledMinute, validateAndCalculateTime]);
+
+  // 달력 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showDatePicker && !target.closest('.date-picker-container')) {
+        setShowDatePicker(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDatePicker]);
+
+  // 달력 관련 함수들
+  const getCalendarDays = (monthOffset: number = 0) => {
+    const now = new Date();
+    const today = now.getDate();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    // 표시할 달 계산
+    const targetDate = new Date(currentYear, currentMonth + monthOffset, 1);
+    const year = targetDate.getFullYear();
+    const month = targetDate.getMonth();
+    
+    // 해당 달의 마지막 날
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    
+    // 해당 달의 첫 번째 날의 요일 (0: 일요일)
+    const firstDayOfWeek = new Date(year, month, 1).getDay();
+    
+    const days = [];
+    
+    // 이전 달 빈 칸들
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      days.push(null);
+    }
+    
+    // 해당 달 날짜들
+    for (let day = 1; day <= lastDay; day++) {
+      // 현재 달이고 오늘보다 이전 날짜인 경우만 비활성화
+      const isCurrentMonth = monthOffset === 0;
+      const isDisabled = isCurrentMonth && day < today;
+      const isToday = isCurrentMonth && day === today;
+      
+      days.push({
+        day,
+        isDisabled,
+        isToday,
+        fullDate: `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
+      });
+    }
+    
+    return {
+      days,
+      year,
+      month: month + 1,
+      monthName: `${month + 1}월`,
+      canGoPrev: monthOffset > 0,
+      canGoNext: monthOffset < 11 // 1년(12개월)까지 가능
+    };
+  };
+
+  const goToPrevMonth = () => {
+    setCurrentCalendarMonth(prev => Math.max(0, prev - 1));
+  };
+
+  const goToNextMonth = () => {
+    setCurrentCalendarMonth(prev => Math.min(11, prev + 1));
+  };
+
+  const handleDateSelect = (dayInfo: any) => {
+    if (!dayInfo || dayInfo.isDisabled) return;
+    
+    setScheduledDate(dayInfo.fullDate);
+    setShowDatePicker(false);
+    
+    // 날짜 변경 시 시간 재검증
+    if (scheduledHour && scheduledMinute) {
+      validateAndCalculateTime(scheduledHour, scheduledMinute);
+    }
+  };
 
   // 네이버 로그아웃 및 브라우저 정리 함수
   const logoutFromNaver = async () => {
@@ -1731,6 +1923,141 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
     }
   };
 
+  // 발행 옵션에 따른 발행 처리 함수
+  const handlePublishByOption = async (): Promise<boolean> => {
+    console.log(`발행 옵션: ${publishOption}`);
+    
+    try {
+      if (publishOption === 'temp') {
+        // 임시저장 (에디터의 임시저장 버튼 클릭)
+        setPublishStatus(prev => ({
+          ...prev,
+          error: '임시저장 중...'
+        }));
+        
+        console.log('💾 임시저장 버튼 클릭 중...');
+        
+        // 네이버 블로그의 실제 "저장" 버튼 클릭
+        const saveButtonResult = await window.electronAPI.playwrightClickInFrames('.save_btn__bzc5B', 'PostWriteForm.naver');
+        
+        if (saveButtonResult.success) {
+          console.log('✅ 임시저장 완료');
+          await window.electronAPI.playwrightWaitTimeout(2000);
+          return true;
+        } else {
+          console.warn('⚠️ 저장 버튼 클릭 실패');
+          return false;
+        }
+        
+      } else if (publishOption === 'immediate' || publishOption === 'scheduled') {
+        // 즉시 발행 또는 예약 발행 - 둘 다 발행 버튼을 먼저 클릭해야 함
+        setPublishStatus(prev => ({
+          ...prev,
+          error: `${publishOption === 'immediate' ? '즉시 발행' : '예약 발행'} 설정 중...`
+        }));
+        
+        // 1단계: 발행 버튼 클릭하여 발행 설정 팝업 열기
+        console.log('📝 발행 버튼 클릭하여 팝업 열기...');
+        const publishButtonResult = await window.electronAPI.playwrightClickInFrames('.publish_btn__m9KHH', 'PostWriteForm.naver');
+        
+        if (!publishButtonResult.success) {
+          console.warn('⚠️ 발행 버튼 클릭 실패');
+          return false;
+        }
+        
+        console.log('✅ 발행 설정 팝업 열기 완료');
+        await window.electronAPI.playwrightWaitTimeout(1000); // 팝업 로딩 대기
+        
+        if (publishOption === 'immediate') {
+          // 즉시 발행: "현재" 라디오 버튼 클릭 (기본값이지만 명시적으로)
+          console.log('⚡ 즉시 발행 - 현재 시간 선택...');
+          const currentRadioResult = await window.electronAPI.playwrightClickInFrames('#radio_time1', 'PostWriteForm.naver');
+          
+          if (currentRadioResult.success) {
+            console.log('✅ 현재 시간 라디오 버튼 클릭 완료');
+          } else {
+            console.warn('⚠️ 현재 시간 라디오 버튼 클릭 실패 (기본값일 가능성 있음)');
+          }
+          
+        } else if (publishOption === 'scheduled') {
+          // 예약 발행: "예약" 라디오 버튼 클릭 후 시간 설정
+          console.log('📅 예약 발행 - 예약 라디오 버튼 클릭...');
+          const radioResult = await window.electronAPI.playwrightClickInFrames('#radio_time2', 'PostWriteForm.naver');
+          
+          if (!radioResult.success) {
+            console.warn('⚠️ 예약 라디오 버튼 클릭 실패');
+            return false;
+          }
+          
+          console.log('✅ 예약 라디오 버튼 클릭 완료');
+          await window.electronAPI.playwrightWaitTimeout(500);
+          
+          // 2단계: UI에서 설정한 예약 시간 사용
+          console.log(`예약 시간 설정: ${scheduledDate} ${scheduledHour}:${scheduledMinute}`);
+          
+          // 시간 선택 (select 요소)
+          console.log('🕐 시간 선택 중...');
+          const hourSelectResult = await window.electronAPI.playwrightEvaluateInFrames(`
+            (function() {
+              try {
+                const hourSelect = document.querySelector('.hour_option__J_heO');
+                if (hourSelect) {
+                  hourSelect.value = '${scheduledHour}';
+                  hourSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                  console.log('시간 선택 완료: ${scheduledHour}');
+                  return { success: true };
+                }
+                return { success: false, error: '시간 선택 요소를 찾을 수 없음' };
+              } catch (error) {
+                return { success: false, error: error.message };
+              }
+            })()
+          `, 'PostWriteForm.naver');
+          
+          if (hourSelectResult?.result?.success) {
+            console.log('✅ 시간 선택 완료');
+          } else {
+            console.warn('⚠️ 시간 선택 실패:', hourSelectResult?.result?.error);
+          }
+          
+          // 분 선택 (select 요소)
+          console.log('⏱️ 분 선택 중...');
+          const minuteSelectResult = await window.electronAPI.playwrightEvaluateInFrames(`
+            (function() {
+              try {
+                const minuteSelect = document.querySelector('.minute_option__Vb3xB');
+                if (minuteSelect) {
+                  minuteSelect.value = '${scheduledMinute}';
+                  minuteSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                  console.log('분 선택 완료: ${scheduledMinute}');
+                  return { success: true };
+                }
+                return { success: false, error: '분 선택 요소를 찾을 수 없음' };
+              } catch (error) {
+                return { success: false, error: error.message };
+              }
+            })()
+          `, 'PostWriteForm.naver');
+          
+          if (minuteSelectResult?.result?.success) {
+            console.log('✅ 분 선택 완료');
+          } else {
+            console.warn('⚠️ 분 선택 실패:', minuteSelectResult?.result?.error);
+          }
+        }
+        
+        await window.electronAPI.playwrightWaitTimeout(500);
+        console.log(`✅ ${publishOption === 'immediate' ? '즉시 발행' : '예약 발행'} 설정 완료`);
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error(`❌ ${publishOption} 발행 처리 실패:`, error);
+      return false;
+    }
+  };
+
   // 네이버 로그인 + 발행 통합 함수
   const publishToNaverBlog = async (): Promise<PublishResult> => {
     if (!naverCredentials.username || !naverCredentials.password) {
@@ -1808,10 +2135,66 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
           console.warn('⚠️ 본문 및 이미지 자동 입력 실패, 수동으로 진행해주세요.');
         }
         
-        // 5단계: 완료 안내
+        // 5단계: 발행 옵션에 따른 처리
         setPublishStatus(prev => ({
           ...prev,
-          error: '자동 입력 완료! 브라우저에서 확인 후 발행해주세요...'
+          error: `${publishOption === 'temp' ? '임시저장' : publishOption === 'immediate' ? '즉시 발행' : '예약 발행'} 처리 중...`
+        }));
+        
+        // 예약발행인 경우 시간 유효성 체크
+        if (publishOption === 'scheduled' && timeError) {
+          setPublishStatus(prev => ({
+            ...prev,
+            error: '예약 시간을 올바르게 설정해주세요.',
+            isPublishing: false
+          }));
+          return { success: false, message: '예약 시간을 올바르게 설정해주세요.' };
+        }
+        
+        const publishSuccess = await handlePublishByOption();
+        
+        if (publishSuccess && publishOption !== 'temp') {
+          // 임시저장이 아닌 경우 최종 발행 버튼 클릭
+          console.log('🚀 팝업에서 최종 "발행" 버튼 클릭 중...');
+          console.log('🎯 버튼 셀렉터: .confirm_btn__WEaBq');
+          
+          await window.electronAPI.playwrightWaitTimeout(500); // 설정 완료 후 잠시 대기
+          
+          const finalPublishResult = await window.electronAPI.playwrightClickInFrames('.confirm_btn__WEaBq', 'PostWriteForm.naver');
+          
+          if (finalPublishResult.success) {
+            console.log('✅ 최종 발행 버튼 클릭 완료');
+            console.log(`🎉 ${publishOption === 'immediate' ? '즉시 발행' : '예약 발행'} 처리 완료!`);
+            await window.electronAPI.playwrightWaitTimeout(3000); // 발행 완료 대기
+          } else {
+            console.warn('⚠️ 최종 발행 버튼 클릭 실패');
+            // 대체 셀렉터 시도
+            const altSelectors = [
+              'button[data-testid="seOnePublishBtn"]',
+              'button[data-click-area="tpb*i.publish"]',
+              '.btn_area__fO7mp button'
+            ];
+            
+            for (const selector of altSelectors) {
+              console.log(`🔄 대체 셀렉터 시도: ${selector}`);
+              const altResult = await window.electronAPI.playwrightClickInFrames(selector, 'PostWriteForm.naver');
+              if (altResult.success) {
+                console.log('✅ 대체 셀렉터로 발행 버튼 클릭 완료');
+                await window.electronAPI.playwrightWaitTimeout(3000);
+                break;
+              }
+            }
+          }
+        }
+        
+        // 6단계: 완료 안내
+        const successMessage = publishOption === 'temp' ? '임시저장 완료!' : 
+                              publishOption === 'immediate' ? '즉시 발행 완료!' : 
+                              '예약 발행 설정 완료!';
+        
+        setPublishStatus(prev => ({
+          ...prev,
+          error: `${successMessage} 브라우저에서 확인해주세요.`
         }));
         
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -1891,33 +2274,327 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
       
       {!publishStatus.success ? (
         <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              네이버 아이디
-            </label>
-            <input
-              type="text"
-              value={naverCredentials.username}
-              onChange={(e) => setNaverCredentials(prev => ({ ...prev, username: e.target.value }))}
-              placeholder="네이버 아이디를 입력하세요"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              disabled={publishStatus.isPublishing}
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              비밀번호
-            </label>
-            <input
-              type="password"
-              value={naverCredentials.password}
-              onChange={(e) => setNaverCredentials(prev => ({ ...prev, password: e.target.value }))}
-              placeholder="비밀번호를 입력하세요"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              disabled={publishStatus.isPublishing}
-              onKeyPress={(e) => e.key === 'Enter' && publishToNaverBlog()}
-            />
+          {/* 로그인 정보와 발행 옵션을 나란히 배치 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 왼쪽: 로그인 정보 */}
+            <div className="flex flex-col justify-center space-y-4">
+              <div className="text-center mb-2">
+                <h5 className="text-sm font-medium text-gray-700 mb-1">네이버 로그인</h5>
+                <p className="text-xs text-gray-500">블로그에 자동 발행하려면 로그인이 필요해요</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  아이디
+                </label>
+                <input
+                  type="text"
+                  value={naverCredentials.username}
+                  onChange={(e) => setNaverCredentials(prev => ({ ...prev, username: e.target.value }))}
+                  placeholder="네이버 아이디"
+                  className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  disabled={publishStatus.isPublishing}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  비밀번호
+                </label>
+                <input
+                  type="password"
+                  value={naverCredentials.password}
+                  onChange={(e) => setNaverCredentials(prev => ({ ...prev, password: e.target.value }))}
+                  placeholder="비밀번호"
+                  className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  disabled={publishStatus.isPublishing}
+                  onKeyPress={(e) => e.key === 'Enter' && publishToNaverBlog()}
+                />
+              </div>
+              
+              <div className="mt-2">
+                <div className="text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg p-2 text-center">
+                  🔒 로그인 정보는 발행 목적으로만 사용되며<br/>저장되지 않습니다
+                </div>
+              </div>
+            </div>
+            
+            {/* 오른쪽: 발행 옵션 */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  발행 옵션
+                </label>
+                <div className="space-y-3">
+                  {/* 임시저장 카드 */}
+                  <label className={`group relative block p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 hover:shadow-sm ${
+                    publishOption === 'temp' 
+                      ? 'border-orange-400 bg-gradient-to-r from-orange-50 to-yellow-50 shadow-sm' 
+                      : 'border-gray-200 bg-white hover:border-orange-200 hover:bg-orange-50/30'
+                  } ${publishStatus.isPublishing ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                    <div className="flex items-start space-x-3">
+                      <input
+                        type="radio"
+                        name="publishOption"
+                        value="temp"
+                        checked={publishOption === 'temp'}
+                        onChange={(e) => setPublishOption(e.target.value as 'temp' | 'immediate' | 'scheduled')}
+                        disabled={publishStatus.isPublishing}
+                        className="mt-0.5 text-orange-500 focus:ring-orange-500"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2">
+                          <span className={`text-lg ${publishOption === 'temp' ? 'scale-110' : ''} transition-transform`}>📝</span>
+                          <span className={`font-semibold ${publishOption === 'temp' ? 'text-orange-700' : 'text-gray-700'}`}>
+                            임시저장
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          나중에 완성해서 발행할 수 있어요
+                        </p>
+                      </div>
+                    </div>
+                    {publishOption === 'temp' && (
+                      <div className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">
+                        선택됨
+                      </div>
+                    )}
+                  </label>
+                  
+                  {/* 즉시발행 카드 */}
+                  <label className={`group relative block p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 hover:shadow-sm ${
+                    publishOption === 'immediate' 
+                      ? 'border-green-400 bg-gradient-to-r from-green-50 to-emerald-50 shadow-sm' 
+                      : 'border-gray-200 bg-white hover:border-green-200 hover:bg-green-50/30'
+                  } ${publishStatus.isPublishing ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                    <div className="flex items-start space-x-3">
+                      <input
+                        type="radio"
+                        name="publishOption"
+                        value="immediate"
+                        checked={publishOption === 'immediate'}
+                        onChange={(e) => setPublishOption(e.target.value as 'temp' | 'immediate' | 'scheduled')}
+                        disabled={publishStatus.isPublishing}
+                        className="mt-0.5 text-green-500 focus:ring-green-500"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2">
+                          <span className={`text-lg ${publishOption === 'immediate' ? 'scale-110' : ''} transition-transform`}>📤</span>
+                          <span className={`font-semibold ${publishOption === 'immediate' ? 'text-green-700' : 'text-gray-700'}`}>
+                            즉시발행
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          지금 바로 모든 사람이 볼 수 있어요
+                        </p>
+                      </div>
+                    </div>
+                    {publishOption === 'immediate' && (
+                      <div className="absolute -top-1 -right-1 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">
+                        선택됨
+                      </div>
+                    )}
+                  </label>
+                  
+                  {/* 예약발행 카드 */}
+                  <label className={`group relative block p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 hover:shadow-sm ${
+                    publishOption === 'scheduled' 
+                      ? 'border-purple-400 bg-gradient-to-r from-purple-50 to-indigo-50 shadow-sm' 
+                      : 'border-gray-200 bg-white hover:border-purple-200 hover:bg-purple-50/30'
+                  } ${publishStatus.isPublishing ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                    <div className="flex items-start space-x-3">
+                      <input
+                        type="radio"
+                        name="publishOption"
+                        value="scheduled"
+                        checked={publishOption === 'scheduled'}
+                        onChange={(e) => setPublishOption(e.target.value as 'temp' | 'immediate' | 'scheduled')}
+                        disabled={publishStatus.isPublishing}
+                        className="mt-0.5 text-purple-500 focus:ring-purple-500"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2">
+                          <span className={`text-lg ${publishOption === 'scheduled' ? 'scale-110' : ''} transition-transform`}>⏰</span>
+                          <span className={`font-semibold ${publishOption === 'scheduled' ? 'text-purple-700' : 'text-gray-700'}`}>
+                            예약발행
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          원하는 시간에 자동으로 발행돼요
+                        </p>
+                        
+                        {/* 예약 시간 설정 UI */}
+                        {publishOption === 'scheduled' && (
+                          <div className="mt-3 p-3 bg-white/70 border border-purple-200 rounded-lg">
+                            <div className="text-xs font-medium text-purple-700 mb-2 flex items-center">
+                              <span className="mr-1">🕐</span>
+                              발행 예약 시간 설정
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              {/* 날짜 */}
+                              <div className="flex-1 relative date-picker-container">
+                                <input
+                                  type="text"
+                                  value={scheduledDate ? scheduledDate.replace(/-/g, '. ') : ''}
+                                  onClick={() => setShowDatePicker(!showDatePicker)}
+                                  readOnly
+                                  className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded bg-white text-gray-700 cursor-pointer hover:bg-gray-50"
+                                  placeholder="날짜 선택"
+                                />
+                                
+                                {/* 달력 팝업 */}
+                                {showDatePicker && (
+                                  <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 p-3 min-w-[280px] date-picker-container">
+                                    {(() => {
+                                      const calendarData = getCalendarDays(currentCalendarMonth);
+                                      return (
+                                        <>
+                                          {/* 달력 헤더 */}
+                                          <div className="flex items-center justify-between mb-3">
+                                            <button 
+                                              type="button"
+                                              className={`p-1 ${currentCalendarMonth === 0 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700 hover:text-purple-600 cursor-pointer'}`}
+                                              disabled={currentCalendarMonth === 0}
+                                              onClick={currentCalendarMonth > 0 ? goToPrevMonth : undefined}
+                                            >
+                                              ‹
+                                            </button>
+                                            <div className="text-sm font-medium text-gray-700">
+                                              {calendarData.year}년 {calendarData.monthName}
+                                            </div>
+                                            <button 
+                                              type="button"
+                                              className={`p-1 ${currentCalendarMonth >= 11 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700 hover:text-purple-600 cursor-pointer'}`}
+                                              disabled={currentCalendarMonth >= 11}
+                                              onClick={currentCalendarMonth < 11 ? goToNextMonth : undefined}
+                                            >
+                                              ›
+                                            </button>
+                                          </div>
+                                          
+                                          {/* 요일 헤더 */}
+                                          <div className="grid grid-cols-7 gap-1 mb-2">
+                                            {['일', '월', '화', '수', '목', '금', '토'].map(day => (
+                                              <div key={day} className="text-center text-xs font-medium text-gray-500 p-1">
+                                                {day}
+                                              </div>
+                                            ))}
+                                          </div>
+                                          
+                                          {/* 날짜들 */}
+                                          <div className="grid grid-cols-7 gap-1">
+                                            {calendarData.days.map((dayInfo, index) => (
+                                              <div key={index} className="aspect-square">
+                                                {dayInfo ? (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleDateSelect(dayInfo)}
+                                                    disabled={dayInfo.isDisabled}
+                                                    className={`w-full h-full text-xs rounded flex items-center justify-center transition-colors ${
+                                                      dayInfo.isDisabled 
+                                                        ? 'text-gray-300 cursor-not-allowed'
+                                                        : dayInfo.isToday
+                                                          ? 'bg-purple-500 text-white font-medium'
+                                                          : 'text-gray-700 hover:bg-purple-100 hover:text-purple-700'
+                                                    }`}
+                                                  >
+                                                    {dayInfo.day}
+                                                  </button>
+                                                ) : (
+                                                  <div></div>
+                                                )}
+                                              </div>
+                                            ))}
+                                          </div>
+                                          
+                                          {/* 닫기 버튼 */}
+                                          <div className="mt-3 flex justify-end">
+                                            <button
+                                              type="button"
+                                              onClick={() => setShowDatePicker(false)}
+                                              className="px-3 py-1 text-xs text-gray-600 hover:text-gray-800"
+                                            >
+                                              닫기
+                                            </button>
+                                          </div>
+                                        </>
+                                      );
+                                    })()}
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {/* 시간 */}
+                              <div>
+                                <select
+                                  value={scheduledHour}
+                                  onChange={(e) => handleTimeChange('hour', e.target.value)}
+                                  className={`px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500 ${
+                                    timeError ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                                  }`}
+                                  disabled={publishStatus.isPublishing}
+                                >
+                                  {Array.from({ length: 24 }, (_, i) => {
+                                    const hour = i.toString().padStart(2, '0');
+                                    return (
+                                      <option key={hour} value={hour}>
+                                        {hour}
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+                              </div>
+                              
+                              <span className="text-xs text-gray-500">:</span>
+                              
+                              {/* 분 */}
+                              <div>
+                                <select
+                                  value={scheduledMinute}
+                                  onChange={(e) => handleTimeChange('minute', e.target.value)}
+                                  className={`px-2 py-1.5 text-xs border rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500 ${
+                                    timeError ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                                  }`}
+                                  disabled={publishStatus.isPublishing}
+                                >
+                                  {['00', '10', '20', '30', '40', '50'].map(minute => (
+                                    <option key={minute} value={minute}>
+                                      {minute}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                            
+                            {/* 에러 메시지 또는 남은 시간 표시 */}
+                            <div className="mt-2">
+                              {timeError ? (
+                                <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">
+                                  {timeError}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-green-600 bg-green-50 border border-green-200 rounded px-2 py-1">
+                                  ✅ {timeUntilPublish}
+                                </div>
+                              )}
+                            </div>
+                            
+                            <div className="text-xs text-gray-500 mt-1">
+                              💡 오늘 남은 시간에만 예약 가능 (10분 단위)
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {publishOption === 'scheduled' && (
+                      <div className="absolute -top-1 -right-1 bg-purple-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">
+                        선택됨
+                      </div>
+                    )}
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
           
           <div className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded p-3">
@@ -1939,19 +2616,6 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
             </div>
           )}
           
-          {publishStatus.isLoggedIn && !publishStatus.success && (
-            <div className="text-green-600 text-sm bg-green-50 border border-green-200 rounded p-2">
-              ✅ 로그인 완료! 브라우저에서 글 작성을 진행해주세요.
-              <div className="mt-2">
-                <button
-                  onClick={logoutFromNaver}
-                  className="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-                >
-                  브라우저 닫기
-                </button>
-              </div>
-            </div>
-          )}
           
           <button
             onClick={publishToNaverBlog}
@@ -1960,7 +2624,7 @@ const NaverPublish: React.FC<PublishComponentProps> = ({
           >
             {publishStatus.isPublishing ? (
               publishStatus.error ? `🚀 ${publishStatus.error}` : '🚀 네이버 블로그 발행 중...'
-            ) : '📤 네이버 블로그에 자동 발행하기'}
+            ) : `${publishOption === 'temp' ? '📝 임시저장' : publishOption === 'immediate' ? '📤 즉시 발행' : '⏰ 예약 발행'}하기`}
           </button>
           
           {publishStatus.isPublishing && (
